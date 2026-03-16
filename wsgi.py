@@ -4,10 +4,6 @@ WSGI entry point for Render.com deployment.
 Gunicorn imports this module and uses the `app` object.
 Sets up sys.path so all project modules (config, state, etc.) are importable.
 """
-# eventlet.monkey_patch() MUST be the very first thing before any other imports
-import eventlet
-eventlet.monkey_patch()
-
 import sys
 import os
 

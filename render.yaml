@@ -3,7 +3,7 @@ services:
     name: drishi-pro
     env: python
     buildCommand: pip install -r requirements-render.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --worker-class eventlet --workers 1 --timeout 300 wsgi:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT -c gunicorn.conf.py wsgi:app
     healthCheckPath: /health
     envVars:
       - key: ANTHROPIC_API_KEY
