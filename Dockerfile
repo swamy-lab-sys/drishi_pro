@@ -34,9 +34,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
 COPY *.py              ./
 COPY web/              ./web/
 
-# ── Bundle pre-trained Q&A database (335 entries, no internet needed) ─────────
 RUN mkdir -p /root/.interview_assistant
-COPY qa_pairs.db       /root/.interview_assistant/qa_pairs.db
 
 EXPOSE 8000
 
