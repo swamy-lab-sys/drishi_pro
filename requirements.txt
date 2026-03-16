@@ -1,0 +1,34 @@
+# ── Core AI ────────────────────────────────────────────────────────
+anthropic>=0.45.0
+
+# ── Speech-to-Text ─────────────────────────────────────────────────
+# faster-whisper uses ctranslate2 (CPU-optimised), no torch needed
+faster-whisper>=1.1.0
+
+# ── Audio capture & processing ─────────────────────────────────────
+numpy>=1.26.0
+scipy>=1.12.0
+webrtcvad>=2.0.10
+sounddevice>=0.4.6        # primary audio backend (PulseAudio / ALSA)
+soundfile>=0.12.1         # audio file I/O (Sarvam/Deepgram file uploads)
+pyaudio>=0.2.14           # fallback audio backend (used if sounddevice fails)
+
+# ── Web UI ─────────────────────────────────────────────────────────
+flask>=3.0.0
+flask-sock>=0.7.0            # WebSocket support for audio streaming from extension
+gunicorn>=21.2.0             # Production WSGI server for Render.com
+
+# ── Semantic Engine (v7.0) ─────────────────────────────────────────
+scikit-learn>=1.3.0       # TF-IDF vectorizer + cosine similarity for tiered cache
+
+# ── Utilities ──────────────────────────────────────────────────────
+python-dotenv>=1.0.0      # .env loading with override support
+requests>=2.31.0          # Sarvam & Deepgram cloud STT HTTP calls
+psutil>=5.9.0             # CPU/memory monitoring for watchdog
+
+# ── PDF Resume Extraction ──────────────────────────────────────────
+pypdf>=4.0.0               # lightweight PDF text extraction (no binary deps)
+# pdfplumber>=0.11.0       # optional: better layout extraction (install manually if needed)
+
+# ── Optional cloud STT ─────────────────────────────────────────────
+# deepgram-sdk   # auto-installed by run.sh when DEEPGRAM_API_KEY is set

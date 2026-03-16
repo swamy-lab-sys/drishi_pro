@@ -1,0 +1,35 @@
+DRISHI PRO — CHROME EXTENSION INSTALL GUIDE
+============================================
+
+STEP 1 — Open Chrome Extensions Page
+  → Open Google Chrome
+  → Type in address bar:  chrome://extensions
+  → Press Enter
+
+STEP 2 — Enable Developer Mode
+  → Top-right corner: turn ON "Developer mode" toggle
+
+STEP 3 — Load the Extension
+  → Click "Load unpacked" button (top-left)
+  → Browse to this folder: Drishi-Extension/
+  → Click "Select Folder"
+  → Extension appears with Drishi Pro icon
+
+STEP 4 — Configure Server URL
+  → Click the Drishi Pro icon in Chrome toolbar
+  → Click the ⚙ Settings tab
+  → Enter Server URL:
+      Local:  http://localhost:8000
+      Cloud:  https://your-app.onrender.com
+  → Enter Secret Code (same as SECRET_CODE set on Render)
+  → Click "Save Settings"
+  → Click "Test Connection" — should say Connected!
+
+STEP 5 — Use It
+  → Open Google Meet / Teams / Zoom
+  → Click Drishi Pro icon
+  → Click "🎙 Capture This Tab's Audio"
+  → Interview answers appear automatically!
+
+NOTE: No code changes needed before loading.
+      Everything is configured from the Settings tab.

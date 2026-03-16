@@ -1,0 +1,92 @@
+{
+  "manifest_version": 3,
+  "name": "Drishi Pro",
+  "version": "4.0",
+  "description": "AI interview assistant — captures Meet/Teams/Zoom audio, answers questions in real time",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "system.display",
+    "tabs",
+    "tabCapture",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://*.onrender.com/*",
+    "https://meet.google.com/*",
+    "https://zoom.us/*",
+    "https://*.teams.microsoft.com/*",
+    "https://teams.live.com/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://meet.google.com/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.live.com/*",
+        "https://zoom.us/*"
+      ],
+      "js": ["meet_content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.programiz.com/*",
+        "https://leetcode.com/*",
+        "https://www.hackerrank.com/*",
+        "https://codewars.com/*",
+        "https://www.codewars.com/*",
+        "https://app.codility.com/*",
+        "https://codesignal.com/*",
+        "https://www.codesignal.com/*",
+        "https://replit.com/*",
+        "https://colab.research.google.com/*"
+      ],
+      "js": ["typewriter.js", "coder_content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page_bridge.js", "offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Drishi Pro",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "commands": {
+    "open-voice-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+V",
+        "mac": "Command+Shift+V"
+      },
+      "description": "Open interview dashboard in new tab"
+    },
+    "open-voice-popup": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
+      "description": "Open interview assistant in side window"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

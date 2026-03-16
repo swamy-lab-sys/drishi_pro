@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: drishi-pro
+    env: python
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: python web/server.py
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: SECRET_CODE
+        sync: false
+      - key: CLOUD_MODE
+        value: "true"
+      - key: STT_BACKEND
+        value: "sarvam"
+      - key: LLM_MODEL_OVERRIDE
+        value: "claude-haiku-4-5-20251001"
+      - key: PYTHONWARNINGS
+        value: "ignore"

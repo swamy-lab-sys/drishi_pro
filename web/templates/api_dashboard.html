@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Settings – Drishi Pro</title>
+<style>
+  :root {
+    --bg:      #0F1117;
+    --surface: #1B1E27;
+    --surface2:#22263a;
+    --border:  #2C2F3A;
+    --accent:  #6366F1;
+    --text:    #E6EDF3;
+    --muted:   #8B949E;
+    --success: #22D3A0;
+    --warn:    #F59E0B;
+    --danger:  #EF4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
+         font-size: 14px; min-height: 100vh; }
+
+  .top-bar { background: var(--surface); border-bottom: 1px solid var(--border);
+             padding: 14px 32px; display: flex; align-items: center; gap: 16px; }
+  .logo { font-size: 13px; font-weight: 900; color: var(--accent); letter-spacing: 2px; }
+  .top-bar h2 { font-size: 18px; font-weight: 700; }
+  .spacer { flex: 1; }
+
+  .container { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+
+  .btn {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.9; color: #fff; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .section { margin-bottom: 28px; }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--muted); margin-bottom: 14px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Option cards (radio style) ── */
+  .options-grid { display: grid; gap: 10px; }
+  .options-grid.cols2 { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .options-grid.cols3 { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+
+  .opt-card {
+    border: 2px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; cursor: pointer;
+    background: var(--surface); transition: all 0.15s;
+    user-select: none;
+  }
+  .opt-card:hover { border-color: rgba(99,102,241,0.4); }
+  .opt-card.selected {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.08);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .opt-card input[type=radio] { display: none; }
+
+  .opt-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+  .opt-sub  { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .opt-badge {
+    display: inline-block; margin-top: 8px; padding: 2px 8px;
+    border-radius: 20px; font-size: 10px; font-weight: 700;
+  }
+  .badge-recommended { background: rgba(34,211,160,0.15); color: var(--success); }
+  .badge-fast        { background: rgba(99,102,241,0.15); color: var(--accent); }
+  .badge-slow        { background: rgba(245,158,11,0.12); color: var(--warn); }
+
+  /* ── Key status row ── */
+  .keys-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .key-status {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 200px;
+  }
+  .key-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .key-dot.ok  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .key-dot.err { background: var(--danger);  }
+  .key-info .name { font-weight: 700; font-size: 13px; }
+  .key-info .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Language selector ── */
+  .lang-grid {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .lang-chip {
+    padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--surface);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; user-select: none;
+  }
+  .lang-chip:hover { border-color: var(--accent); }
+  .lang-chip.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .lang-chip input[type=radio] { display: none; }
+
+  /* ── Save bar ── */
+  .save-bar {
+    position: sticky; bottom: 0;
+    background: rgba(15,17,23,0.92); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+    margin: 0 -24px -32px;
+  }
+  .save-status { font-size: 12px; font-weight: 600; }
+  .save-status.ok  { color: var(--success); }
+  .save-status.err { color: var(--danger); }
+
+  #toast {
+    position: fixed; bottom: 72px; right: 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 18px;
+    font-size: 13px; font-weight: 600; display: none; z-index: 999;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #toast.ok  { border-color: var(--success); color: var(--success); }
+  #toast.err { border-color: var(--danger);  color: var(--danger); }
+
+  .loading { text-align: center; padding: 60px; color: var(--muted); }
+  .warn-box {
+    background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 10px; padding: 12px 16px; font-size: 12px;
+    color: var(--warn); margin-bottom: 20px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">DRISHI PRO</div>
+  <h2>AI Settings</h2>
+  <div class="spacer"></div>
+  <a href="/" class="btn">← Dashboard</a>
+</div>
+
+<div class="container" id="main">
+  <div class="loading">Loading settings…</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let current = {};   // settings from server
+let pending = {};   // unsaved changes
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/admin/settings');
+    if (r.status === 401) {
+      document.getElementById('main').innerHTML =
+        '<div style="text-align:center;padding:60px;color:var(--danger)">🔒 Admin access required.<br><small>Connect using the master SECRET_CODE in extension Settings.</small></div>';
+      return;
+    }
+    current = await r.json();
+    pending = { stt_backend: current.stt_backend, stt_language: current.stt_language, llm_model: current.llm_model };
+    render();
+  } catch (e) {
+    document.getElementById('main').innerHTML =
+      '<div style="text-align:center;padding:60px;color:var(--danger)">Failed to load settings: ' + e.message + '</div>';
+  }
+}
+
+function render() {
+  const s = current;
+  document.getElementById('main').innerHTML = `
+
+    <div class="warn-box">
+      ⚠ Changes apply immediately to this server session.
+      To make them permanent after Render redeploys, update the env vars
+      <strong>STT_BACKEND</strong>, <strong>LLM_MODEL_OVERRIDE</strong>, <strong>SARVAM_LANGUAGE</strong>
+      in your Render service → Environment tab.
+    </div>
+
+    <!-- API Keys Status -->
+    <div class="section">
+      <div class="section-title">API Key Status</div>
+      <div class="keys-row">
+        ${keyCard('Sarvam AI', 'sarvam.ai', s.sarvam_key_set,   'SARVAM_API_KEY',   'Required for Sarvam STT')}
+        ${keyCard('Deepgram',  'deepgram.com', s.deepgram_key_set, 'DEEPGRAM_API_KEY', 'Required for Deepgram STT')}
+        ${keyCard('Anthropic', 'console.anthropic.com', s.anthropic_key_set, 'ANTHROPIC_API_KEY', 'Required for all LLM answers')}
+      </div>
+    </div>
+
+    <!-- STT Backend -->
+    <div class="section">
+      <div class="section-title">Speech-to-Text Engine</div>
+      <div class="options-grid cols2">
+
+        <label class="opt-card ${pending.stt_backend === 'sarvam' ? 'selected' : ''}"
+               onclick="choose('stt_backend','sarvam')">
+          <input type="radio" name="stt" value="sarvam" ${pending.stt_backend==='sarvam'?'checked':''}>
+          <div class="opt-name">Sarvam AI</div>
+          <div class="opt-sub">saarika:v2.5 · Indian English + regional languages<br>
+            Telugu, Hindi, Tamil, Kannada, Malayalam …<br>Auto-translates to English</div>
+          <span class="opt-badge badge-recommended">★ Default</span>
+          ${!s.sarvam_key_set ? '<div style="margin-top:6px;font-size:10px;color:var(--danger)">⚠ SARVAM_API_KEY not set</div>' : ''}
+        </label>
+
+        <label class="opt-card ${pending.stt_backend === 'deepgram' ? 'selected' : ''}"
+               onclick="choose('stt_backend','deepgram')">
+          <input type="radio" name="stt" value="deepgram" ${pending.stt_backend==='deepgram'?'checked':''}>
+          <div class="opt-name">Deepgram</div>
+          <div class="opt-sub">Nova-3 · Best for US/UK English<br>~250ms latency · $0.0043/min</div>
+          <span class="opt-badge badge-fast">⚡ Fast</span>
+          ${!s.deepgram_key_set ? '<div style="margin-top:6px;font-size:10px;color:var(--danger)">⚠ DEEPGRAM_API_KEY not set</div>' : ''}
+        </label>
+
+        ${!s.cloud_mode ? `
+        <label class="opt-card ${pending.stt_backend === 'local' ? 'selected' : ''}"
+               onclick="choose('stt_backend','local')">
+          <input type="radio" name="stt" value="local" ${pending.stt_backend==='local'?'checked':''}>
+          <div class="opt-name">Local Whisper</div>
+          <div class="opt-sub">faster-whisper · runs on your machine<br>No API cost · needs GPU for speed</div>
+          <span class="opt-badge badge-slow">Local only</span>
+        </label>` : ''}
+
+      </div>
+    </div>
+
+    <!-- Sarvam Language (only relevant for Sarvam) -->
+    <div class="section" id="langSection" style="${pending.stt_backend !== 'sarvam' ? 'opacity:0.35;pointer-events:none' : ''}">
+      <div class="section-title">Sarvam Language Mode</div>
+      <div class="lang-grid">
+        ${langChip('unknown',  'Auto-detect',   'Detects any Indian language')}
+        ${langChip('en-IN',    'English (IN)',   'Indian English only')}
+        ${langChip('hi-IN',    'Hindi',          'हिन्दी')}
+        ${langChip('te-IN',    'Telugu',         'తెలుగు')}
+        ${langChip('ta-IN',    'Tamil',          'தமிழ்')}
+        ${langChip('kn-IN',    'Kannada',        'ಕನ್ನಡ')}
+        ${langChip('ml-IN',    'Malayalam',      'മലയാളം')}
+        ${langChip('mr-IN',    'Marathi',        'मराठी')}
+      </div>
+    </div>
+
+    <!-- LLM Model -->
+    <div class="section">
+      <div class="section-title">LLM Model (Answer Generation)</div>
+      <div class="options-grid cols3">
+
+        <label class="opt-card ${pending.llm_model === 'claude-haiku-4-5-20251001' ? 'selected' : ''}"
+               onclick="choose('llm_model','claude-haiku-4-5-20251001')">
+          <input type="radio" name="llm" value="claude-haiku-4-5-20251001">
+          <div class="opt-name">Claude Haiku</div>
+          <div class="opt-sub">Fastest · ~0.6s answers<br>Best for live interviews</div>
+          <span class="opt-badge badge-recommended">★ Default</span>
+        </label>
+
+        <label class="opt-card ${pending.llm_model === 'claude-sonnet-4-6' ? 'selected' : ''}"
+               onclick="choose('llm_model','claude-sonnet-4-6')">
+          <input type="radio" name="llm" value="claude-sonnet-4-6">
+          <div class="opt-name">Claude Sonnet</div>
+          <div class="opt-sub">Balanced · ~1.5s answers<br>Better for complex questions</div>
+          <span class="opt-badge badge-fast">Balanced</span>
+        </label>
+
+        <label class="opt-card ${pending.llm_model === 'claude-opus-4-6' ? 'selected' : ''}"
+               onclick="choose('llm_model','claude-opus-4-6')">
+          <input type="radio" name="llm" value="claude-opus-4-6">
+          <div class="opt-name">Claude Opus</div>
+          <div class="opt-sub">Most capable · ~3-5s<br>Use for detailed questions</div>
+          <span class="opt-badge badge-slow">Powerful</span>
+        </label>
+
+      </div>
+    </div>
+
+    <!-- Current active settings summary -->
+    <div class="section">
+      <div class="section-title">Active Configuration</div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 18px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; font-size:13px;">
+          <div>
+            <div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-bottom:4px">STT Engine</div>
+            <div style="font-weight:700">${sttLabel(current.stt_backend)}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:2px">${langLabel(current.stt_language)}</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-bottom:4px">LLM Model</div>
+            <div style="font-weight:700">${llmLabel(current.llm_model)}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:2px">Answer generation</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-bottom:4px">Mode</div>
+            <div style="font-weight:700">${current.cloud_mode ? '☁ Cloud (Render)' : '💻 Local'}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:2px">Deployment type</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save bar -->
+    <div class="save-bar">
+      <span id="saveStatus" class="save-status"></span>
+      <div class="spacer"></div>
+      <button class="btn" onclick="resetPending()">Reset</button>
+      <button class="btn primary" onclick="saveSettings()" id="saveBtn">Apply Changes</button>
+    </div>
+  `;
+}
+
+// ── Option helpers ────────────────────────────────────────────────────────────
+
+function keyCard(name, hint, isSet, envKey, desc) {
+  return `<div class="key-status">
+    <div class="key-dot ${isSet ? 'ok' : 'err'}"></div>
+    <div class="key-info">
+      <div class="name">${name}</div>
+      <div class="hint">${isSet ? '✓ Key configured' : '✗ Missing — set ' + envKey + ' on Render'}</div>
+    </div>
+  </div>`;
+}
+
+function langChip(val, label, title) {
+  const sel = pending.stt_language === val;
+  return `<label class="lang-chip ${sel ? 'selected' : ''}" title="${title}"
+          onclick="chooseLang('${val}')">
+    <input type="radio" name="lang" value="${val}" ${sel?'checked':''}>
+    ${label}
+  </label>`;
+}
+
+function sttLabel(v) {
+  return {sarvam:'Sarvam AI (saarika:v2.5)', deepgram:'Deepgram Nova-3', local:'Local Whisper'}[v] || v;
+}
+function llmLabel(v) {
+  if (v.includes('haiku'))  return 'Claude Haiku 4.5';
+  if (v.includes('sonnet')) return 'Claude Sonnet 4.6';
+  if (v.includes('opus'))   return 'Claude Opus 4.6';
+  return v;
+}
+function langLabel(v) {
+  return {unknown:'Auto-detect language', 'en-IN':'English (Indian)', 'hi-IN':'Hindi', 'te-IN':'Telugu',
+          'ta-IN':'Tamil', 'kn-IN':'Kannada', 'ml-IN':'Malayalam', 'mr-IN':'Marathi'}[v] || v;
+}
+
+// ── State updates ─────────────────────────────────────────────────────────────
+
+function choose(key, val) {
+  pending[key] = val;
+  // Update card styles without full re-render
+  if (key === 'stt_backend') {
+    document.querySelectorAll('[onclick^="choose(\'stt_backend"]').forEach(el => {
+      el.classList.toggle('selected', el.getAttribute('onclick').includes(`'${val}'`));
+    });
+    const ls = document.getElementById('langSection');
+    if (ls) ls.style.opacity = val === 'sarvam' ? '1' : '0.35';
+    if (ls) ls.style.pointerEvents = val === 'sarvam' ? '' : 'none';
+  } else if (key === 'llm_model') {
+    document.querySelectorAll('[onclick^="choose(\'llm_model"]').forEach(el => {
+      el.classList.toggle('selected', el.getAttribute('onclick').includes(`'${val}'`));
+    });
+  }
+  markDirty();
+}
+
+function chooseLang(val) {
+  pending.stt_language = val;
+  document.querySelectorAll('.lang-chip').forEach(el => {
+    el.classList.toggle('selected', el.getAttribute('onclick').includes(`'${val}'`));
+  });
+  markDirty();
+}
+
+function markDirty() {
+  const s = document.getElementById('saveStatus');
+  if (s) { s.textContent = 'Unsaved changes'; s.className = 'save-status warn'; }
+}
+
+function resetPending() {
+  pending = { stt_backend: current.stt_backend, stt_language: current.stt_language, llm_model: current.llm_model };
+  render();
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const r = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(pending)
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Save failed', 'err'); return; }
+
+    current.stt_backend  = data.stt_backend;
+    current.stt_language = data.stt_language;
+    current.llm_model    = data.llm_model;
+    pending = { ...current };
+
+    const s = document.getElementById('saveStatus');
+    if (s) { s.textContent = '✓ Applied'; s.className = 'save-status ok'; }
+    toast('Settings applied to live server', 'ok');
+    // Re-render summary row
+    render();
+  } catch (e) {
+    toast('Error: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply Changes'; }
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+let _tt;
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = type; el.style.display = 'block';
+  clearTimeout(_tt);
+  _tt = setTimeout(() => el.style.display = 'none', 3500);
+}
+
+window.onload = loadSettings;
+</script>
+</body>
+</html>

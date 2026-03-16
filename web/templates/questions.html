@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions Database — Drishi Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg:        #eef2ff;
+            --card:      #ffffff;
+            --border:    #dde5f4;
+            --text:      #0c1a3a;
+            --muted:     #4b5c78;
+            --soft:      #7a8fac;
+            --accent:    #3b5bdb;
+            --accent2:   #7048e8;
+            --success:   #0ca678;
+            --danger:    #e03131;
+            --warning:   #e67700;
+            --teal:      #0c8599;
+            --pink:      #c2255c;
+            --hdr-h:     62px;
+            --tb-h:      54px;
+            --sb-h:      32px;
+        }
+
+        html, body { height: 100%; overflow: hidden; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 14px;
+            color: var(--text);
+            background: var(--bg);
+        }
+
+        .app { display: flex; flex-direction: column; height: 100vh; }
+
+        /* ══════════════════════════════
+           TOP BAR
+        ══════════════════════════════ */
+        .topbar {
+            height: var(--hdr-h);
+            background: linear-gradient(120deg, #0c1a3a 0%, #1a337a 55%, #2d1b6e 100%);
+            display: flex; align-items: center;
+            padding: 0 22px; gap: 14px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 20px rgba(12,26,58,0.35);
+            z-index: 50;
+        }
+
+        .back-btn {
+            background: rgba(255,255,255,0.1);
+            color: #c8d8ff;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 9px;
+            padding: 7px 15px;
+            font-size: 13px; font-weight: 700;
+            cursor: pointer; text-decoration: none;
+            display: flex; align-items: center; gap: 6px;
+            transition: all 0.18s;
+            letter-spacing: 0.2px;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.18); color: #fff; border-color: rgba(255,255,255,0.3); }
+
+        .topbar-logo { font-size: 20px; }
+
+        .topbar-title {
+            font-size: 18px; font-weight: 900;
+            background: linear-gradient(90deg, #ffffff 0%, #93c5fd 60%, #c4b5fd 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: -0.4px;
+        }
+
+        .topbar-gap { flex: 1; }
+
+        .stat-badge {
+            padding: 5px 14px; border-radius: 20px;
+            font-size: 12px; font-weight: 700;
+            white-space: nowrap;
+        }
+        .sb-blue  { background: rgba(59,91,219,0.35); color: #93c5fd; border: 1px solid rgba(147,197,253,0.25); }
+        .sb-teal  { background: rgba(12,133,153,0.35); color: #67e8f9; border: 1px solid rgba(103,232,249,0.25); }
+        .sb-green { background: rgba(12,166,120,0.35); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.25); }
+
+        /* ══════════════════════════════
+           TOOLBAR
+        ══════════════════════════════ */
+        .toolbar {
+            height: var(--tb-h);
+            background: var(--card);
+            border-bottom: 2px solid var(--border);
+            display: flex; align-items: center;
+            padding: 0 16px; gap: 8px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(12,26,58,0.07);
+        }
+
+        /* Search */
+        .search-wrap { position: relative; flex: 1; max-width: 360px; }
+        .search-ico {
+            position: absolute; left: 11px; top: 50%;
+            transform: translateY(-50%);
+            color: var(--soft); font-size: 14px; pointer-events: none;
+        }
+        .search-input {
+            width: 100%; padding: 8px 34px 8px 34px;
+            border: 2px solid var(--border); border-radius: 10px;
+            font-size: 14px; font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            background: var(--bg); color: var(--text); outline: none;
+            transition: all 0.18s;
+        }
+        .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,91,219,0.13); background: #fff; }
+        .search-input::placeholder { color: var(--soft); font-weight: 400; }
+        .search-x {
+            position: absolute; right: 10px; top: 50%;
+            transform: translateY(-50%);
+            background: none; border: none; color: var(--soft);
+            cursor: pointer; font-size: 15px; display: none; padding: 2px;
+            transition: color 0.15s;
+        }
+        .search-x.on { display: block; }
+        .search-x:hover { color: var(--danger); }
+
+        /* Filter pills */
+        .filter-group {
+            display: flex; gap: 3px;
+            background: var(--bg); border-radius: 10px;
+            padding: 3px; border: 2px solid var(--border);
+        }
+        .f-btn {
+            padding: 5px 14px; border-radius: 8px;
+            border: none; background: none;
+            color: var(--muted); font-size: 13px; font-weight: 700;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .f-btn.on { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(59,91,219,0.3); }
+        .f-btn:hover:not(.on) { color: var(--accent); background: #eef2ff; }
+
+        .tb-divider { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+        .tb-flex { flex: 1; }
+        .match-lbl { font-size: 12px; font-weight: 700; color: var(--soft); white-space: nowrap; }
+
+        /* Toolbar buttons */
+        .tb-btn {
+            height: 35px; padding: 0 15px; border-radius: 9px;
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            white-space: nowrap; transition: all 0.18s;
+            border: 2px solid transparent;
+        }
+        .tb-btn.outline {
+            background: var(--card); color: var(--muted);
+            border-color: var(--border);
+        }
+        .tb-btn.outline:hover { border-color: var(--accent); color: var(--accent); background: #eef2ff; }
+
+        .tb-btn.reset {
+            background: #fff3bf; color: #7c5c00;
+            border-color: #ffd43b;
+        }
+        .tb-btn.reset:hover { background: #ffd43b; color: #543c00; border-color: #fab005; box-shadow: 0 2px 8px rgba(252,196,25,0.4); }
+
+        .tb-btn.dl-csv {
+            background: #e3fafc; color: #0c8599;
+            border-color: #99e9f2;
+        }
+        .tb-btn.dl-csv:hover { background: #0c8599; color: #fff; border-color: #0c8599; box-shadow: 0 2px 8px rgba(12,133,153,0.35); }
+
+        .tb-btn.dl-json {
+            background: #f3f0ff; color: #7048e8;
+            border-color: #d0bfff;
+        }
+        .tb-btn.dl-json:hover { background: #7048e8; color: #fff; border-color: #7048e8; box-shadow: 0 2px 8px rgba(112,72,232,0.35); }
+
+        .tb-btn.add {
+            background: linear-gradient(135deg, #0ca678 0%, #099268 100%);
+            color: #fff; border-color: transparent;
+            box-shadow: 0 2px 10px rgba(12,166,120,0.35);
+        }
+        .tb-btn.add:hover { box-shadow: 0 4px 16px rgba(12,166,120,0.5); transform: translateY(-1px); }
+
+        .tb-btn.apply {
+            background: linear-gradient(135deg, #3b5bdb 0%, #7048e8 100%);
+            color: #fff; border-color: transparent;
+            box-shadow: 0 2px 10px rgba(59,91,219,0.35);
+            font-size: 13px; font-weight: 800; letter-spacing: 0.2px;
+        }
+        .tb-btn.apply:hover { box-shadow: 0 4px 16px rgba(59,91,219,0.55); transform: translateY(-1px); }
+
+        /* ══════════════════════════════
+           TABLE
+        ══════════════════════════════ */
+        .table-wrap {
+            flex: 1; overflow: auto;
+            background: var(--bg);
+        }
+        .table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+        .table-wrap::-webkit-scrollbar-track { background: #e8edf8; }
+        .table-wrap::-webkit-scrollbar-thumb { background: #b0bdd6; border-radius: 8px; }
+        .table-wrap::-webkit-scrollbar-thumb:hover { background: #8899b8; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+        thead { position: sticky; top: 0; z-index: 20; }
+        thead th {
+            background: linear-gradient(180deg, #0c1a3a 0%, #162548 100%);
+            color: rgba(255,255,255,0.7);
+            font-weight: 700; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 1px;
+            padding: 12px 14px; text-align: left;
+            white-space: nowrap;
+            border-right: 1px solid rgba(255,255,255,0.06);
+            cursor: pointer; user-select: none;
+            transition: background 0.15s, color 0.15s;
+        }
+        thead th:hover { background: linear-gradient(180deg, #1a2f55 0%, #2a3f6e 100%); color: #fff; }
+        thead th.sorted { color: #67e8f9; }
+        thead th:last-child { border-right: none; cursor: default; }
+        .si { margin-left: 4px; font-size: 10px; opacity: 0.5; }
+        thead th.sorted .si { opacity: 1; color: #67e8f9; }
+
+        tbody tr {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        tbody tr:nth-child(4n+3),
+        tbody tr:nth-child(4n+4) { background: #f5f7ff; }
+        tbody tr:hover { background: #e8eeff !important; }
+        tbody tr.expanded { background: #eef2ff !important; border-left: 3px solid var(--accent); }
+
+        tbody td {
+            padding: 9px 13px; vertical-align: middle;
+            border-right: 1px solid var(--border);
+        }
+        tbody td:last-child { border-right: none; }
+
+        /* Column widths — 6 columns, no preview or keywords col */
+        .c-num  { width: 48px; text-align: center; }
+        .c-q    { min-width: 260px; }          /* grows to fill space */
+        .c-type { width: 82px; text-align: center; }
+        .c-tags { width: 200px; }
+        .c-hit  { width: 60px; text-align: center; }
+        .c-act  { width: 88px; text-align: center; }
+
+        /* Row number badge */
+        .rnum {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 26px; height: 26px; border-radius: 7px;
+            font-size: 11px; font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            color: #fff;
+        }
+
+        /* Question cell — question text + keyword chips below */
+        .q-cell {
+            cursor: pointer;
+        }
+        .q-text {
+            font-size: 14px; font-weight: 600; color: #1a2744;
+            line-height: 1.45; transition: color 0.12s;
+            display: flex; align-items: flex-start; gap: 6px;
+        }
+        .q-text:hover { color: var(--accent); }
+        .q-read-hint {
+            flex-shrink: 0; margin-top: 2px;
+            opacity: 0; font-size: 11px; color: var(--accent);
+            transition: opacity 0.15s;
+        }
+        .q-cell:hover .q-read-hint { opacity: 1; }
+        .q-kws { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+        .kw { background: #ede9fe; color: #5b21b6; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 20px; letter-spacing: 0.2px; }
+
+        /* Type pills */
+        .type-pill {
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 800;
+            padding: 3px 9px; border-radius: 20px;
+            text-transform: uppercase; letter-spacing: 0.6px;
+            white-space: nowrap;
+        }
+        .tp-theory  { background: #dbe4ff; color: #2f4ac2; border: 1.5px solid #bac8ff; }
+        .tp-coding  { background: #fff3bf; color: #7c5c00; border: 1.5px solid #ffe066; }
+        .tp-both    { background: #f3d9fa; color: #7b2d8b; border: 1.5px solid #e599f7; }
+
+        /* Hit count */
+        .hit-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 26px; height: 22px; border-radius: 11px;
+            font-size: 11px; font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .h-zero { background: #f1f3f9; color: #94a3b8; border: 1px solid #dde5f4; }
+        .h-low  { background: #dbe4ff; color: #2f4ac2; border: 1px solid #bac8ff; }
+        .h-mid  { background: #fff3bf; color: #7c5c00; border: 1px solid #ffe066; }
+        .h-hot  { background: #ffe3e3; color: #c92a2a; border: 1px solid #ffa8a8;
+                  animation: hotpulse 2s infinite; }
+        @keyframes hotpulse { 0%,100%{box-shadow:0 0 0 0 rgba(201,42,42,0.3)} 50%{box-shadow:0 0 0 5px rgba(201,42,42,0)} }
+
+        /* Row actions — compact icon buttons */
+        .act-wrap { display: flex; gap: 4px; justify-content: center; }
+        .ra {
+            width: 30px; height: 30px; border-radius: 7px;
+            font-size: 14px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+            border: 1.5px solid transparent;
+        }
+        .ra-edit { background: #dbe4ff; color: #2f4ac2; border-color: #bac8ff; }
+        .ra-edit:hover { background: #3b5bdb; color: #fff; border-color: #3b5bdb; box-shadow: 0 2px 8px rgba(59,91,219,0.4); }
+        .ra-del  { background: #fff0f0; color: #c92a2a; border-color: #ffc9c9; }
+        .ra-del:hover  { background: #c92a2a; color: #fff; border-color: #c92a2a; box-shadow: 0 2px 8px rgba(201,42,42,0.4); }
+
+        /* ── Expand detail row (kept minimal, reader replaces it) ── */
+        .detail-row { display: none; }
+
+        /* ══════════════════════════════════════════════════
+           READER OVERLAY — full-screen interview answer view
+        ══════════════════════════════════════════════════ */
+        .reader-ov {
+            display: none; position: fixed; inset: 0; z-index: 300;
+            background: rgba(8,16,40,0.78);
+            backdrop-filter: blur(6px);
+            align-items: center; justify-content: center;
+            padding: 24px 16px;
+        }
+        .reader-ov.open { display: flex; }
+
+        .reader-panel {
+            background: #fff;
+            border-radius: 20px;
+            width: 100%; max-width: 860px;
+            max-height: calc(100vh - 48px);
+            display: flex; flex-direction: column;
+            box-shadow: 0 32px 80px rgba(8,16,40,0.45);
+            overflow: hidden;
+            animation: rslide .18s ease;
+        }
+        @keyframes rslide { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
+
+        /* ── Reader header ── */
+        .r-hdr {
+            padding: 20px 26px 16px;
+            background: linear-gradient(120deg,#0c1a3a 0%,#1a337a 55%,#2d1b6e 100%);
+            flex-shrink: 0;
+        }
+        .r-nav {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+        }
+        .r-nav-btn {
+            width: 32px; height: 32px; border-radius: 8px;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75);
+            font-size: 16px; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; transition: all .15s; flex-shrink: 0;
+        }
+        .r-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,0.2); color:#fff; }
+        .r-nav-btn:disabled { opacity: .3; cursor: default; }
+        .r-nav-ctr { flex:1; text-align:center; font-size:12px; color:rgba(255,255,255,0.45); font-weight:600; }
+        .r-close {
+            width:34px; height:34px; border-radius:9px; margin-left:auto;
+            border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.08);
+            color:rgba(255,255,255,0.7); font-size:18px; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; transition:all .15s;
+        }
+        .r-close:hover { background:rgba(201,42,42,.5); color:#fff; border-color:transparent; }
+        .r-question {
+            font-size: 20px; font-weight: 900; letter-spacing: -.3px; line-height: 1.35;
+            background: linear-gradient(90deg,#fff 0%,#93c5fd 65%,#c4b5fd 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .r-tags { margin-top: 10px; display:flex; gap:5px; flex-wrap:wrap; }
+
+        /* ── Reader body (scrollable) ── */
+        .r-body {
+            flex: 1; overflow-y: auto; padding: 28px 32px 24px;
+            scroll-behavior: smooth;
+        }
+        .r-body::-webkit-scrollbar { width: 7px; }
+        .r-body::-webkit-scrollbar-track { background: #f0f4ff; }
+        .r-body::-webkit-scrollbar-thumb { background: #b0bdd6; border-radius: 6px; }
+
+        /* ── Theory section ── */
+        .r-section { margin-bottom: 28px; }
+        .r-sec-label {
+            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px;
+            margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+            padding-bottom: 9px; border-bottom: 2px solid;
+        }
+        .r-sec-label.theory { color: #2f4ac2; border-color: #bac8ff; }
+        .r-sec-label.coding { color: #92400e; border-color: #fde68a; }
+
+        /* Big readable bullet points */
+        .r-bullets { list-style: none; padding: 0; margin: 0; }
+        .r-bullets li {
+            display: flex; gap: 14px; align-items: flex-start;
+            padding: 11px 16px; border-radius: 10px;
+            margin-bottom: 8px; background: #f5f7ff;
+            border: 1px solid #e0e7ff;
+            font-size: 16px; font-weight: 500; color: #0c1a3a;
+            line-height: 1.7;
+            transition: background .12s;
+        }
+        .r-bullets li:hover { background: #eaefff; }
+        .r-bullets li .bul-dot {
+            width: 9px; height: 9px; border-radius: 50%;
+            background: #7048e8; flex-shrink: 0; margin-top: 8px;
+        }
+        .r-bullets li .bul-txt { flex: 1; }
+
+        /* Plain paragraph (non-bullet answers) */
+        .r-para {
+            font-size: 16px; line-height: 1.85; color: #0c1a3a;
+            font-weight: 400; background: #f5f7ff;
+            border: 1px solid #e0e7ff; border-radius: 10px;
+            padding: 16px 20px;
+        }
+
+        /* Code block */
+        pre.r-code {
+            background: #0f1629; color: #e2e8f0;
+            padding: 20px 22px; border-radius: 12px;
+            font-size: 14px; font-family: 'JetBrains Mono', monospace;
+            line-height: 1.7; overflow-x: auto; white-space: pre;
+            border: 1px solid #2d3a55;
+            max-height: 480px; overflow-y: auto;
+        }
+        pre.r-code::-webkit-scrollbar { width:6px; height:6px; }
+        pre.r-code::-webkit-scrollbar-track { background:#1a2035; }
+        pre.r-code::-webkit-scrollbar-thumb { background:#3d4f70; border-radius:4px; }
+
+        /* ── Reader footer ── */
+        .r-ftr {
+            flex-shrink: 0; padding: 12px 26px;
+            background: #f5f7ff; border-top: 2px solid #e0e7ff;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .r-meta { font-size: 12px; color: var(--muted); display:flex; gap:14px; flex:1; flex-wrap:wrap; }
+        .r-meta span { display:flex; align-items:center; gap:4px; }
+        .r-act-btn {
+            height: 33px; padding: 0 16px; border-radius: 8px;
+            font-size: 12px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; gap: 5px; transition: all .15s;
+            border: 1.5px solid; white-space: nowrap;
+        }
+        .r-copy { background:#dbe4ff; color:#2f4ac2; border-color:#bac8ff; }
+        .r-copy:hover { background:#3b5bdb; color:#fff; border-color:#3b5bdb; }
+        .r-edit-btn { background:#d1fae5; color:#065f46; border-color:#6ee7b7; }
+        .r-edit-btn:hover { background:#059669; color:#fff; border-color:#059669; }
+
+        /* ══════════════════════════════
+           STATUS BAR
+        ══════════════════════════════ */
+        .statusbar {
+            height: var(--sb-h);
+            background: #0c1a3a;
+            display: flex; align-items: center;
+            padding: 0 16px; gap: 18px;
+            flex-shrink: 0;
+        }
+        .sb { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .sb b { color: #67e8f9; font-weight: 800; }
+        .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #51cf66; box-shadow: 0 0 6px #51cf66; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+        .sb-gap { flex: 1; }
+        .sb-hint { font-size: 11px; color: rgba(255,255,255,0.3); font-style: italic; }
+
+        /* ══════════════════════════════
+           EMPTY / LOADING
+        ══════════════════════════════ */
+        .empty-tr td { padding: 80px; text-align: center; color: var(--muted); }
+        .empty-tr h3 { font-size: 22px; margin-bottom: 10px; color: #94a3b8; }
+        .empty-tr p  { font-size: 14px; }
+
+        /* ══════════════════════════════
+           OVERLAY + MODAL
+        ══════════════════════════════ */
+        .overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(12,26,58,0.65);
+            backdrop-filter: blur(5px);
+            z-index: 200; align-items: flex-start; justify-content: center;
+            padding: 36px 16px; overflow-y: auto;
+        }
+        .overlay.open { display: flex; }
+
+        .modal {
+            background: var(--card); border-radius: 18px;
+            border: 1.5px solid var(--border);
+            box-shadow: 0 28px 70px rgba(12,26,58,0.3);
+            width: 100%; max-width: 700px;
+            overflow: hidden;
+        }
+
+        .m-hdr {
+            padding: 22px 26px 20px;
+            background: linear-gradient(120deg, #0c1a3a 0%, #1a337a 55%, #2d1b6e 100%);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .m-hdr h2 {
+            font-size: 17px; font-weight: 900; letter-spacing: -0.3px;
+            background: linear-gradient(90deg, #fff 0%, #93c5fd 70%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .m-hdr-sub { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.45); margin-left: 4px; -webkit-text-fill-color: rgba(255,255,255,0.45); }
+        .m-x {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 9px; width: 33px; height: 33px; cursor: pointer;
+            color: rgba(255,255,255,0.7); font-size: 18px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+        }
+        .m-x:hover { background: rgba(201,42,42,0.5); color: #fff; border-color: transparent; }
+
+        .m-body { padding: 22px 26px 18px; }
+
+        .fr { margin-bottom: 15px; }
+        .fr label {
+            display: block; font-size: 11px; font-weight: 800;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 6px;
+        }
+        .fr input, .fr textarea {
+            width: 100%; padding: 10px 13px;
+            border: 2px solid var(--border); border-radius: 9px;
+            font-size: 14px; font-family: 'Inter', sans-serif; font-weight: 500;
+            color: var(--text); background: var(--bg); outline: none;
+            transition: all 0.18s; resize: vertical;
+        }
+        .fr input:focus, .fr textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,91,219,0.12); background: #fff; }
+        .fr textarea { min-height: 90px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.65; }
+        .ta-t { border-left: 3px solid var(--accent) !important; }
+        .ta-c { border-left: 3px solid var(--warning) !important; }
+        .fr-hint { font-size: 11px; color: var(--soft); margin-top: 4px; }
+        .fr-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+        /* Type selector */
+        .type-row { display: flex; gap: 7px; }
+        .tc {
+            padding: 7px 18px; border-radius: 20px;
+            border: 2px solid var(--border);
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            background: none; color: var(--muted); transition: all 0.15s;
+        }
+        .tc.on-t { border-color: var(--accent); background: #dbe4ff; color: #2f4ac2; }
+        .tc.on-c { border-color: var(--warning); background: #fff3bf; color: #7c5c00; }
+        .tc.on-b { border-color: var(--accent2); background: #f3d9fa; color: #7b2d8b; }
+
+        .m-ftr {
+            padding: 14px 26px; border-top: 2px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            background: #f5f7ff;
+        }
+        .m-hint { font-size: 11px; color: var(--soft); }
+        .m-hint kbd { background: #dde5f4; border-radius: 4px; padding: 1px 7px; font-family: monospace; font-size: 10px; color: var(--text); }
+
+        .btn-cancel {
+            padding: 9px 20px; border: 2px solid var(--border); border-radius: 9px;
+            background: none; font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.15s;
+        }
+        .btn-cancel:hover { background: var(--bg); border-color: #94a3b8; color: var(--text); }
+        .btn-save {
+            padding: 9px 26px; border: none; border-radius: 9px;
+            background: linear-gradient(135deg, #3b5bdb 0%, #7048e8 100%);
+            color: #fff; font-size: 14px; font-weight: 800; cursor: pointer;
+            box-shadow: 0 3px 12px rgba(59,91,219,0.4); transition: all 0.18s;
+            letter-spacing: 0.2px;
+        }
+        .btn-save:hover { box-shadow: 0 5px 18px rgba(59,91,219,0.55); transform: translateY(-1px); }
+        .btn-save:disabled { opacity: 0.5; cursor: default; box-shadow: none; transform: none; }
+
+        /* ── Delete modal ── */
+        .del-modal { max-width: 440px; }
+        .del-body { padding: 36px 30px 28px; text-align: center; }
+        .del-ico { font-size: 50px; margin-bottom: 14px; }
+        .del-ttl { font-size: 22px; font-weight: 900; color: var(--danger); margin-bottom: 8px; letter-spacing: -0.3px; }
+        .del-sub { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 18px; }
+        .del-preview {
+            background: #fff5f5; border: 2px solid #ffc9c9; border-radius: 10px;
+            padding: 12px 16px; font-size: 13px; font-weight: 700; color: #7f1d1d;
+            text-align: left; line-height: 1.45; margin-bottom: 26px;
+        }
+        .btn-del {
+            padding: 10px 28px; border: none; border-radius: 10px;
+            background: linear-gradient(135deg, #e03131 0%, #b91c1c 100%);
+            color: #fff; font-size: 14px; font-weight: 800; cursor: pointer;
+            box-shadow: 0 3px 12px rgba(224,49,49,0.4); transition: all 0.18s;
+        }
+        .btn-del:hover { box-shadow: 0 5px 18px rgba(224,49,49,0.55); transform: translateY(-1px); }
+
+        /* ── Toast ── */
+        .toast {
+            position: fixed; bottom: 44px; left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            padding: 11px 22px; border-radius: 11px;
+            font-size: 14px; font-weight: 700; opacity: 0;
+            transition: all 0.25s; z-index: 400;
+            pointer-events: none; white-space: nowrap;
+            box-shadow: 0 6px 24px rgba(12,26,58,0.4);
+            letter-spacing: 0.1px;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.ok  { background: linear-gradient(135deg, #0ca678, #099268); color: #fff; }
+        .toast.err { background: linear-gradient(135deg, #e03131, #b91c1c); color: #fff; }
+        .toast.info{ background: linear-gradient(135deg, #3b5bdb, #7048e8); color: #fff; }
+
+        mark { background: #ffe066; border-radius: 3px; padding: 0 2px; color: #54390a; font-weight: 700; }
+
+        @media (max-width: 768px) {
+            .c-type { display: none; }
+            .fr-2col { grid-template-columns: 1fr; }
+        }
+
+        /* ── TAG PILLS ─────────────────────────────────────── */
+        .tag-pill {
+            display: inline-block;
+            padding: 2px 8px; border-radius: 12px;
+            font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+            margin: 1px 2px;
+            border: 1px solid transparent;
+        }
+        .tag-python   { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+        .tag-django   { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+        .tag-devops   { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+        .tag-sre      { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+        .tag-aws      { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+        .tag-terraform{ background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+        .tag-ansible  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .tag-linux    { background: #f0fdf4; color: #14532d; border-color: #86efac; }
+        .tag-hr       { background: #fdf4ff; color: #701a75; border-color: #e879f9; }
+        .tag-coding   { background: #ecfeff; color: #155e75; border-color: #67e8f9; }
+        .tag-other    { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+
+        /* ── TAG DROPDOWN (toolbar) ─────────────────────────── */
+        .tag-select-wrap { position: relative; display: flex; align-items: center; gap: 5px; }
+        .tag-select-wrap label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .tag-select {
+            height: 35px; padding: 0 28px 0 10px;
+            border: 2px solid var(--border); border-radius: 9px;
+            background: var(--bg); color: var(--text);
+            font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif;
+            cursor: pointer; outline: none; transition: all 0.18s;
+            appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%234b5c78' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 9px center;
+        }
+        .tag-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,91,219,0.13); }
+        .tag-select.active { border-color: var(--accent); background-color: #dbe4ff; color: #2f4ac2; }
+
+        /* ── TAG PICKER (modal) ─────────────────────────────── */
+        .tag-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+        .tg-o {
+            padding: 4px 12px; border-radius: 20px;
+            border: 1.5px solid var(--border);
+            font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s;
+            user-select: none; text-transform: uppercase; letter-spacing: 0.3px;
+            color: var(--muted); background: var(--bg);
+        }
+        .tg-o:hover { opacity: 0.85; }
+        .tg-o.sel.tag-python   { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+        .tg-o.sel.tag-django   { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+        .tg-o.sel.tag-devops   { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+        .tg-o.sel.tag-sre      { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+        .tg-o.sel.tag-aws      { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+        .tg-o.sel.tag-terraform{ background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+        .tg-o.sel.tag-ansible  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .tg-o.sel.tag-linux    { background: #f0fdf4; color: #14532d; border-color: #86efac; }
+        .tg-o.sel.tag-hr       { background: #fdf4ff; color: #701a75; border-color: #e879f9; }
+        .tg-o.sel.tag-coding   { background: #ecfeff; color: #155e75; border-color: #67e8f9; }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <!-- ── TOP BAR ── -->
+    <div class="topbar">
+        <a class="back-btn" href="/">&#8592; Live</a>
+        <div class="topbar-logo">&#128218;</div>
+        <div class="topbar-title">Questions Database</div>
+        <div class="topbar-gap"></div>
+        <span class="stat-badge sb-blue"  id="stTotal">— entries</span>
+        <span class="stat-badge sb-green" id="stUsed"></span>
+        <span class="stat-badge sb-teal"  id="stHits"></span>
+    </div>
+
+    <!-- ── TOOLBAR ── -->
+    <div class="toolbar">
+        <div class="search-wrap">
+            <span class="search-ico">&#128269;</span>
+            <input class="search-input" id="searchInput" type="text"
+                placeholder="Search questions, answers, keywords..."
+                onkeydown="if(event.key==='Enter')applySearch()"
+                oninput="onSearchInput()" autocomplete="off" />
+            <button class="search-x" id="searchX" onclick="clearSearch()">&#10005;</button>
+        </div>
+
+        <div class="filter-group">
+            <button class="f-btn on"  data-f="all"    onclick="setFilter('all')">All</button>
+            <button class="f-btn"     data-f="theory" onclick="setFilter('theory')">Theory</button>
+            <button class="f-btn"     data-f="coding" onclick="setFilter('coding')">Coding</button>
+        </div>
+
+        <div class="tag-select-wrap">
+            <label>&#127991;</label>
+            <select class="tag-select" id="tagSelect">
+                <option value="all">All Tags</option>
+                <option value="python">Python</option>
+                <option value="django">Django</option>
+                <option value="devops">DevOps</option>
+                <option value="sre">SRE</option>
+                <option value="aws">AWS</option>
+                <option value="terraform">Terraform</option>
+                <option value="ansible">Ansible</option>
+                <option value="linux">Linux</option>
+                <option value="hr">HR</option>
+                <option value="coding">Coding</option>
+            </select>
+        </div>
+
+        <button class="tb-btn apply" onclick="applySearch()" title="Apply search and tag filter">&#128269; Search</button>
+        <button class="tb-btn reset" onclick="resetAll()" title="Clear all filters">&#8635; Reset</button>
+
+        <div class="tb-divider"></div>
+        <div class="tb-flex"></div>
+        <span class="match-lbl" id="matchLbl"></span>
+        <div class="tb-divider"></div>
+
+        <button class="tb-btn dl-csv"  onclick="downloadCSV()"  title="Export visible rows as CSV">&#11123; CSV</button>
+        <button class="tb-btn dl-json" onclick="downloadJSON()" title="Export visible rows as JSON">&#11123; JSON</button>
+        <button class="tb-btn add"     onclick="openAdd()">&#43; Add Q&amp;A</button>
+    </div>
+
+    <!-- ── TABLE ── -->
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th class="c-num" onclick="sortBy('id'">#<span class="si" id="si-id"> ↑</span></th>
+                    <th class="c-q"   onclick="sortBy('question')">Question<span class="si" id="si-question"></span></th>
+                    <th class="c-type" onclick="sortBy('type')">Type<span class="si" id="si-type"></span></th>
+                    <th class="c-tags">Tags</th>
+                    <th class="c-hit" onclick="sortBy('hit_count')">Hits<span class="si" id="si-hit_count"></span></th>
+                    <th class="c-act">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tbody">
+                <tr class="empty-tr"><td colspan="6"><h3>&#8987;</h3><p>Loading database...</p></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── STATUS BAR ── -->
+    <div class="statusbar">
+        <div class="sb"><span class="live-dot"></span>&nbsp;Live</div>
+        <div class="sb">Total: <b id="sbTotal">—</b></div>
+        <div class="sb">Shown: <b id="sbShown">—</b></div>
+        <div class="sb">Hits: <b id="sbHits">—</b></div>
+        <div class="sb">Sort: <b id="sbSort">ID ↑</b></div>
+        <div class="sb-gap"></div>
+        <div class="sb-hint">Click question to read full answer · ← → navigate · Ctrl+Enter to save</div>
+    </div>
+</div>
+
+<!-- ── ADD/EDIT MODAL ── -->
+<div class="overlay" id="editOv">
+  <div class="modal">
+    <div class="m-hdr">
+        <h2 id="mTitle">&#43; Add Q&amp;A</h2>
+        <button class="m-x" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="m-body">
+        <input type="hidden" id="eId">
+        <div class="fr">
+            <label>Question *</label>
+            <input type="text" id="eQ" placeholder="e.g. What is a Python generator?" />
+        </div>
+        <div class="fr">
+            <label>Type</label>
+            <div class="type-row">
+                <button class="tc on-t" data-t="theory" onclick="setType('theory')">Theory</button>
+                <button class="tc"      data-t="coding" onclick="setType('coding')">Coding</button>
+                <button class="tc"      data-t="both"   onclick="setType('both')">Both</button>
+            </div>
+        </div>
+        <div class="fr">
+            <label>Theory Answer</label>
+            <textarea class="ta-t" id="eTheory" rows="4" placeholder="- First point&#10;- Second point&#10;- Third point"></textarea>
+        </div>
+        <div class="fr">
+            <label>Coding Answer <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+            <textarea class="ta-c" id="eCoding" rows="3" placeholder="def solution():&#10;    pass"></textarea>
+        </div>
+        <div class="fr-2col">
+            <div class="fr">
+                <label>Keywords <span style="font-weight:400;text-transform:none;font-size:11px">(comma separated)</span></label>
+                <input type="text" id="eKw" placeholder="generator,yield,lazy" />
+            </div>
+            <div class="fr">
+                <label>Aliases <span style="font-weight:400;text-transform:none;font-size:11px">(pipe | separated)</span></label>
+                <input type="text" id="eAliases" placeholder="what is yield|python generator" />
+                <div class="fr-hint">Alternate phrasings to improve DB matching.</div>
+            </div>
+        </div>
+        <div class="fr">
+            <label>Tags <span style="font-weight:400;text-transform:none;font-size:11px">(click to toggle)</span></label>
+            <div class="tag-picker" id="tagPicker">
+                <span class="tg-o tag-python"    data-tag="python">Python</span>
+                <span class="tg-o tag-django"    data-tag="django">Django</span>
+                <span class="tg-o tag-devops"    data-tag="devops">DevOps</span>
+                <span class="tg-o tag-sre"       data-tag="sre">SRE</span>
+                <span class="tg-o tag-aws"       data-tag="aws">AWS</span>
+                <span class="tg-o tag-terraform" data-tag="terraform">Terraform</span>
+                <span class="tg-o tag-ansible"   data-tag="ansible">Ansible</span>
+                <span class="tg-o tag-linux"     data-tag="linux">Linux</span>
+                <span class="tg-o tag-hr"        data-tag="hr">HR</span>
+                <span class="tg-o tag-coding"    data-tag="coding">Coding</span>
+            </div>
+            <input type="hidden" id="modalTags">
+        </div>
+    </div>
+    <div class="m-ftr">
+        <div class="m-hint"><kbd>Ctrl+Enter</kbd> save &nbsp;·&nbsp; <kbd>Esc</kbd> close</div>
+        <div style="display:flex;gap:8px">
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="btn-save" id="btnSave" onclick="saveModal()">Save to DB</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── READER OVERLAY ── -->
+<div class="reader-ov" id="readerOv">
+  <div class="reader-panel">
+    <div class="r-hdr">
+      <div class="r-nav">
+        <button class="r-nav-btn" id="rPrev" onclick="readerNav(-1)" title="Previous (←)">&#8592;</button>
+        <div class="r-nav-ctr" id="rNavCtr"></div>
+        <button class="r-nav-btn" id="rNext" onclick="readerNav(1)"  title="Next (→)">&#8594;</button>
+        <button class="r-close" onclick="closeReader()" title="Close (Esc)">&#10005;</button>
+      </div>
+      <div class="r-question" id="rQuestion"></div>
+      <div class="r-tags"    id="rTags"></div>
+    </div>
+    <div class="r-body" id="rBody"></div>
+    <div class="r-ftr">
+      <div class="r-meta" id="rMeta"></div>
+      <button class="r-act-btn r-copy"    onclick="readerCopy()" id="rCopyBtn">&#128203; Copy Answer</button>
+      <button class="r-act-btn r-edit-btn" onclick="readerEdit()">&#9998; Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE MODAL ── -->
+<div class="overlay" id="delOv">
+  <div class="modal del-modal">
+    <div class="del-body">
+        <div class="del-ico">&#128465;&#65039;</div>
+        <div class="del-ttl">Delete Entry?</div>
+        <div class="del-sub">This action is permanent and cannot be undone.</div>
+        <div class="del-preview" id="delPrev"></div>
+        <div style="display:flex;gap:10px;justify-content:center">
+            <button class="btn-cancel" onclick="closeDelModal()">Cancel</button>
+            <button class="btn-del" onclick="confirmDel()">&#128465; Yes, Delete</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    /* ── State ── */
+    let allItems = [], shown = [];
+    let activeFilter = 'all', searchQ = '', sortField = 'id', sortAsc = true;
+    let eType = 'theory', delId = null;
+    let searchTimer = null;
+
+    const COLORS = ['#3b5bdb','#0ca678','#e67700','#7048e8','#0c8599','#c2255c','#d9480f','#2f9e44'];
+
+    /* ── Load ── */
+    async function load() {
+        try {
+            const r = await fetch('/api/qa?search=');
+            const d = await r.json();
+            allItems = d.items || [];
+            const s = d.stats || {};
+            el('stTotal').textContent = `${s.total||allItems.length} entries`;
+            const used = allItems.filter(i=>i.hit_count>0).length;
+            el('stUsed').textContent = `${used} used`;
+            el('stHits').textContent = `${s.total_hits||0} hits`;
+            el('sbTotal').textContent = s.total || allItems.length;
+            el('sbHits').textContent  = s.total_hits || 0;
+            applyFilter();
+        } catch {
+            el('tbody').innerHTML = `<tr class="empty-tr"><td colspan="8"><h3>&#10060;</h3><p>Failed to load. Is the server running?</p></td></tr>`;
+        }
+    }
+
+    function el(id) { return document.getElementById(id); }
+
+    /* ── Filter + Sort + Render ── */
+    function applyFilter() {
+        let items = allItems;
+        if (activeFilter==='theory') items = items.filter(i=>i.type==='theory'||i.type==='both');
+        else if (activeFilter==='coding') items = items.filter(i=>i.type==='coding'||i.type==='both');
+        if (searchQ) {
+            const q = searchQ.toLowerCase();
+            items = items.filter(i =>
+                (i.question||'').toLowerCase().includes(q) ||
+                (i.answer_theory||'').toLowerCase().includes(q) ||
+                (i.answer_coding||'').toLowerCase().includes(q) ||
+                (i.aliases||'').toLowerCase().includes(q) ||
+                (i.keywords||'').toLowerCase().includes(q)
+            );
+        }
+        // Tag filter
+        if (activeTag !== 'all') {
+            items = items.filter(r => {
+                const tags = (r.tags || '').toLowerCase().split(',').map(t => t.trim());
+                return tags.includes(activeTag);
+            });
+        }
+        items = [...items].sort((a,b) => {
+            let av=a[sortField], bv=b[sortField];
+            if (typeof av==='string') av=av.toLowerCase();
+            if (typeof bv==='string') bv=bv.toLowerCase();
+            return av<bv ? (sortAsc?-1:1) : av>bv ? (sortAsc?1:-1) : 0;
+        });
+        shown = items;
+        renderTable(items);
+        const cnt = searchQ||activeFilter!=='all'
+            ? `${items.length} / ${allItems.length} shown`
+            : `${allItems.length} entries`;
+        el('matchLbl').textContent = cnt;
+        el('sbShown').textContent  = items.length;
+    }
+
+    function renderTable(items) {
+        if (!items.length) {
+            const q = el('searchInput').value.trim();
+            el('tbody').innerHTML = `<tr class="empty-tr"><td colspan="6"><h3>&#128269;</h3><p>${q?`No results for <strong>"${esc(q)}"</strong> — try different keywords.`:'No entries found.'}</p></td></tr>`;
+            return;
+        }
+        el('tbody').innerHTML = items.map((item, idx) => {
+            const c    = COLORS[idx % COLORS.length];
+            const tc   = 'tp-'+(item.type||'theory');
+            const tlbl = (item.type||'theory').charAt(0).toUpperCase()+(item.type||'theory').slice(1);
+            const h    = item.hit_count||0;
+            const hc   = h>=10?'h-hot':h>=3?'h-mid':h>=1?'h-low':'h-zero';
+            const kws  = (item.keywords||'').split(',').map(k=>k.trim()).filter(Boolean).slice(0,5);
+            const qHtml= searchQ ? hl(esc(item.question),searchQ) : esc(item.question);
+
+            // Tags pills
+            const tagsHtml = (item.tags||'').split(',').filter(Boolean).map(t => {
+                t = t.trim().toLowerCase();
+                return `<span class="tag-pill tag-${t}">${t}</span>`;
+            }).join('');
+
+            // Keyword chips under question
+            const kwHtml = kws.length
+                ? `<div class="q-kws">${kws.map(k=>`<span class="kw">${esc(k)}</span>`).join('')}</div>`
+                : '';
+
+            return `<tr id="tr-${item.id}">
+                <td class="c-num"><span class="rnum" style="background:${c}">${idx+1}</span></td>
+                <td class="c-q">
+                  <div class="q-cell" onclick="openReader(${item.id})">
+                    <div class="q-text">${qHtml}<span class="q-read-hint">&#128218;</span></div>
+                    ${kwHtml}
+                  </div>
+                </td>
+                <td class="c-type"><span class="type-pill ${tc}">${tlbl}</span></td>
+                <td class="c-tags">${tagsHtml||'<span style="color:#ccc;font-size:11px">—</span>'}</td>
+                <td class="c-hit"><span class="hit-badge ${hc}">${h}</span></td>
+                <td class="c-act"><div class="act-wrap">
+                    <button class="ra ra-edit" onclick="openEdit(${item.id},event)" title="Edit">&#9998;</button>
+                    <button class="ra ra-del"  onclick="openDel(${item.id},event)"  title="Delete">&#128465;</button>
+                </div></td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ══════════════════════════════════════════════════
+       READER OVERLAY
+    ══════════════════════════════════════════════════ */
+    let readerIdx = 0;   // index in `shown` array
+    let readerItemId = null;
+
+    function openReader(id) {
+        const idx = shown.findIndex(i => i.id === id);
+        if (idx < 0) return;
+        readerIdx = idx;
+        readerItemId = id;
+        _renderReader();
+        el('readerOv').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeReader() {
+        el('readerOv').classList.remove('open');
+        document.body.style.overflow = '';
+        readerItemId = null;
+    }
+
+    function readerNav(dir) {
+        const next = readerIdx + dir;
+        if (next < 0 || next >= shown.length) return;
+        readerIdx = next;
+        readerItemId = shown[readerIdx].id;
+        _renderReader();
+        el('rBody').scrollTop = 0;
+    }
+
+    function _renderReader() {
+        const item = shown[readerIdx];
+        if (!item) return;
+
+        // Nav counter
+        el('rNavCtr').textContent = `${readerIdx + 1} / ${shown.length}`;
+        el('rPrev').disabled = readerIdx === 0;
+        el('rNext').disabled = readerIdx === shown.length - 1;
+
+        // Question
+        el('rQuestion').textContent = item.question;
+
+        // Tags
+        const tagsHtml = (item.tags||'').split(',').filter(Boolean).map(t => {
+            t = t.trim().toLowerCase();
+            return `<span class="tag-pill tag-${t}">${t}</span>`;
+        }).join('');
+        el('rTags').innerHTML = tagsHtml || '';
+
+        // Body
+        const hasT = (item.answer_theory||'').trim();
+        const hasC = (item.answer_coding||'').trim();
+        let bodyHtml = '';
+
+        if (hasT) {
+            bodyHtml += `<div class="r-section">
+                <div class="r-sec-label theory">&#128218; Theory Answer</div>
+                ${_rFmtTheory(hasT)}
+            </div>`;
+        }
+        if (hasC) {
+            bodyHtml += `<div class="r-section">
+                <div class="r-sec-label coding">&#128187; Code / Example</div>
+                <pre class="r-code">${esc(hasC.replace(/```\w*\n?/g,'').trim())}</pre>
+            </div>`;
+        }
+        if (!hasT && !hasC) {
+            bodyHtml = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:15px">No answer yet — click <strong>Edit</strong> to add one.</div>`;
+        }
+        el('rBody').innerHTML = bodyHtml;
+
+        // Footer meta
+        const typePill = `<span class="type-pill tp-${item.type||'theory'}" style="font-size:10px">${(item.type||'theory')}</span>`;
+        el('rMeta').innerHTML = `
+            <span>&#128178; ID ${item.id}</span>
+            ${item.hit_count ? `<span>&#128293; ${item.hit_count} hits</span>` : ''}
+            <span>&#128197; ${(item.updated_at||'').slice(0,10)}</span>
+            <span>${typePill}</span>
+            ${item.keywords ? `<span style="color:#7048e8;font-size:11px">&#128273; ${esc(item.keywords)}</span>` : ''}
+        `;
+
+        // Highlight the active table row
+        document.querySelectorAll('#tbody tr').forEach(r => r.style.outline = '');
+        const tr = el('tr-' + item.id);
+        if (tr) { tr.style.outline = '3px solid #7048e8'; tr.scrollIntoView({block:'nearest'}); }
+    }
+
+    function _rFmtTheory(text) {
+        const lines = text.split('\n');
+        const isBullets = lines.some(l => /^[-•*]\s/.test(l.trim()));
+        if (isBullets) {
+            const items = lines
+                .filter(l => l.trim())
+                .map(l => l.replace(/^[-•*]\s*/, '').trim())
+                .filter(Boolean);
+            return `<ul class="r-bullets">${items.map(t =>
+                `<li><span class="bul-dot"></span><span class="bul-txt">${esc(t)}</span></li>`
+            ).join('')}</ul>`;
+        }
+        return `<div class="r-para">${esc(text).replace(/\n\n/g,'</div><div class="r-para" style="margin-top:10px">').replace(/\n/g,'<br>')}</div>`;
+    }
+
+    function readerCopy() {
+        const item = shown[readerIdx];
+        if (!item) return;
+        const text = (item.answer_theory || item.answer_coding || '').trim();
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = el('rCopyBtn');
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.innerHTML = '&#128203; Copy Answer'; }, 1800);
+        });
+    }
+
+    function readerEdit() {
+        const item = shown[readerIdx];
+        if (!item) return;
+        closeReader();
+        setTimeout(() => openEdit(item.id, null), 80);
+    }
+
+    function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function hl(html, q) {
+        if (!q) return html;
+        return html.replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<mark>$1</mark>');
+    }
+
+
+    /* ── Sort ── */
+    function sortBy(field) {
+        if (sortField===field) sortAsc=!sortAsc; else { sortField=field; sortAsc=true; }
+        document.querySelectorAll('.si').forEach(e=>{e.textContent='';e.closest('th').classList.remove('sorted');});
+        const si = el('si-'+field);
+        if (si) { si.textContent=' '+(sortAsc?'↑':'↓'); si.closest('th').classList.add('sorted'); }
+        el('sbSort').textContent = field+' '+(sortAsc?'↑':'↓');
+        applyFilter();
+    }
+
+    /* ── Search ── */
+    function onSearchInput() {
+        // Only update the X button on input — don't filter until Search is clicked
+        const v = el('searchInput').value.trim();
+        el('searchX').classList.toggle('on', v.length > 0);
+    }
+    function applySearch() {
+        searchQ = el('searchInput').value.trim();
+        el('searchX').classList.toggle('on', searchQ.length > 0);
+        activeTag = el('tagSelect').value;
+        el('tagSelect').classList.toggle('active', activeTag !== 'all');
+        applyFilter();
+    }
+    function clearSearch() {
+        el('searchInput').value=''; searchQ='';
+        el('searchX').classList.remove('on');
+        applyFilter();
+        el('searchInput').focus();
+    }
+    function setFilter(f) {
+        activeFilter = f;
+        document.querySelectorAll('.f-btn').forEach(b=>b.classList.toggle('on', b.dataset.f===f));
+        applyFilter();
+    }
+    function resetAll() {
+        el('searchInput').value=''; searchQ='';
+        el('searchX').classList.remove('on');
+        activeFilter='all';
+        document.querySelectorAll('.f-btn').forEach(b=>b.classList.toggle('on', b.dataset.f==='all'));
+        activeTag='all';
+        el('tagSelect').value='all'; el('tagSelect').classList.remove('active');
+        sortField='id'; sortAsc=true;
+        document.querySelectorAll('.si').forEach(e=>{e.textContent='';e.closest('th').classList.remove('sorted');});
+        el('si-id').textContent=' ↑'; el('si-id').closest('th').classList.add('sorted');
+        el('sbSort').textContent='ID ↑';
+        applyFilter();
+        toast('Reset — showing all entries', 'info');
+    }
+
+    /* ── Download ── */
+    function downloadCSV() {
+        const hdr=['ID','Question','Type','Tags','Theory Answer','Coding Answer','Keywords','Aliases','Hits'];
+        const rows=shown.map(i=>[i.id,i.question,i.type,i.tags||'',i.answer_theory||'',i.answer_coding||'',i.keywords||'',i.aliases||'',i.hit_count||0].map(v=>`"${String(v).replace(/"/g,'""')}"`));
+        dlFile([hdr.join(','),...rows.map(r=>r.join(','))].join('\n'),'text/csv',`qa_${today()}.csv`);
+        toast('&#11123; Downloaded CSV ('+shown.length+' rows)', 'ok');
+    }
+    function downloadJSON() {
+        dlFile(JSON.stringify(shown,null,2),'application/json',`qa_${today()}.json`);
+        toast('&#11123; Downloaded JSON ('+shown.length+' rows)', 'ok');
+    }
+    function dlFile(content,mime,name) {
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+        a.download=name; a.click();
+    }
+    function today() { return new Date().toISOString().slice(0,10); }
+
+    /* ── Add modal ── */
+    function openAdd() {
+        el('eId').value='';
+        el('mTitle').innerHTML='<span>&#43;</span> Add New Q&amp;A';
+        el('eQ').value=''; el('eTheory').value=''; el('eCoding').value='';
+        el('eKw').value=''; el('eAliases').value='';
+        initTagPicker('');
+        el('btnSave').textContent='Save to DB';
+        setType('theory');
+        el('editOv').classList.add('open');
+        setTimeout(()=>el('eQ').focus(),80);
+    }
+
+    /* ── Edit modal ── */
+    async function openEdit(id, e) {
+        e&&e.stopPropagation();
+        try {
+            const r=await fetch(`/api/qa/${id}`); const item=await r.json();
+            if (item.error){toast('Entry not found','err');return;}
+            el('eId').value=id;
+            el('mTitle').innerHTML=`&#9998; Edit Entry <span style="color:rgba(147,197,253,0.6);font-size:12px;font-weight:500">#${id}</span>`;
+            el('eQ').value=item.question||''; el('eTheory').value=item.answer_theory||'';
+            el('eCoding').value=item.answer_coding||''; el('eKw').value=item.keywords||'';
+            el('eAliases').value=item.aliases||'';
+            initTagPicker(item.tags||'');
+            el('btnSave').textContent='Update Entry';
+            setType(item.type||'theory');
+            el('editOv').classList.add('open');
+            setTimeout(()=>el('eQ').focus(),80);
+        } catch { toast('Failed to load entry','err'); }
+    }
+    function closeModal(){ el('editOv').classList.remove('open'); }
+
+    function setType(t) {
+        eType=t;
+        document.querySelectorAll('.tc').forEach(b=>{
+            b.classList.remove('on-t','on-c','on-b');
+            if (b.dataset.t===t) b.classList.add('on-'+t.charAt(0));
+        });
+    }
+
+    async function saveModal() {
+        const q=el('eQ').value.trim();
+        if (!q){el('eQ').focus();toast('Question text is required','err');return;}
+        const id=el('eId').value;
+        const pay={question:q,answer_theory:el('eTheory').value.trim(),answer_coding:el('eCoding').value.trim(),type:eType,keywords:el('eKw').value.trim(),aliases:el('eAliases').value.trim(),tags:el('modalTags').value.trim()};
+        const btn=el('btnSave'); btn.disabled=true; btn.textContent='Saving...';
+        try {
+            const r=await fetch(id?`/api/qa/${id}`:'/api/qa',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pay)});
+            const d=await r.json();
+            if (!r.ok){toast(d.error||'Save failed','err');return;}
+            closeModal();
+            toast(id?'&#10003; Updated successfully!':'&#10003; New entry added!','ok');
+            await load();
+            if (id) setTimeout(()=>{ el('tr-'+id)?.scrollIntoView({behavior:'smooth',block:'nearest'}); },200);
+        } catch { toast('Network error','err'); }
+        finally { btn.disabled=false; btn.textContent=id?'Update Entry':'Save to DB'; }
+    }
+
+    /* ── Delete ── */
+    function openDel(id,e) {
+        e&&e.stopPropagation();
+        delId=id;
+        const item=allItems.find(i=>i.id===id);
+        el('delPrev').textContent=item?item.question:`Entry #${id}`;
+        el('delOv').classList.add('open');
+    }
+    function closeDelModal(){ delId=null; el('delOv').classList.remove('open'); }
+    async function confirmDel() {
+        if (!delId) return;
+        try {
+            const r=await fetch(`/api/qa/${delId}`,{method:'DELETE'});
+            const d=await r.json();
+            if (!r.ok){toast(d.error||'Delete failed','err');return;}
+            closeDelModal();
+            toast('&#10003; Entry deleted','ok');
+            if (readerItemId===delId) closeReader();
+            await load();
+        } catch { toast('Network error','err'); }
+    }
+
+    /* ── Keyboard / overlay close ── */
+    el('editOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+    el('delOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDelModal();});
+    el('readerOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closeReader();});
+    document.addEventListener('keydown',e=>{
+        const readerOpen = el('readerOv').classList.contains('open');
+        if (e.key==='Escape'){ closeModal(); closeDelModal(); closeReader(); }
+        if (readerOpen) {
+            if (e.key==='ArrowLeft'  || e.key==='ArrowUp')   { e.preventDefault(); readerNav(-1); }
+            if (e.key==='ArrowRight' || e.key==='ArrowDown')  { e.preventDefault(); readerNav(1); }
+        }
+        if ((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&el('editOv').classList.contains('open')) saveModal();
+    });
+
+    /* ── Tag filter (dropdown) ── */
+    let activeTag = 'all';
+    function filterByTag(tag) {
+        // Called programmatically (e.g. resetAll) — sync state without re-triggering applyFilter
+        activeTag = tag;
+        const sel = el('tagSelect');
+        sel.value = tag;
+        sel.classList.toggle('active', tag !== 'all');
+    }
+
+    /* ── Tag picker (modal) ── */
+    let _selTags = new Set();
+    function initTagPicker(tagsStr) {
+        _selTags = new Set((tagsStr || '').split(',').map(t => t.trim()).filter(Boolean));
+        document.querySelectorAll('.tg-o').forEach(span => {
+            span.classList.toggle('sel', _selTags.has(span.dataset.tag));
+        });
+        el('modalTags').value = [..._selTags].join(',');
+    }
+    function toggleTag(tag) {
+        if (_selTags.has(tag)) _selTags.delete(tag);
+        else _selTags.add(tag);
+        document.querySelectorAll('.tg-o').forEach(span => {
+            span.classList.toggle('sel', _selTags.has(span.dataset.tag));
+        });
+        el('modalTags').value = [..._selTags].join(',');
+    }
+    // Wire up tag picker clicks once
+    document.querySelectorAll('.tg-o').forEach(span => {
+        span.addEventListener('click', () => toggleTag(span.dataset.tag));
+    });
+
+    /* ── Toast ── */
+    function toast(msg,type='') {
+        const t=el('toast');
+        t.innerHTML=msg; t.className='toast show'+(type?' '+type:'');
+        setTimeout(()=>t.className='toast',3200);
+    }
+
+    load();
+</script>
+</body>
+</html>

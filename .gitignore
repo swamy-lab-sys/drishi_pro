@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+venv/
+ENV/
+
+# Environment (contains API keys — never commit)
+.env
+
+# Runtime / generated
+*.db
+*.log
+*.raw
+.interview_assistant/
+fragment_context.json
+runtime_settings.json
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.zip
+
+# Large / binary
+get-pip.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

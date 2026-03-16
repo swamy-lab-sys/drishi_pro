@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>User Profiles – Drishi Pro</title>
+<style>
+  :root {
+    --bg: #0F1117; --surface: #1B1E27; --border: #2C2F3A;
+    --accent: #6366F1; --text: #E6EDF3; --muted: #8B949E;
+    --success: #22D3A0; --danger: #EF4444; --warn: #F59E0B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
+         font-size: 14px; min-height: 100vh; }
+
+  .top-bar { background: var(--surface); border-bottom: 1px solid var(--border);
+             padding: 14px 32px; display: flex; align-items: center; gap: 16px; }
+  .logo { font-size: 13px; font-weight: 900; color: var(--accent); letter-spacing: 2px; }
+  .top-bar h2 { font-size: 18px; font-weight: 700; }
+  .spacer { flex: 1; }
+
+  .container { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+
+  .btn {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer;
+    font-size: 12px; font-weight: 600; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px; transition: border-color 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.9; color: #fff; }
+  .btn.success { border-color: var(--success); color: var(--success); }
+  .btn.danger  { border-color: var(--danger);  color: var(--danger); }
+  .btn.warn    { border-color: var(--warn);    color: var(--warn); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+          overflow: hidden; margin-bottom: 24px; }
+  .card-head { padding: 16px 20px; border-bottom: 1px solid var(--border);
+               display: flex; align-items: center; justify-content: space-between; }
+  .card-head h3 { font-size: 15px; font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px 16px; font-size: 10px; text-transform: uppercase;
+       letter-spacing: 0.6px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  td { padding: 14px 16px; border-bottom: 1px solid rgba(44,47,58,0.5); font-size: 13px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: rgba(255,255,255,0.02); }
+
+  .badge { padding: 3px 9px; border-radius: 6px; font-size: 10px; font-weight: 700; }
+  .badge-active   { background: var(--success); color: #000; }
+  .badge-idle     { background: rgba(255,255,255,0.07); color: var(--muted); }
+  .badge-uploaded { background: rgba(34,211,160,0.15); color: var(--success); }
+  .badge-missing  { background: rgba(255,255,255,0.05); color: var(--muted); }
+  .badge-key      { background: rgba(99,102,241,0.15); color: var(--accent); font-family: monospace; font-size: 11px; padding: 3px 8px; border-radius: 5px; }
+  .badge-revoked  { background: rgba(239,68,68,0.1); color: var(--danger); }
+
+  /* Key reveal box */
+  .key-reveal { background: rgba(34,211,160,0.08); border: 1px solid rgba(34,211,160,0.35);
+                border-radius: 10px; padding: 16px 18px; margin: 16px 0 0; display: none; }
+  .key-reveal .key-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; }
+  .key-reveal .key-value { font-family: monospace; font-size: 15px; font-weight: 700;
+                           color: var(--success); letter-spacing: 1px; word-break: break-all; }
+  .key-reveal .key-warn  { font-size: 11px; color: var(--warn); margin-top: 8px; }
+
+  /* Keys table inside modal */
+  .keys-list { margin-top: 16px; }
+  .key-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+             border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+             background: rgba(255,255,255,0.02); }
+  .key-row .key-info { flex: 1; min-width: 0; }
+  .key-row .key-code { font-family: monospace; font-size: 12px; color: var(--text); }
+  .key-row .key-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .key-row.revoked   { opacity: 0.45; }
+  .key-empty { text-align: center; padding: 28px; color: var(--muted); font-size: 13px; }
+
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Modals ── */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+             align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+  .overlay.open { display: flex; }
+  .modal { background: var(--surface); width: 100%; max-width: 560px; border-radius: 16px;
+           border: 1px solid var(--border); max-height: 90vh; overflow-y: auto; }
+  .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+                display: flex; align-items: center; }
+  .modal-head h3 { font-size: 16px; font-weight: 700; flex: 1; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 20px;
+                 cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .modal-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .modal-body { padding: 20px 24px; }
+  .modal-foot { padding: 16px 24px; border-top: 1px solid var(--border);
+                display: flex; justify-content: flex-end; gap: 10px; }
+
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.6px; color: var(--muted); margin-bottom: 6px; }
+  input, textarea, select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit;
+    font-size: 13px; outline: none; transition: border-color 0.15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+
+  .hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  .resume-preview { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+                    padding: 14px; font-size: 12px; line-height: 1.7; max-height: 320px;
+                    overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+                    color: var(--text); font-family: monospace; }
+
+  .upload-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 28px;
+                 text-align: center; cursor: pointer; transition: border-color 0.2s; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); }
+  .upload-zone input[type=file] { display: none; }
+  .upload-zone .up-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-zone .up-text { color: var(--muted); font-size: 12px; }
+  .upload-zone .up-title { font-weight: 700; margin-bottom: 4px; }
+
+  /* Summary box after upload */
+  .summary-box { background: rgba(34,211,160,0.08); border: 1px solid rgba(34,211,160,0.3);
+                 border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.7;
+                 margin-top: 12px; display: none; white-space: pre-wrap; }
+
+  /* Progress bar */
+  .progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+              margin-top: 12px; display: none; }
+  .progress-bar { height: 100%; background: var(--accent); width: 0%;
+                  transition: width 0.3s; animation: prog 1.5s ease-in-out infinite; }
+  @keyframes prog { 0%{width:20%} 50%{width:80%} 100%{width:20%} }
+
+  /* Active user banner */
+  .active-banner { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3);
+                   border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;
+                   display: flex; align-items: center; gap: 10px; display: none; }
+  .active-banner .dot { width: 8px; height: 8px; border-radius: 50%;
+                        background: var(--success); flex-shrink: 0; }
+  .active-banner .info { flex: 1; }
+  .active-banner .name { font-weight: 700; }
+  .active-banner .role { font-size: 11px; color: var(--muted); }
+
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface);
+           border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px;
+           font-weight: 600; font-size: 13px; display: none; z-index: 999;
+           animation: slideUp 0.25s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error   { border-color: var(--danger);  color: var(--danger); }
+  @keyframes slideUp { from { transform: translateY(16px); opacity: 0; }
+                       to   { transform: translateY(0);    opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">DRISHI PRO</div>
+  <h2>User Profiles</h2>
+  <div class="spacer"></div>
+  <a href="/" class="btn">← Dashboard</a>
+  <button class="btn primary" onclick="openCreateModal()" style="margin-left:8px">+ New User</button>
+</div>
+
+<div class="container">
+
+  <!-- Active user banner -->
+  <div class="active-banner" id="activeBanner">
+    <div class="dot"></div>
+    <div class="info">
+      <div class="name" id="activeName">—</div>
+      <div class="role" id="activeRole">—</div>
+    </div>
+    <span style="font-size:11px; color:var(--muted)">Active for this interview session</span>
+  </div>
+
+  <!-- Users table -->
+  <div class="card">
+    <div class="card-head">
+      <h3>Candidates</h3>
+      <span id="userCount" style="font-size:11px; color:var(--muted)">0 profiles</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Role</th>
+          <th>Experience</th>
+          <th>Resume</th>
+          <th>Intro</th>
+          <th>Keys</th>
+          <th>Status</th>
+          <th style="min-width:300px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userTable">
+        <tr><td colspan="9" style="text-align:center; padding:32px; color:var(--muted)">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Admin: All Access Keys overview -->
+  <div class="card" id="allKeysCard">
+    <div class="card-head">
+      <h3>🔑 Access Keys — Admin Overview</h3>
+      <span id="allKeysCount" style="font-size:11px; color:var(--muted)">0 keys</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Key</th>
+          <th>Label</th>
+          <th>Created</th>
+          <th>Last Used</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="allKeysTable">
+        <tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted)">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ═══════════════════ CREATE / EDIT MODAL ═══════════════════ -->
+<div class="overlay" id="userModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="userModalTitle">New User Profile</h3>
+      <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="uName" placeholder="e.g. Tejaswini">
+      </div>
+      <div class="form-group">
+        <label>Role / Job Title *</label>
+        <input type="text" id="uRole" placeholder="e.g. Production Support Engineer">
+      </div>
+      <div class="form-group">
+        <label>Years of Experience</label>
+        <input type="number" id="uExp" min="0" max="50" placeholder="3">
+      </div>
+      <div class="form-group">
+        <label>Self Introduction</label>
+        <textarea id="uIntro" rows="4"
+          placeholder="Hi, my name is … I have X years of experience in …"></textarea>
+        <p class="hint">This is returned instantly when the interviewer asks "Introduce yourself."</p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('userModal')">Cancel</button>
+      <button class="btn primary" onclick="saveUser()">Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ UPLOAD RESUME MODAL ═══════════════════ -->
+<div class="overlay" id="resumeModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="resumeModalTitle">Upload Resume</h3>
+      <button class="modal-close" onclick="closeModal('resumeModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted); font-size:12px; margin-bottom:16px">
+        Upload a PDF or plain-text resume. Text is extracted automatically.
+        Only the summary (skills, tools, experience) is sent to the LLM — never the full PDF.
+      </p>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('resumeFileInput').click()"
+           ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+        <input type="file" id="resumeFileInput" accept=".pdf,.txt,.doc"
+               onchange="handleFileSelected(event)">
+        <div class="up-icon">📄</div>
+        <div class="up-title">Click to browse or drag & drop</div>
+        <div class="up-text">PDF, TXT — max 5 MB</div>
+      </div>
+      <div class="progress" id="uploadProgress"><div class="progress-bar"></div></div>
+      <div class="summary-box" id="resumeSummaryBox"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('resumeModal')">Cancel</button>
+      <button class="btn primary" id="uploadBtn" onclick="doUploadResume()" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ VIEW RESUME MODAL ═══════════════════ -->
+<div class="overlay" id="viewResumeModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <h3 id="viewResumeTitle">Resume Text</h3>
+      <button class="modal-close" onclick="closeModal('viewResumeModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="resume-preview" id="resumePreviewText">—</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('viewResumeModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ EDIT INTRODUCTION MODAL ═══════════════════ -->
+<div class="overlay" id="introModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="introModalTitle">Edit Self Introduction</h3>
+      <button class="modal-close" onclick="closeModal('introModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted); font-size:12px; margin-bottom:14px">
+        When the interviewer asks "Introduce yourself", this text is returned instantly —
+        no LLM call required.
+      </p>
+      <div class="form-group">
+        <label>Self Introduction</label>
+        <textarea id="introText" rows="7"
+          placeholder="Hi, my name is … I have X years of experience in …&#10;I work with … and have expertise in …"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('introModal')">Cancel</button>
+      <button class="btn primary" onclick="saveIntro()">Save Introduction</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ JOB DESCRIPTION MODAL ═══════════════════ -->
+<div class="overlay" id="jdModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="jdModalTitle">Job Description</h3>
+      <button class="modal-close" onclick="closeModal('jdModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted); font-size:12px; margin-bottom:14px">
+        Paste the job description from the interview role. The system will emphasize
+        matching skills when answering questions.
+      </p>
+      <div class="form-group">
+        <label>Job Description</label>
+        <textarea id="jdText" rows="8"
+          placeholder="Python Developer role&#10;&#10;Requirements:&#10;- Python, APIs, Docker, Linux …"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('jdModal')">Cancel</button>
+      <button class="btn primary" onclick="saveJD()">Save JD</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ACCESS KEYS MODAL ═══════════════════ -->
+<div class="overlay" id="keysModal">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-head">
+      <h3 id="keysModalTitle">Access Keys</h3>
+      <button class="modal-close" onclick="closeModal('keysModal')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <p style="color:var(--muted); font-size:12px; margin-bottom:14px">
+        Each key is a personal password for one user's Chrome extension.
+        Share the key with that candidate — they enter it in the extension Settings tab.
+        Their answers will be personalized to their resume and role.
+      </p>
+
+      <!-- Generate new key -->
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <input type="text" id="newKeyLabel" placeholder="Label (optional) e.g. Venkat's key"
+               style="flex:1; min-width:160px">
+        <button class="btn primary" onclick="generateKey()">+ Generate Key</button>
+      </div>
+
+      <!-- New key reveal (shown once after generation) -->
+      <div class="key-reveal" id="keyReveal">
+        <div class="key-label">New Key — Copy it now, it won't be shown again</div>
+        <div class="key-value" id="newKeyValue">—</div>
+        <div style="margin-top:10px; display:flex; gap:8px">
+          <button class="btn success" onclick="copyNewKey()">📋 Copy Key</button>
+        </div>
+        <div class="key-warn">⚠ Store this key safely. You cannot retrieve it later.</div>
+      </div>
+
+      <!-- Existing keys list -->
+      <div class="keys-list" id="keysListContainer">
+        <div class="key-empty">No keys yet. Generate one above.</div>
+      </div>
+
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('keysModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let allUsers = [];
+let activeUserId = null;
+let editingUserId = null;
+let resumeTargetUserId = null;
+let selectedFile = null;
+let keysTargetUserId = null;
+let allUserKeys = {};  // user_id -> [key, ...]
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+window.onload = async () => {
+  await loadActiveSession();
+  await loadUsers();
+  await loadAllKeys();
+};
+
+async function loadActiveSession() {
+  try {
+    const r = await fetch('/api/session-info');
+    if (!r.ok) return;
+    const data = await r.json();
+    // If user is active, their name is in session info
+    if (data.user_name && data.user_name !== 'None') {
+      const banner = document.getElementById('activeBanner');
+      document.getElementById('activeName').textContent = data.user_name;
+      document.getElementById('activeRole').textContent = data.user_role || '—';
+      banner.style.display = 'flex';
+    }
+  } catch {}
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/users');
+    allUsers = await r.json();
+    // Determine active user id from session info
+    const si = await fetch('/api/session-info').then(r => r.json()).catch(() => ({}));
+    activeUserId = null;
+    if (si.user_name && si.user_name !== 'None') {
+      const match = allUsers.find(u => u.name === si.user_name);
+      if (match) activeUserId = match.id;
+    }
+    renderTable();
+    document.getElementById('userCount').textContent = allUsers.length + ' profile' + (allUsers.length !== 1 ? 's' : '');
+  } catch (e) {
+    document.getElementById('userTable').innerHTML =
+      '<tr><td colspan="8" style="text-align:center; color:var(--danger); padding:24px">Failed to load users</td></tr>';
+  }
+}
+
+function renderTable() {
+  const tbody = document.getElementById('userTable');
+  if (!allUsers.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--muted)">No profiles yet. Click "+ New User" to add one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allUsers.map(u => {
+    const isActive  = u.id === activeUserId;
+    const hasResume = !!(u.resume_file || (u.resume_text && u.resume_text.length > 20));
+    const hasIntro  = !!(u.self_introduction && u.self_introduction.trim().length > 5);
+    const userKeys  = (allUserKeys[u.id] || []).filter(k => k.is_active);
+    const keyCount  = userKeys.length;
+    return `
+      <tr style="${isActive ? 'background:rgba(99,102,241,0.06);' : ''}">
+        <td style="color:var(--muted); font-size:11px">#${u.id}</td>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td style="color:var(--muted)">${esc(u.role)}</td>
+        <td style="color:var(--muted)">${u.experience_years || 0} yrs</td>
+        <td>
+          ${hasResume
+            ? `<span class="badge badge-uploaded">✓ ${esc(u.resume_file || 'Uploaded')}</span>`
+            : `<span class="badge badge-missing">Not uploaded</span>`}
+        </td>
+        <td>
+          ${hasIntro
+            ? `<span class="badge badge-uploaded">✓ Set</span>`
+            : `<span class="badge badge-missing">—</span>`}
+        </td>
+        <td>
+          <button class="btn" onclick="openKeysModal(${u.id})" title="Manage access keys"
+            style="padding:4px 10px; font-size:11px;">
+            🔑 ${keyCount > 0 ? keyCount + ' key' + (keyCount > 1 ? 's' : '') : 'No keys'}
+          </button>
+        </td>
+        <td>
+          <span class="badge ${isActive ? 'badge-active' : 'badge-idle'}">
+            ${isActive ? '● ACTIVE' : 'IDLE'}
+          </span>
+        </td>
+        <td>
+          <div class="actions">
+            <button class="btn" title="Upload Resume" onclick="openResumeUpload(${u.id})">📄 Resume</button>
+            ${hasResume ? `<button class="btn" title="View Resume" onclick="viewResume(${u.id})">👁 View</button>` : ''}
+            <button class="btn" title="Edit Self Introduction" onclick="openIntroModal(${u.id})">💬 Intro</button>
+            <button class="btn" title="Add Job Description" onclick="openJDModal(${u.id})">📋 JD</button>
+            ${!isActive ? `<button class="btn success" onclick="activateUser(${u.id})">▶ Activate</button>` : ''}
+            <button class="btn" onclick="openEditModal(${u.id})">✏ Edit</button>
+            <button class="btn danger" onclick="deleteUser(${u.id})">✕</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+
+// ── Activate ─────────────────────────────────────────────────────────────────
+
+async function activateUser(id) {
+  const r = await fetch(`/api/users/activate/${id}`, {method: 'POST'});
+  if (r.ok) {
+    activeUserId = id;
+    const u = allUsers.find(x => x.id === id);
+    document.getElementById('activeName').textContent = u ? u.name : '—';
+    document.getElementById('activeRole').textContent = u ? u.role : '—';
+    document.getElementById('activeBanner').style.display = 'flex';
+    renderTable();
+    toast('Profile activated: ' + (u ? u.name : id), 'success');
+  } else {
+    toast('Failed to activate', 'error');
+  }
+}
+
+
+// ── Create / Edit User ────────────────────────────────────────────────────────
+
+function openCreateModal() {
+  editingUserId = null;
+  document.getElementById('userModalTitle').textContent = 'New User Profile';
+  ['uName','uRole','uIntro'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('uExp').value = '';
+  openModal('userModal');
+}
+
+function openEditModal(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!u) return;
+  editingUserId = id;
+  document.getElementById('userModalTitle').textContent = 'Edit Profile — ' + u.name;
+  document.getElementById('uName').value  = u.name || '';
+  document.getElementById('uRole').value  = u.role || '';
+  document.getElementById('uExp').value   = u.experience_years || '';
+  document.getElementById('uIntro').value = u.self_introduction || '';
+  openModal('userModal');
+}
+
+async function saveUser() {
+  const name  = document.getElementById('uName').value.trim();
+  const role  = document.getElementById('uRole').value.trim();
+  const exp   = parseInt(document.getElementById('uExp').value) || 0;
+  const intro = document.getElementById('uIntro').value.trim();
+  if (!name || !role) { toast('Name and role are required', 'error'); return; }
+
+  const payload = {name, role, experience_years: exp, self_introduction: intro};
+  const method  = editingUserId ? 'PUT' : 'POST';
+  const url     = editingUserId ? `/api/users/${editingUserId}` : '/api/users';
+
+  const r = await fetch(url, {
+    method, headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (r.ok) {
+    toast(editingUserId ? 'Profile updated' : 'Profile created', 'success');
+    closeModal('userModal');
+    await loadUsers();
+  } else {
+    const d = await r.json().catch(() => ({}));
+    toast('Error: ' + (d.error || r.status), 'error');
+  }
+}
+
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+async function deleteUser(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!confirm(`Delete profile "${u ? u.name : id}"? This cannot be undone.`)) return;
+  const r = await fetch(`/api/users/${id}`, {method: 'DELETE'});
+  if (r.ok) { toast('Profile deleted', 'success'); await loadUsers(); }
+  else toast('Failed to delete', 'error');
+}
+
+
+// ── Upload Resume ─────────────────────────────────────────────────────────────
+
+function openResumeUpload(userId) {
+  resumeTargetUserId = userId;
+  selectedFile = null;
+  document.getElementById('uploadBtn').disabled = true;
+  document.getElementById('uploadProgress').style.display = 'none';
+  document.getElementById('resumeSummaryBox').style.display = 'none';
+  document.getElementById('resumeSummaryBox').textContent = '';
+  document.getElementById('resumeFileInput').value = '';
+  const u = allUsers.find(x => x.id === userId);
+  document.getElementById('resumeModalTitle').textContent =
+    'Upload Resume — ' + (u ? u.name : 'User');
+  const zone = document.getElementById('uploadZone');
+  zone.querySelector('.up-title').textContent = 'Click to browse or drag & drop';
+  zone.querySelector('.up-text').textContent  = 'PDF, TXT — max 5 MB';
+  openModal('resumeModal');
+}
+
+function handleFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  setSelectedFile(file);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('drag');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) setSelectedFile(file);
+}
+
+function setSelectedFile(file) {
+  selectedFile = file;
+  const zone = document.getElementById('uploadZone');
+  zone.querySelector('.up-title').textContent = file.name;
+  zone.querySelector('.up-text').textContent  = (file.size / 1024).toFixed(0) + ' KB — ready to upload';
+  document.getElementById('uploadBtn').disabled = false;
+  document.getElementById('resumeSummaryBox').style.display = 'none';
+}
+
+async function doUploadResume() {
+  if (!selectedFile || !resumeTargetUserId) return;
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  document.getElementById('uploadProgress').style.display = 'block';
+
+  try {
+    const fd = new FormData();
+    fd.append('resume', selectedFile);
+    const r = await fetch(`/api/users/${resumeTargetUserId}/upload_resume`, {
+      method: 'POST', body: fd
+    });
+    const data = await r.json();
+    if (r.ok && data.success) {
+      document.getElementById('uploadProgress').style.display = 'none';
+      const box = document.getElementById('resumeSummaryBox');
+      box.textContent = data.summary
+        ? '✓ Extracted Summary:\n\n' + data.summary
+        : '✓ Resume uploaded (' + data.message + ')';
+      box.style.display = 'block';
+      toast('Resume uploaded successfully', 'success');
+      await loadUsers();
+    } else {
+      document.getElementById('uploadProgress').style.display = 'none';
+      toast('Upload failed: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch (e) {
+    document.getElementById('uploadProgress').style.display = 'none';
+    toast('Upload error: ' + e.message, 'error');
+  } finally {
+    btn.textContent = 'Upload';
+    btn.disabled = !selectedFile;
+  }
+}
+
+
+// ── View Resume ───────────────────────────────────────────────────────────────
+
+function viewResume(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!u) return;
+  document.getElementById('viewResumeTitle').textContent =
+    (u.resume_file ? u.resume_file : 'Resume') + ' — ' + u.name;
+  const text = u.resume_text || 'No resume text stored.';
+  document.getElementById('resumePreviewText').textContent = text;
+  openModal('viewResumeModal');
+}
+
+
+// ── Self Introduction ─────────────────────────────────────────────────────────
+
+let introTargetUserId = null;
+
+function openIntroModal(id) {
+  introTargetUserId = id;
+  const u = allUsers.find(x => x.id === id);
+  document.getElementById('introModalTitle').textContent =
+    'Self Introduction — ' + (u ? u.name : 'User');
+  document.getElementById('introText').value = u ? (u.self_introduction || '') : '';
+  openModal('introModal');
+}
+
+async function saveIntro() {
+  const text = document.getElementById('introText').value.trim();
+  if (!introTargetUserId) return;
+  const r = await fetch(`/api/users/${introTargetUserId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({self_introduction: text})
+  });
+  if (r.ok) {
+    toast('Introduction saved', 'success');
+    closeModal('introModal');
+    await loadUsers();
+    // Refresh active user if needed
+    if (introTargetUserId === activeUserId) {
+      await fetch(`/api/users/activate/${activeUserId}`, {method: 'POST'});
+    }
+  } else {
+    toast('Failed to save', 'error');
+  }
+}
+
+
+// ── Job Description ───────────────────────────────────────────────────────────
+
+let jdTargetUserId = null;
+
+function openJDModal(id) {
+  jdTargetUserId = id;
+  const u = allUsers.find(x => x.id === id);
+  document.getElementById('jdModalTitle').textContent =
+    'Job Description — ' + (u ? u.name : 'User');
+  document.getElementById('jdText').value = u ? (u.job_description || '') : '';
+  openModal('jdModal');
+}
+
+async function saveJD() {
+  const text = document.getElementById('jdText').value.trim();
+  if (!jdTargetUserId) return;
+  const r = await fetch(`/api/users/${jdTargetUserId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({job_description: text})
+  });
+  if (r.ok) {
+    toast('Job description saved', 'success');
+    closeModal('jdModal');
+    await loadUsers();
+    if (jdTargetUserId === activeUserId) {
+      await fetch(`/api/users/activate/${activeUserId}`, {method: 'POST'});
+    }
+  } else {
+    toast('Failed to save', 'error');
+  }
+}
+
+
+// ── Access Keys ───────────────────────────────────────────────────────────────
+
+async function loadAllKeys() {
+  try {
+    const r = await fetch('/api/access-keys');
+    if (!r.ok) return;
+    const keys = await r.json();
+    // Group by user_id
+    allUserKeys = {};
+    for (const k of keys) {
+      if (!allUserKeys[k.user_id]) allUserKeys[k.user_id] = [];
+      allUserKeys[k.user_id].push(k);
+    }
+    renderAllKeysTable(keys);
+  } catch {}
+}
+
+function renderAllKeysTable(keys) {
+  const tbody = document.getElementById('allKeysTable');
+  const countEl = document.getElementById('allKeysCount');
+  if (!keys || !keys.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted)">No access keys created yet. Click 🔑 next to a user to generate one.</td></tr>';
+    countEl.textContent = '0 keys';
+    return;
+  }
+  countEl.textContent = keys.length + ' key' + (keys.length > 1 ? 's' : '');
+  tbody.innerHTML = keys.map(k => {
+    const active = k.is_active;
+    const masked = k.key.substring(0, 6) + '••••••••••••' + k.key.slice(-3);
+    const created = k.created_at ? new Date(k.created_at * 1000).toLocaleDateString() : '—';
+    const lastUsed = k.last_used_at ? timeAgo(k.last_used_at) : 'Never';
+    return `<tr style="${!active ? 'opacity:0.45;' : ''}">
+      <td><strong>${esc(k.user_name)}</strong></td>
+      <td style="color:var(--muted); font-size:11px">${esc(k.user_role)}</td>
+      <td><span class="badge badge-key">${esc(masked)}</span></td>
+      <td style="color:var(--muted); font-size:11px">${esc(k.label || '—')}</td>
+      <td style="color:var(--muted); font-size:11px">${created}</td>
+      <td style="color:var(--muted); font-size:11px">${lastUsed}</td>
+      <td><span class="badge ${active ? 'badge-uploaded' : 'badge-revoked'}">${active ? 'Active' : 'Revoked'}</span></td>
+      <td>
+        <div class="actions">
+          ${active ? `<button class="btn warn" onclick="revokeKey(${k.id})" title="Revoke key">⊘ Revoke</button>` : ''}
+          <button class="btn danger" onclick="deleteKey(${k.id})" title="Delete key">✕ Delete</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function openKeysModal(userId) {
+  keysTargetUserId = userId;
+  const u = allUsers.find(x => x.id === userId);
+  document.getElementById('keysModalTitle').textContent = '🔑 Access Keys — ' + (u ? u.name : 'User');
+  document.getElementById('newKeyLabel').value = '';
+  document.getElementById('keyReveal').style.display = 'none';
+  document.getElementById('newKeyValue').textContent = '—';
+  await renderKeysListForUser(userId);
+  openModal('keysModal');
+}
+
+async function renderKeysListForUser(userId) {
+  const r = await fetch(`/api/access-keys/user/${userId}`);
+  const keys = r.ok ? await r.json() : [];
+  // Update cache
+  allUserKeys[userId] = keys;
+  const container = document.getElementById('keysListContainer');
+  if (!keys.length) {
+    container.innerHTML = '<div class="key-empty">No keys yet. Generate one above.</div>';
+    renderTable(); // refresh count badge
+    return;
+  }
+  container.innerHTML = keys.map(k => {
+    const active = k.is_active;
+    const masked = k.key.substring(0, 6) + '••••••••••••' + k.key.slice(-3);
+    const created = k.created_at ? new Date(k.created_at * 1000).toLocaleDateString() : '—';
+    const lastUsed = k.last_used_at ? timeAgo(k.last_used_at) : 'Never used';
+    return `
+    <div class="key-row ${active ? '' : 'revoked'}">
+      <div class="key-info">
+        <div class="key-code">${esc(masked)}
+          ${k.label ? `<span style="color:var(--muted); font-size:10px; margin-left:6px">${esc(k.label)}</span>` : ''}
+        </div>
+        <div class="key-meta">Created ${created} · Last used: ${lastUsed} · ${active ? '✓ Active' : '⊘ Revoked'}</div>
+      </div>
+      <div class="actions">
+        ${active ? `<button class="btn warn" style="padding:4px 10px; font-size:11px" onclick="revokeKey(${k.id})">⊘ Revoke</button>` : ''}
+        <button class="btn danger" style="padding:4px 10px; font-size:11px" onclick="deleteKey(${k.id})">✕ Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+  renderTable(); // refresh count badge in users table
+}
+
+async function generateKey() {
+  if (!keysTargetUserId) return;
+  const label = document.getElementById('newKeyLabel').value.trim();
+  const r = await fetch('/api/access-keys', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: keysTargetUserId, label})
+  });
+  if (!r.ok) { toast('Failed to create key', 'error'); return; }
+  const data = await r.json();
+
+  // Show the key once
+  document.getElementById('newKeyValue').textContent = data.key;
+  document.getElementById('keyReveal').style.display = 'block';
+  document.getElementById('newKeyLabel').value = '';
+
+  toast('Key created — copy it now!', 'success');
+  await renderKeysListForUser(keysTargetUserId);
+  await loadAllKeys();
+}
+
+function copyNewKey() {
+  const val = document.getElementById('newKeyValue').textContent;
+  if (!val || val === '—') return;
+  navigator.clipboard.writeText(val).then(() => toast('Key copied to clipboard', 'success'));
+}
+
+async function revokeKey(keyId) {
+  if (!confirm('Revoke this key? The user will lose access immediately.')) return;
+  const r = await fetch(`/api/access-keys/${keyId}/revoke`, {method: 'POST'});
+  if (r.ok) {
+    toast('Key revoked', 'success');
+    if (keysTargetUserId) await renderKeysListForUser(keysTargetUserId);
+    await loadAllKeys();
+  } else toast('Failed to revoke key', 'error');
+}
+
+async function deleteKey(keyId) {
+  if (!confirm('Permanently delete this key? This cannot be undone.')) return;
+  const r = await fetch(`/api/access-keys/${keyId}`, {method: 'DELETE'});
+  if (r.ok) {
+    toast('Key deleted', 'success');
+    if (keysTargetUserId) await renderKeysListForUser(keysTargetUserId);
+    await loadAllKeys();
+  } else toast('Failed to delete key', 'error');
+}
+
+function timeAgo(ts) {
+  const diff = Math.floor(Date.now() / 1000 - ts);
+  if (diff < 60)   return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+// Close on overlay click
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+});
+
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+let _toastTimer;
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.style.display = 'none', 3500);
+}
+
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

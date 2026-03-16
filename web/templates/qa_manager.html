@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Q&A Manager – Drishi Pro</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --accent: #4f8ef7;
+    --accent2: #22d3a0;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --code-bg: #0d1117;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; overflow: hidden; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-header h2 { font-size: 15px; font-weight: 700; color: var(--accent); }
+  .sidebar-header p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stats-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .stat { background: var(--bg); border-radius: 6px; padding: 4px 8px; font-size: 11px; }
+  .stat span { font-weight: 700; color: var(--accent2); }
+  .search-wrap { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .search-wrap input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .qa-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .qa-item { padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: background 0.15s; }
+  .qa-item:hover { background: rgba(255,255,255,0.04); }
+  .qa-item.active { background: rgba(79,142,247,0.12); border-left-color: var(--accent); }
+  .qa-item .q-text { font-size: 12px; font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qa-item .q-meta { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; align-items: center; }
+  .badge { border-radius: 4px; padding: 1px 5px; font-size: 10px; font-weight: 600; }
+  .badge.theory  { background: #1d4ed840; color: #60a5fa; }
+  .badge.coding  { background: #14532d40; color: #4ade80; }
+  .badge.both    { background: #7c3aed40; color: #c084fc; }
+  .btn-new { margin: 12px 16px; padding: 8px; background: var(--accent); color: #fff; border: none; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .btn-new:hover { opacity: 0.9; }
+  .empty-list { color: var(--muted); font-size: 12px; padding: 20px 16px; text-align: center; }
+
+  /* ── Main area ── */
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .toolbar h3 { font-size: 15px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .toolbar h3.has-title { color: var(--text); }
+  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.15s; }
+  .btn:hover { background: rgba(255,255,255,0.07); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.9; }
+  .btn.danger  { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .btn.danger:hover { opacity: 0.9; }
+  .btn.success { background: var(--accent2); border-color: var(--accent2); color: #000; }
+  .btn.success:hover { opacity: 0.9; }
+  .editor-area { flex: 1; overflow-y: auto; padding: 20px; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+  input[type=text], select, textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 12.5px; line-height: 1.6; }
+  textarea.code-area { background: var(--code-bg); min-height: 180px; }
+  textarea.theory-area { min-height: 120px; }
+  .type-row { display: flex; gap: 10px; align-items: center; }
+  .type-row select { width: auto; min-width: 130px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Test result ── */
+  .test-result { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 12px; }
+  .test-result.hit  { border-color: var(--accent2); }
+  .test-result.miss { border-color: var(--border); color: var(--muted); }
+  .score-bar { height: 5px; border-radius: 3px; background: var(--border); margin-top: 6px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 3px; background: var(--accent2); transition: width .3s; }
+
+  /* ── Empty state ── */
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--muted); }
+  .empty-state .icon { font-size: 48px; }
+  .empty-state p { font-size: 13px; text-align: center; max-width: 300px; }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 500; transform: translateY(80px); opacity: 0; transition: all .25s; z-index: 999; }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.ok  { border-color: var(--accent2); color: var(--accent2); }
+  #toast.err { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab { padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Meta info ── */
+  .meta-info { font-size: 11px; color: var(--muted); display: flex; gap: 14px; padding: 6px 0 12px; }
+  .meta-info span { display: flex; align-items: center; gap: 4px; }
+
+  /* ── Nav link ── */
+  .nav-link { font-size: 11px; color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 4px; }
+  .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Q&amp;A Database</h2>
+      <p>Pre-loaded answers — no API needed</p>
+      <a href="/" class="nav-link" style="display:inline-block;margin-top:6px;">← Back to Dashboard</a>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat">Total <span id="statTotal">0</span></div>
+      <div class="stat">Theory <span id="statTheory">0</span></div>
+      <div class="stat">Coding <span id="statCoding">0</span></div>
+      <div class="stat">Both <span id="statBoth">0</span></div>
+      <div class="stat">Hits <span id="statHits">0</span></div>
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search questions…" oninput="onSearch(this.value)">
+    </div>
+    <div class="qa-list" id="qaList"></div>
+    <button class="btn-new" onclick="newItem()">+ New Q&amp;A Pair</button>
+  </div>
+
+  <!-- ── Main area ── -->
+  <div class="main">
+    <div class="toolbar">
+      <h3 id="toolbarTitle" class="">Select or create a Q&amp;A pair</h3>
+      <button class="btn success" id="btnTest" onclick="testLookup()" style="display:none">Test Lookup</button>
+      <button class="btn primary" id="btnSave" onclick="saveItem()" style="display:none">Save</button>
+      <button class="btn danger"  id="btnDelete" onclick="deleteItem()" style="display:none">Delete</button>
+    </div>
+    <div class="editor-area" id="editorArea">
+      <div class="empty-state">
+        <div class="icon">🗃️</div>
+        <p>Add pre-loaded Q&amp;A pairs here. When a question from audio matches an entry, the stored answer is shown instantly — no API call needed.</p>
+        <button class="btn primary" onclick="newItem()" style="margin-top:8px">+ New Q&amp;A Pair</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let allItems = [];
+let currentId = null;   // null = new item
+let isNew = false;
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+window.onload = () => loadList();
+
+async function loadList(search = '') {
+  const url = search ? `/api/qa?search=${encodeURIComponent(search)}` : '/api/qa';
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    allItems = data.items || [];
+    renderList(allItems);
+    updateStats(data.stats || {});
+  } catch(e) { toast('Failed to load list', 'err'); }
+}
+
+// ── Render list ───────────────────────────────────────────────────────────────
+function renderList(items) {
+  const el = document.getElementById('qaList');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty-list">No entries yet. Click "+ New Q&A Pair".</div>';
+    return;
+  }
+  el.innerHTML = items.map(it => `
+    <div class="qa-item ${it.id === currentId ? 'active' : ''}" onclick="selectItem(${it.id})">
+      <div class="q-text">${esc(it.question)}</div>
+      <div class="q-meta">
+        <span class="badge ${it.type}">${it.type}</span>
+        <span>hits: ${it.hit_count}</span>
+        <span>${it.updated_at ? it.updated_at.slice(0,10) : ''}</span>
+      </div>
+    </div>`).join('');
+}
+
+function updateStats(s) {
+  document.getElementById('statTotal').textContent  = s.total  || 0;
+  document.getElementById('statTheory').textContent = s.theory || 0;
+  document.getElementById('statCoding').textContent = s.coding || 0;
+  document.getElementById('statBoth').textContent   = s.both   || 0;
+  document.getElementById('statHits').textContent   = s.total_hits || 0;
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+let searchTimer;
+function onSearch(v) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadList(v), 300);
+}
+
+// ── Select / New ──────────────────────────────────────────────────────────────
+function selectItem(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  currentId = id;
+  isNew = false;
+  renderEditor(item);
+  renderList(allItems);  // refresh active state
+}
+
+function newItem() {
+  currentId = null;
+  isNew = true;
+  renderEditor({
+    question: '', answer_theory: '', answer_coding: '',
+    type: 'theory', keywords: '', hit_count: 0, created_at: '', updated_at: ''
+  });
+}
+
+// ── Editor ────────────────────────────────────────────────────────────────────
+function renderEditor(item) {
+  const title = item.question || 'New Q&A Pair';
+  document.getElementById('toolbarTitle').textContent = title;
+  document.getElementById('toolbarTitle').className = item.question ? 'has-title' : '';
+  document.getElementById('btnSave').style.display   = '';
+  document.getElementById('btnDelete').style.display = item.id ? '' : 'none';
+  document.getElementById('btnTest').style.display   = item.question ? '' : 'none';
+
+  const showTheory = item.type === 'theory' || item.type === 'both';
+  const showCoding = item.type === 'coding' || item.type === 'both';
+
+  document.getElementById('editorArea').innerHTML = `
+    <div class="form-group">
+      <label>Question Text</label>
+      <input type="text" id="fQuestion" value="${esc(item.question)}"
+             placeholder="e.g. What is the difference between list and tuple?"
+             oninput="onQuestionChange(this.value)">
+      <div class="hint">This is matched against the audio-to-text. Fuzzy matching — exact wording not required.</div>
+    </div>
+    <div class="form-group">
+      <div class="type-row">
+        <div>
+          <label>Type</label>
+          <select id="fType" onchange="onTypeChange(this.value)">
+            <option value="theory" ${item.type==='theory'?'selected':''}>Theory (explanation)</option>
+            <option value="coding" ${item.type==='coding'?'selected':''}>Coding (code answer)</option>
+            <option value="both"   ${item.type==='both'  ?'selected':''}>Both (theory + code)</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label>Keywords <span style="font-weight:400;text-transform:none">(optional, comma-separated)</span></label>
+          <input type="text" id="fKeywords" value="${esc(item.keywords||'')}"
+                 placeholder="e.g. kubernetes, k8s, container orchestration">
+        </div>
+      </div>
+      <div class="hint">Keywords boost matching score when the question contains these terms.</div>
+    </div>
+
+    <div class="tabs">
+      ${showTheory ? `<div class="tab active" id="tabTheory" onclick="switchTab('theory')">Theory Answer</div>` : ''}
+      ${showCoding ? `<div class="tab ${!showTheory?'active':''}" id="tabCoding" onclick="switchTab('coding')">Code Answer</div>` : ''}
+    </div>
+
+    <div id="panelTheory" style="display:${showTheory?'block':'none'}">
+      <div class="form-group">
+        <label>Theory / Explanation Answer</label>
+        <textarea class="theory-area" id="fAnswerTheory" placeholder="Write the answer in plain text or bullet points...">${esc(item.answer_theory||'')}</textarea>
+        <div class="hint">Used when the question is identified as a theory/explanation question.</div>
+      </div>
+    </div>
+    <div id="panelCoding" style="display:${showCoding&&!showTheory?'block':'none'}">
+      <div class="form-group">
+        <label>Code Answer</label>
+        <textarea class="code-area" id="fAnswerCoding" placeholder="Paste code here (with or without markdown code fences)...">${esc(item.answer_coding||'')}</textarea>
+        <div class="hint">Used when the question is identified as a coding request.</div>
+      </div>
+    </div>
+
+    ${item.id ? `<div class="meta-info">
+      <span>ID: ${item.id}</span>
+      <span>Hits: ${item.hit_count}</span>
+      <span>Created: ${item.created_at||'—'}</span>
+      <span>Updated: ${item.updated_at||'—'}</span>
+    </div>` : ''}
+
+    <div id="testResult"></div>
+  `;
+}
+
+function onQuestionChange(v) {
+  document.getElementById('toolbarTitle').textContent = v || 'New Q&A Pair';
+  document.getElementById('toolbarTitle').className = v ? 'has-title' : '';
+  document.getElementById('btnTest').style.display = v ? '' : 'none';
+}
+
+function onTypeChange(v) {
+  // Re-render editor preserving current field values
+  const q   = document.getElementById('fQuestion')?.value || '';
+  const kw  = document.getElementById('fKeywords')?.value || '';
+  const th  = document.getElementById('fAnswerTheory')?.value || '';
+  const co  = document.getElementById('fAnswerCoding')?.value || '';
+  renderEditor({ question: q, answer_theory: th, answer_coding: co, type: v, keywords: kw,
+                 id: currentId, hit_count: 0, created_at: '', updated_at: '' });
+}
+
+function switchTab(which) {
+  const t = document.getElementById('tabTheory');
+  const c = document.getElementById('tabCoding');
+  const pt = document.getElementById('panelTheory');
+  const pc = document.getElementById('panelCoding');
+  if (which === 'theory') {
+    if (t) t.className = 'tab active';
+    if (c) c.className = 'tab';
+    if (pt) pt.style.display = 'block';
+    if (pc) pc.style.display = 'none';
+  } else {
+    if (t) t.className = 'tab';
+    if (c) c.className = 'tab active';
+    if (pt) pt.style.display = 'none';
+    if (pc) pc.style.display = 'block';
+  }
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+async function saveItem() {
+  const q  = document.getElementById('fQuestion')?.value?.trim();
+  if (!q) { toast('Question text is required', 'err'); return; }
+  const payload = {
+    question:       q,
+    answer_theory:  document.getElementById('fAnswerTheory')?.value || '',
+    answer_coding:  document.getElementById('fAnswerCoding')?.value || '',
+    type:           document.getElementById('fType')?.value || 'theory',
+    keywords:       document.getElementById('fKeywords')?.value || '',
+  };
+  try {
+    let r;
+    if (isNew || !currentId) {
+      r = await fetch('/api/qa', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const data = await r.json();
+      if (r.ok) { currentId = data.id; isNew = false; toast('Saved!', 'ok'); loadList(); }
+      else toast(data.error || 'Save failed', 'err');
+    } else {
+      r = await fetch(`/api/qa/${currentId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const data = await r.json();
+      if (r.ok) { toast('Updated!', 'ok'); loadList(); }
+      else toast(data.error || 'Update failed', 'err');
+    }
+  } catch(e) { toast('Network error', 'err'); }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deleteItem() {
+  if (!currentId) return;
+  if (!confirm('Delete this Q&A pair?')) return;
+  try {
+    const r = await fetch(`/api/qa/${currentId}`, { method: 'DELETE' });
+    if (r.ok) {
+      currentId = null; isNew = false;
+      document.getElementById('editorArea').innerHTML = `<div class="empty-state"><div class="icon">🗃️</div><p>Deleted. Select another entry or create a new one.</p></div>`;
+      document.getElementById('toolbarTitle').textContent = 'Select or create a Q&A pair';
+      document.getElementById('toolbarTitle').className = '';
+      ['btnSave','btnDelete','btnTest'].forEach(id => document.getElementById(id).style.display = 'none');
+      toast('Deleted', 'ok');
+      loadList();
+    } else { toast('Delete failed', 'err'); }
+  } catch(e) { toast('Network error', 'err'); }
+}
+
+// ── Test Lookup ───────────────────────────────────────────────────────────────
+async function testLookup() {
+  const q = document.getElementById('fQuestion')?.value?.trim();
+  if (!q) return;
+  const tp = document.getElementById('fType')?.value || 'theory';
+  const want_code = tp === 'coding';
+  try {
+    const r = await fetch('/api/qa/test', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ question: q, want_code })
+    });
+    const data = await r.json();
+    const el = document.getElementById('testResult');
+    if (data.found) {
+      const pct = Math.round(data.score * 100);
+      el.innerHTML = `<div class="test-result hit">
+        <strong>DB Hit</strong> — score ${pct}% (id #${data.qa_id})<br>
+        <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
+        <pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:var(--accent2)">${esc(data.answer?.slice(0,400))}${data.answer?.length>400?'…':''}</pre>
+      </div>`;
+    } else {
+      el.innerHTML = `<div class="test-result miss">No DB match found (score below threshold) — LLM API would be called.</div>`;
+    }
+  } catch(e) { toast('Test failed', 'err'); }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2800);
+}
+</script>
+</body>
+</html>

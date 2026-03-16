@@ -1,0 +1,59 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Interview Voice Assistant — docker-compose
+#
+#  Usage:
+#    1.  cp .env.example .env  && edit .env to add your ANTHROPIC_API_KEY
+#    2.  docker compose up
+#    3.  Open http://localhost:8000 in Chrome
+#    4.  Install chrome_extension/ in Chrome (Developer mode → Load unpacked)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  interview-assistant:
+    build: .
+    image: interview-assistant:latest
+    container_name: interview-assistant
+
+    # ── API Keys from .env ───────────────────────────────────────────────────
+    env_file:
+      - .env
+
+    environment:
+      - PYTHONWARNINGS=ignore
+      # PulseAudio inside container uses host socket
+      - PULSE_SERVER=unix:/tmp/pulse/native
+
+    ports:
+      - "8000:8000"
+
+    # ── Persistent data (answers, cache, custom DB entries) ──────────────────
+    volumes:
+      - interview_data:/root/.interview_assistant
+      # PulseAudio socket passthrough (Linux host audio)
+      - /run/user/1000/pulse:/tmp/pulse:ro
+      # Timezone
+      - /etc/localtime:/etc/localtime:ro
+
+    # ── Audio device passthrough (Linux) ────────────────────────────────────
+    devices:
+      - /dev/snd:/dev/snd
+
+    # ── Allow audio group access ─────────────────────────────────────────────
+    group_add:
+      - audio
+
+    restart: unless-stopped
+
+    # ── Resource limits ──────────────────────────────────────────────────────
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1G
+
+volumes:
+  interview_data:
+    name: interview_assistant_data

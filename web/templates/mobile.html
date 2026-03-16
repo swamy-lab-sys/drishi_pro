@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0c10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Drishi — {{ user_name }}</title>
+<style>
+  :root {
+    --bg:      #0a0c10;
+    --surface: #13161e;
+    --border:  #1e2230;
+    --accent:  #6366f1;
+    --text:    #e8edf5;
+    --muted:   #5a6070;
+    --success: #22d3a0;
+    --warn:    #f59e0b;
+    --danger:  #ef4444;
+    --code-bg: #0d1117;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  /* ── Status bar ── */
+  .status-bar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,12,16,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--accent); }
+  .user-chip {
+    background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 20px; padding: 3px 10px;
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+  }
+  .spacer { flex: 1; }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .live-dot.live    { background: var(--success); box-shadow: 0 0 6px var(--success); animation: pulse 2s infinite; }
+  .live-dot.error   { background: var(--danger); }
+  .live-dot.waiting { background: var(--warn); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .clear-btn {
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px;
+    padding: 5px 10px; font-size: 11px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+  }
+  .clear-btn:active { background: rgba(255,255,255,0.05); }
+
+  /* ── Main content ── */
+  .content { padding: 12px; min-height: calc(100vh - 50px); }
+
+  /* ── Waiting state ── */
+  .waiting-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 60vh; gap: 12px; text-align: center; padding: 24px;
+  }
+  .waiting-state .icon { font-size: 40px; }
+  .waiting-state .title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .waiting-state .sub   { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 280px; }
+
+  /* ── Answer cards ── */
+  .answer-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: opacity 0.3s;
+  }
+  .answer-card.new-card {
+    border-color: rgba(99,102,241,0.5);
+    animation: slideIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes slideIn {
+    from { transform: translateY(-12px); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+  }
+  .answer-card.old-card { opacity: 0.6; }
+
+  .card-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .card-header .q-icon { font-size: 12px; margin-top: 2px; flex-shrink: 0; }
+  .card-header .question {
+    font-size: 12px; color: var(--muted); font-style: italic;
+    line-height: 1.5; flex: 1;
+  }
+  .card-header .src-badge {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--muted);
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px; padding: 2px 6px;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .src-badge.fast { color: var(--success); background: rgba(34,211,160,0.1); }
+
+  .card-body { padding: 12px 14px; }
+
+  /* Plain text answer */
+  .answer-text {
+    font-size: 15px; line-height: 1.7; color: var(--text);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  /* Bullet points */
+  .answer-text li, .answer-text .bullet {
+    margin-left: 4px; margin-bottom: 4px;
+  }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .code-block pre {
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #a9c3e8;
+    white-space: pre;
+  }
+  .copy-code-btn {
+    float: right; margin: -4px -4px 4px 0;
+    background: rgba(255,255,255,0.06); border: none;
+    color: var(--muted); border-radius: 6px;
+    padding: 3px 8px; font-size: 10px; cursor: pointer;
+  }
+  .copy-code-btn:active { background: rgba(255,255,255,0.12); }
+
+  /* Inline code */
+  .answer-text code {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 13px;
+    background: rgba(99,102,241,0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #a9c3e8;
+  }
+
+  /* Generating indicator */
+  .generating {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px; color: var(--muted); font-size: 13px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; margin-bottom: 12px;
+  }
+  .dots { display: flex; gap: 4px; }
+  .dot  { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+          animation: bounce 1.2s infinite ease-in-out; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+
+  /* Connection status toast */
+  #conn-toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 8px 18px;
+    font-size: 12px; font-weight: 600;
+    white-space: nowrap; z-index: 99;
+    transition: opacity 0.3s; opacity: 0; pointer-events: none;
+  }
+  #conn-toast.show { opacity: 1; }
+  #conn-toast.ok   { border-color: var(--success); color: var(--success); }
+  #conn-toast.err  { border-color: var(--danger);  color: var(--danger); }
+  #conn-toast.warn { border-color: var(--warn);    color: var(--warn); }
+
+  /* Scroll to top fab */
+  #scroll-top {
+    position: fixed; bottom: 20px; right: 16px;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    border: none; font-size: 16px; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.4);
+    z-index: 90;
+  }
+  #scroll-top.visible { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="status-bar">
+  <div class="logo">DRISHI</div>
+  <div class="user-chip">{{ user_name }}</div>
+  <div class="spacer"></div>
+  <div class="live-dot waiting" id="liveDot"></div>
+  <span id="liveLabel" style="font-size:10px; color:var(--muted); margin-left:2px">Connecting</span>
+  <button class="clear-btn" onclick="clearAnswers()">Clear</button>
+</div>
+
+<div class="content" id="content">
+  <div class="waiting-state" id="waitingState">
+    <div class="icon">🎧</div>
+    <div class="title">Waiting for questions…</div>
+    <div class="sub">Start your interview on the laptop.<br>Answers will appear here automatically.</div>
+  </div>
+</div>
+
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+<div id="conn-toast"></div>
+
+<script>
+const ACCESS_KEY = "{{ access_key }}";
+const USER_NAME  = "{{ user_name }}";
+
+let answers = [];        // full answer history in this session
+let generatingEl = null; // "generating..." card element
+let evtSource = null;
+let reconnectTimer = null;
+let reconnectDelay = 2000;
+
+// ── LocalStorage cache — survives page refresh ────────────────────────────────
+const LS_KEY = 'drishi_answers_' + ACCESS_KEY.slice(-8);
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (Array.isArray(cached) && cached.length) {
+        for (const item of cached) addAnswer(item, false);
+      }
+    }
+  } catch {}
+}
+
+function saveCache() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(answers.slice(-10)));
+  } catch {}
+}
+
+// ── SSE connection ─────────────────────────────────────────────────────────────
+function connect() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  clearTimeout(reconnectTimer);
+
+  setDot('waiting', 'Connecting…');
+  evtSource = new EventSource('/m/' + ACCESS_KEY + '/stream');
+
+  evtSource.onopen = () => {
+    reconnectDelay = 2000;  // reset back-off on success
+    setDot('live', 'Live');
+    showToast('Connected', 'ok');
+  };
+
+  evtSource.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleMessage(msg);
+    } catch {}
+  };
+
+  evtSource.onerror = () => {
+    evtSource.close(); evtSource = null;
+    setDot('error', 'Reconnecting…');
+    showToast('Reconnecting in ' + Math.round(reconnectDelay/1000) + 's…', 'warn');
+    reconnectTimer = setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);  // cap at 30s
+      connect();
+    }, reconnectDelay);
+  };
+}
+
+function handleMessage(msg) {
+  if (msg.type === 'connected') {
+    setDot('live', 'Live');
+    return;
+  }
+  if (msg.type === 'status') {
+    if (msg.message && msg.message.toLowerCase().includes('generat')) {
+      showGenerating();
+    } else {
+      hideGenerating();
+    }
+    return;
+  }
+  if (msg.type === 'answer') {
+    hideGenerating();
+    addAnswer(msg, true);
+    saveCache();
+    return;
+  }
+  if (msg.type === 'rejected') return;  // silently skip
+  if (msg.type === 'transcript') return; // don't show raw transcript on mobile
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function addAnswer(msg, isNew) {
+  // Avoid duplicates on reconnect (same question already displayed)
+  const key = (msg.question || '').toLowerCase().trim().slice(0, 60);
+  if (key && answers.some(a => (a.question||'').toLowerCase().trim().slice(0,60) === key)) {
+    return;
+  }
+
+  answers.unshift(msg);  // newest first
+
+  const waitEl = document.getElementById('waitingState');
+  if (waitEl) waitEl.remove();
+
+  const card = document.createElement('div');
+  card.className = 'answer-card' + (isNew ? ' new-card' : ' old-card');
+
+  const isFast = (msg.source || '').startsWith('db') || msg.source === 'cache';
+  const srcLabel = isFast ? '⚡ Fast' : 'AI';
+  const srcClass = isFast ? 'fast' : '';
+
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="q-icon">Q</span>
+      <div class="question">${esc(msg.question || '')}</div>
+      <span class="src-badge ${srcClass}">${srcLabel}</span>
+    </div>
+    <div class="card-body">${formatAnswer(msg.answer || '')}</div>`;
+
+  const content = document.getElementById('content');
+  // Insert at top (after any generating card)
+  const genCard = document.getElementById('generatingCard');
+  if (genCard) {
+    content.insertBefore(card, genCard.nextSibling);
+  } else {
+    content.insertBefore(card, content.firstChild);
+  }
+
+  // Fade out old answers after 5 items
+  const cards = content.querySelectorAll('.answer-card:not(#generatingCard)');
+  cards.forEach((c, i) => {
+    c.classList.toggle('old-card', i >= 3);
+    c.classList.toggle('new-card', i === 0 && isNew);
+  });
+
+  // Scroll to top to show newest answer
+  if (isNew) window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function showGenerating() {
+  if (document.getElementById('generatingCard')) return;
+  const el = document.createElement('div');
+  el.id = 'generatingCard';
+  el.className = 'generating';
+  el.innerHTML = '<div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><span>Generating answer…</span>';
+  const content = document.getElementById('content');
+  const waitEl = document.getElementById('waitingState');
+  if (waitEl) waitEl.remove();
+  content.insertBefore(el, content.firstChild);
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function hideGenerating() {
+  const el = document.getElementById('generatingCard');
+  if (el) el.remove();
+}
+
+function clearAnswers() {
+  answers = [];
+  localStorage.removeItem(LS_KEY);
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="waiting-state" id="waitingState">
+      <div class="icon">🎧</div>
+      <div class="title">Cleared — waiting for questions…</div>
+      <div class="sub">New answers will appear here.</div>
+    </div>`;
+}
+
+// ── Format answer text ─────────────────────────────────────────────────────────
+function formatAnswer(text) {
+  if (!text) return '';
+
+  // Extract code blocks first, replace with placeholders
+  const codeBlocks = [];
+  let processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({lang: lang || '', code: code.trim()});
+    return `\x00CODE${idx}\x00`;
+  });
+
+  // Escape HTML for non-code parts
+  processed = processed
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Bullet points: lines starting with - or •
+    .replace(/^[\-•]\s(.+)$/gm, '<div style="padding-left:12px; margin-bottom:4px">• $1</div>')
+    // Numbered list
+    .replace(/^(\d+)\.\s(.+)$/gm, '<div style="padding-left:12px; margin-bottom:4px"><span style="color:var(--muted)">$1.</span> $2</div>');
+
+  // Restore code blocks
+  processed = processed.replace(/\x00CODE(\d+)\x00/g, (_, idx) => {
+    const {lang, code} = codeBlocks[parseInt(idx)];
+    const escaped = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="code-block">
+      <button class="copy-code-btn" onclick="copyCode(this)">Copy</button>
+      <pre>${escaped}</pre>
+    </div>`;
+  });
+
+  return `<div class="answer-text">${processed}</div>`;
+}
+
+function copyCode(btn) {
+  const pre = btn.nextElementSibling;
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function setDot(state, label) {
+  const dot = document.getElementById('liveDot');
+  const lbl = document.getElementById('liveLabel');
+  dot.className = 'live-dot ' + state;
+  lbl.textContent = label;
+  lbl.style.color = state === 'live' ? 'var(--success)' : state === 'error' ? 'var(--danger)' : 'var(--warn)';
+}
+
+let _toastTimer;
+function showToast(msg, type) {
+  const el = document.getElementById('conn-toast');
+  el.textContent = msg;
+  el.className = 'show ' + (type || '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.className = '', 2500);
+}
+
+// Scroll-to-top FAB
+window.addEventListener('scroll', () => {
+  const fab = document.getElementById('scroll-top');
+  fab.classList.toggle('visible', window.scrollY > 300);
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadCache();   // show cached answers while SSE connects
+  connect();     // start live stream
+});
+
+// Reconnect when tab becomes visible again (phone wakes up)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && (!evtSource || evtSource.readyState === EventSource.CLOSED)) {
+    connect();
+  }
+});
+</script>
+</body>
+</html>

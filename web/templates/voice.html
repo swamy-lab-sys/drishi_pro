@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Drishi Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #10a37f;
+            --primary-dark: #0d8c6c;
+            --bg: #ffffff;
+            --surface: #f7f7f8;
+            --text: #202123;
+            --text-light: #6e6e80;
+            --border: #e5e5e5;
+            --recording: #ef4444;
+            --processing: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        header {
+            background: var(--surface);
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .mode-badge {
+            background: var(--primary);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+            min-height: calc(100vh - 200px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Chat Messages */
+        .messages {
+            flex: 1;
+            margin-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .message {
+            display: flex;
+            gap: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 20px;
+        }
+
+        .message.user .message-avatar {
+            background: var(--primary);
+            color: white;
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--surface);
+        }
+
+        .message-content {
+            flex: 1;
+            padding-top: 8px;
+        }
+
+        .message-text {
+            font-size: 16px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-text {
+            font-weight: 500;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 8px;
+        }
+
+        /* Code blocks */
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .empty-subtitle {
+            font-size: 16px;
+        }
+
+        /* Voice Control Panel */
+        .voice-control {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            padding: 24px;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .voice-control-inner {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            width: 100%;
+            text-align: center;
+            min-height: 24px;
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .status-text.recording {
+            color: var(--recording);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .status-text.processing {
+            color: var(--processing);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Transcription Box */
+        .transcription-box {
+            width: 100%;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            min-height: 80px;
+            display: none;
+            position: relative;
+        }
+
+        .transcription-box.visible {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .transcription-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .transcription-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            font-family: inherit;
+            resize: none;
+            min-height: 40px;
+        }
+
+        .transcription-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+
+        .btn-secondary,
+        .btn-primary {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: #efefef;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Microphone Button */
+        .mic-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 16px rgba(16, 163, 127, 0.3);
+            position: relative;
+            user-select: none;
+        }
+
+        .mic-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(16, 163, 127, 0.4);
+        }
+
+        .mic-button:active,
+        .mic-button.recording {
+            background: var(--recording);
+            transform: scale(0.95);
+            box-shadow: 0 2px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .mic-button.processing {
+            background: var(--processing);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Waveform */
+        .waveform {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 20px;
+            gap: 3px;
+        }
+
+        .waveform.active {
+            display: flex;
+        }
+
+        .wave-bar {
+            width: 4px;
+            background: var(--recording);
+            border-radius: 2px;
+            animation: wave 0.8s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .wave-bar:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .wave-bar:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+        .wave-bar:nth-child(4) {
+            animation-delay: 0.3s;
+        }
+
+        .wave-bar:nth-child(5) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes wave {
+
+            0%,
+            100% {
+                height: 20px;
+            }
+
+            50% {
+                height: 50px;
+            }
+        }
+
+        /* Hint Text */
+        .hint-text {
+            font-size: 13px;
+            color: var(--text-light);
+            text-align: center;
+        }
+
+        .hint-key {
+            background: var(--surface);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 16px;
+            }
+
+            .voice-control {
+                padding: 16px;
+            }
+
+            .mic-button {
+                width: 70px;
+                height: 70px;
+                font-size: 28px;
+            }
+
+            .message-text {
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">🎤 Drishi Pro</div>
+            <div class="mode-badge">PUSH-TO-TALK</div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="messages" id="messages">
+            <div class="empty-state">
+                <div class="empty-icon">🎯</div>
+                <div class="empty-title">Ready for Your Interview</div>
+                <div class="empty-subtitle">Hold the microphone button or press SPACE to ask a question</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="voice-control">
+        <div class="voice-control-inner">
+            <!-- Status -->
+            <div class="status-bar">
+                <div class="status-text" id="status">Press and hold to speak</div>
+            </div>
+
+            <!-- Transcription Box -->
+            <div class="transcription-box" id="transcriptionBox">
+                <div class="transcription-label">Your Question (you can edit)</div>
+                <textarea class="transcription-input" id="transcriptionInput"
+                    placeholder="Your transcribed question will appear here..."></textarea>
+                <div class="transcription-actions">
+                    <button class="btn-secondary" onclick="cancelTranscription()">Cancel</button>
+                    <button class="btn-primary" id="sendBtn" onclick="sendQuestion()">Send Question</button>
+                </div>
+            </div>
+
+            <!-- Microphone Button -->
+            <div style="position: relative;">
+                <div class="waveform" id="waveform">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+                <button class="mic-button" id="micButton">
+                    <span id="micIcon">🎤</span>
+                </button>
+            </div>
+
+            <!-- Hint -->
+            <div class="hint-text">
+                Hold <span class="hint-key">SPACE</span> or click the button to speak
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let isProcessing = false;
+
+        // DOM Elements
+        const micButton = document.getElementById('micButton');
+        const micIcon = document.getElementById('micIcon');
+        const status = document.getElementById('status');
+        const waveform = document.getElementById('waveform');
+        const transcriptionBox = document.getElementById('transcriptionBox');
+        const transcriptionInput = document.getElementById('transcriptionInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messages = document.getElementById('messages');
+
+        // Start Recording
+        async function startRecording() {
+            if (isRecording || isProcessing) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await transcribeAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+
+                // UI Updates
+                micButton.classList.add('recording');
+                micIcon.textContent = '⏸';
+                status.textContent = '🔴 Recording... (release to stop)';
+                status.classList.add('recording');
+                waveform.classList.add('active');
+
+            } catch (error) {
+                console.error('Microphone access denied:', error);
+                status.textContent = '❌ Microphone access denied';
+                setTimeout(() => {
+                    status.textContent = 'Press and hold to speak';
+                }, 3000);
+            }
+        }
+
+        // Stop Recording
+        function stopRecording() {
+            if (!isRecording) return;
+
+            mediaRecorder.stop();
+            isRecording = false;
+
+            // UI Updates
+            micButton.classList.remove('recording');
+            micButton.classList.add('processing');
+            micIcon.textContent = '⏳';
+            status.textContent = '⏳ Transcribing...';
+            status.classList.remove('recording');
+            status.classList.add('processing');
+            waveform.classList.remove('active');
+        }
+
+        // Transcribe Audio
+        async function transcribeAudio(audioBlob) {
+            isProcessing = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+
+                const response = await fetch(`${API_BASE}/voice/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.transcription) {
+                    transcriptionInput.value = data.transcription;
+                    transcriptionBox.classList.add('visible');
+                    status.textContent = '✏️ Review your question';
+                    status.classList.remove('processing');
+                    sendBtn.disabled = false;
+                } else {
+                    throw new Error(data.error || 'Transcription failed');
+                }
+
+            } catch (error) {
+                console.error('Transcription error:', error);
+                status.textContent = '❌ Could not transcribe. Try again.';
+                status.classList.remove('processing');
+                setTimeout(() => {
+                    status.textContent = 'Press and hold to speak';
+                }, 3000);
+            } finally {
+                micButton.classList.remove('processing');
+                micIcon.textContent = '🎤';
+                isProcessing = false;
+            }
+        }
+
+        // Send Question
+        async function sendQuestion() {
+            const question = transcriptionInput.value.trim();
+            if (!question || isProcessing) return;
+
+            isProcessing = true;
+            sendBtn.disabled = true;
+            status.textContent = '🤔 Generating answer...';
+            status.classList.add('processing');
+
+            // Add user message
+            addMessage('user', question);
+
+            // Hide transcription box
+            transcriptionBox.classList.remove('visible');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/solve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        problem: question,
+                        source: 'voice'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.solution) {
+                    addMessage('assistant', data.solution);
+                    status.textContent = '✅ Answer ready! Ask another question.';
+                } else {
+                    throw new Error('No solution received');
+                }
+
+            } catch (error) {
+                console.error('Answer generation error:', error);
+                addMessage('assistant', '❌ Sorry, I encountered an error generating the answer. Please try again.');
+                status.textContent = '❌ Error. Please try again.';
+            } finally {
+                status.classList.remove('processing');
+                setTimeout(() => {
+                    status.textContent = 'Press and hold to speak';
+                }, 2000);
+                isProcessing = false;
+            }
+        }
+
+        // Cancel Transcription
+        function cancelTranscription() {
+            transcriptionBox.classList.remove('visible');
+            transcriptionInput.value = '';
+            status.textContent = 'Press and hold to speak';
+            status.classList.remove('processing');
+        }
+
+        // Add Message to Chat
+        function addMessage(role, text) {
+            // Remove empty state
+            const emptyState = messages.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">
+                    <div class="message-text">${formatMessage(text)}</div>
+                    <div class="message-time">${time}</div>
+                </div>
+            `;
+
+            messages.appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        // Format Message (handle code blocks)
+        function formatMessage(text) {
+            // Simple markdown-like formatting for code blocks
+            return text.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // Mouse Events
+        micButton.addEventListener('mousedown', startRecording);
+        micButton.addEventListener('mouseup', stopRecording);
+        micButton.addEventListener('mouseleave', () => {
+            if (isRecording) stopRecording();
+        });
+
+        // Touch Events (Mobile)
+        micButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+
+        micButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        // Keyboard Events (SPACE)
+        let spaceKeyDown = false;
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !spaceKeyDown && !isRecording && !isProcessing) {
+                // Don't trigger if typing in textarea
+                if (e.target.tagName === 'TEXTAREA') return;
+                e.preventDefault();
+                spaceKeyDown = true;
+                startRecording();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && spaceKeyDown) {
+                e.preventDefault();
+                spaceKeyDown = false;
+                stopRecording();
+            }
+        });
+
+        // Enter to send in transcription
+        transcriptionInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                sendQuestion();
+            }
+        });
+    </script>
+</body>
+
+</html>

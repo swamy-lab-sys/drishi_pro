@@ -1,0 +1,30 @@
+Senior Python Job DescripƟon
+
+Entries AI, formerly known as Stanch.io, is a next-generaƟon AI-powered cloud business soluƟon
+designed to simplify operaƟons for startups and mid-sized businesses. With features such as HR
+management, payroll, employee self-service, accounƟng, inventory management, and
+compliance tools, Entries AI empowers businesses to achieve operaƟonal efficiency and
+improved visibility. The plaƞorm provides real-Ɵme insights for finance teams and business
+owners, enabling beƩer decision-making and streamlined processes. Entries AI is dedicated to
+helping businesses succeed with smarter, more innovaƟve tools.
+
+Role DescripƟon
+We are looking for a skilled Frappe Developer with around 5 plus years of Experience to join the
+Entries AI team in Bengaluru. This is a full-Ɵme on-site role where you will be responsible for
+designing, customizing, and maintaining Frappe and ERPNext-based soluƟons. Day-to-day tasks
+include developing and implemenƟng features, fixing bugs, integraƟng third-party applicaƟons,
+and collaboraƟng with cross-funcƟonal teams to ensure seamless user experiences. The role
+requires troubleshooƟng technical issues and conƟnuously opƟmizing the plaƞorm to align with
+business needs.
+
+QualificaƟons
+Strong proficiency in Frappe framework and ERPNext development
+Experience in coding with Python, JavaScript, and related programming languages
+Solid knowledge of database management, specifically with MariaDB/MySQL, and
+understanding of RESTful APIs
+Skills in soŌware debugging, problem-solving, and customizaƟon of pre-built features
+Understanding of web development principles, frontend design, and integraƟon with backend
+systems
+Excellent communicaƟon skills and the ability to collaborate with cross-funcƟonal teams
+Bachelor’s degree in Computer Science, InformaƟon Technology, or a related field
+Experience with cloud-based business soluƟons is a bonus

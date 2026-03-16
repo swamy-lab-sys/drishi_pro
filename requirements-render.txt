@@ -1,0 +1,25 @@
+# Drishi Pro — Cloud / Render.com dependencies
+# Audio capture is done by the Chrome extension (no local audio libs needed)
+
+# Core AI
+anthropic>=0.45.0
+
+# Web server + WebSocket
+flask>=3.0.0
+flask-sock>=0.7.0
+
+# HTTP + utilities
+requests>=2.31.0
+numpy>=1.26.0
+psutil>=5.9.0
+python-dotenv>=1.0.0
+
+# PDF resume parsing
+pypdf>=4.0.0
+
+# Semantic / DB matching
+scikit-learn>=1.3.0
+
+# Cloud STT (Deepgram HTTP calls — no binary deps)
+# deepgram-sdk is optional; we use raw requests in stt.py
+soundfile>=0.12.1
