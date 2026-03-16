@@ -229,11 +229,10 @@ def init_db():
 
         # Seed Unix/Bash Q&A pairs if not already present
         count = conn.execute("SELECT COUNT(*) FROM qa_pairs WHERE tags LIKE '%unix-seed%'").fetchone()[0]
-        if count == 0:
-            conn.close()
-            _seed_unix_qa()
-        else:
-            conn.close()
+        conn.close()
+
+    if count == 0:
+        _seed_unix_qa()
 
 
 def _seed_unix_qa():
