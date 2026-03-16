@@ -2,7 +2,6 @@ services:
   - type: web
     name: drishi-pro
     env: python
-    pythonVersion: "3.12.0"
     buildCommand: pip install -r requirements-render.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT -c gunicorn.conf.py wsgi:app
     healthCheckPath: /health
