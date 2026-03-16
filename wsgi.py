@@ -64,10 +64,14 @@ def status():
 @_boot.route('/<path:path>')
 def loading_page(path):
     if not _ready.is_set():
-        return f'<h1>Drishi Pro starting... ({_import_status})</h1><p>Refresh in a moment.</p>', 503
+        html = '<html><head><meta http-equiv="refresh" content="3"></head>' \
+               f'<body><h1>Drishi Pro starting...</h1><p>Loading, please wait...</p></body></html>'
+        return html, 503
     if _import_error:
         return f'<h1>Startup Error</h1><pre>{_import_error}</pre>', 500
-    return '<h1>Ready — please refresh</h1>', 200
+    # Real app is ready — redirect so the real app handles the request
+    from flask import redirect
+    return redirect('/' if path == '' else '/' + path)
 
 
 class _App:
