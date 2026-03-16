@@ -1,15 +1,22 @@
 """
 WSGI entry point for Render.com deployment.
-
-Gunicorn imports this module and uses the `app` object.
-Sets up sys.path so all project modules (config, state, etc.) are importable.
 """
 import sys
 import os
 
-_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _root)                          # config, state, qa_database, etc.
-sys.path.insert(0, os.path.join(_root, 'web'))     # server.py
+print("[wsgi] Starting...", flush=True)
 
-import server  # web/server.py
-app = server.app
+_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _root)
+sys.path.insert(0, os.path.join(_root, 'web'))
+
+print("[wsgi] Importing server...", flush=True)
+try:
+    import server
+    app = server.app
+    print("[wsgi] App ready.", flush=True)
+except Exception as e:
+    print(f"[wsgi] IMPORT ERROR: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
+    raise
