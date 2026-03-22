@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // GLOBAL STATE — declared first to avoid let TDZ crash in boot IIFE
 // ══════════════════════════════════════════════════════════════════════════════
-let BASE        = '';          // server URL — set from chrome.storage or session
+const FIXED_URL = 'https://particulate-arely-unrenovative.ngrok-free.dev';
+let BASE        = FIXED_URL;   // server URL — always defaults to fixed ngrok URL
 let USER_TOKEN  = '';          // per-user token
 let SECRET_CODE = '';
 let isOnline    = false;
@@ -38,7 +39,8 @@ function _loadSession() {
     const raw = localStorage.getItem(_SESSION_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    if (!s.token || !s.serverUrl) { _clearSession(); return null; }
+    if (!s.token) { _clearSession(); return null; }
+    if (!s.serverUrl) s.serverUrl = FIXED_URL;
     if (Date.now() - (s.loginTimestamp || 0) > _SESSION_TTL) {
       _clearSession();
       return null;
@@ -59,7 +61,7 @@ function _showLogin(expiredMsg = '') {
   ls.style.display = 'flex';
   if (expiredMsg) _setLoginError(expiredMsg);
   // Show current server URL hint so user knows where they're logging into
-  chrome.storage.sync.get({ serverUrl: '' }, (d) => {
+  chrome.storage.sync.get({ serverUrl: FIXED_URL }, (d) => {
     const hintEl = document.getElementById('loginServerUrl');
     if (hintEl) hintEl.textContent = d.serverUrl
       ? d.serverUrl.replace(/^https?:\/\//, '')
@@ -145,7 +147,7 @@ async function doLogin() {
   btn.textContent = 'Authenticating…';
 
   // Get server URL from storage (configured once in Settings tab)
-  chrome.storage.sync.get({ serverUrl: '' }, async (data) => {
+  chrome.storage.sync.get({ serverUrl: FIXED_URL }, async (data) => {
     const serverUrl = (data.serverUrl || BASE || '').replace(/\/$/, '');
 
     if (!serverUrl) {
@@ -224,7 +226,7 @@ function doLogout() {
     // No valid session: show login, keep main UI behind it
     // Pre-fill server URL from chrome.storage if available
     // Show server URL hint on login screen
-    chrome.storage.sync.get({ serverUrl: '' }, (d) => {
+    chrome.storage.sync.get({ serverUrl: FIXED_URL }, (d) => {
       const hintEl = document.getElementById('loginServerUrl');
       if (hintEl) hintEl.textContent = d.serverUrl
         ? d.serverUrl.replace(/^https?:\/\//, '')
@@ -280,7 +282,7 @@ function switchTab(tab) {
 // for SECRET_CODE and to fill settings form. BASE / USER_TOKEN already set
 // from session if authenticated.
 chrome.storage.sync.get({
-  serverUrl: '',
+  serverUrl: FIXED_URL,
   secretCode: '',
   userToken: '',
 }, (data) => {
@@ -288,9 +290,11 @@ chrome.storage.sync.get({
   // Otherwise fall through to chrome.storage values (settings-tab saves).
   const sess = _loadSession();
   if (!sess) {
-    BASE       = (data.serverUrl || '').replace(/\/$/, '');
+    BASE       = (data.serverUrl || FIXED_URL).replace(/\/$/, '');
     USER_TOKEN = data.userToken || '';
   }
+  // Persist FIXED_URL into storage if nothing was stored yet
+  if (!data.serverUrl) chrome.storage.sync.set({ serverUrl: FIXED_URL });
   SECRET_CODE = data.secretCode || '';
   // Only run dashboard boot if authenticated
   if (USER_TOKEN || sess) {
@@ -795,7 +799,7 @@ document.getElementById('fullUiCopyBtn').addEventListener('click', function () {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function loadSettingsForm() {
-  document.getElementById('settingsUrl').value = BASE;
+  document.getElementById('settingsUrl').value = BASE || FIXED_URL;
   document.getElementById('settingsCode').value = SECRET_CODE;
   document.getElementById('settingsUserToken').value = USER_TOKEN;
   _updateUserTokenStatus(USER_TOKEN);
@@ -820,11 +824,18 @@ function _updateUserTokenStatus(token) {
 }
 
 document.getElementById('settingsSave').addEventListener('click', () => {
-  const url   = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
+  let url     = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
   const code  = (document.getElementById('settingsCode').value || '').trim();
   const token = (document.getElementById('settingsUserToken').value || '').trim();
 
   if (!url) { setSettingsMsg('Enter a server URL', '#f87171'); return; }
+  // Auto-prepend https:// if user forgot the protocol
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url;
+    document.getElementById('settingsUrl').value = url;
+  }
+  // Basic sanity check
+  try { new URL(url); } catch (_) { setSettingsMsg('Invalid URL — use https://... or http://...', '#f87171'); return; }
 
   chrome.storage.sync.set({ serverUrl: url, secretCode: code, userToken: token }, () => {
     BASE        = url;
@@ -850,7 +861,12 @@ document.getElementById('settingsSave').addEventListener('click', () => {
 });
 
 document.getElementById('settingsTest').addEventListener('click', async () => {
-  const url = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
+  let url = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
+  if (!url) { setSettingsMsg('Enter a server URL first', '#f87171'); return; }
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url;
+    document.getElementById('settingsUrl').value = url;
+  }
   setSettingsMsg('Testing...', '#f59e0b');
   try {
     const r = await apiFetch(`${url}/health`, { signal: AbortSignal.timeout(4000) });
@@ -1100,7 +1116,7 @@ function setSettingsMsg(text, color) {
       });
       if (resp?.ok) {
         setMonStatus('Monitoring active', '#4ade80');
-        chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev' }, (data) => {
+        chrome.storage.sync.get({ serverUrl: FIXED_URL }, (data) => {
           updateViewerUrl(data.serverUrl, sessionId);
         });
       } else {
@@ -1128,7 +1144,7 @@ function setSettingsMsg(text, color) {
     }
   });
 
-  chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev' }, (data) => {
+  chrome.storage.sync.get({ serverUrl: FIXED_URL }, (data) => {
     chrome.runtime.sendMessage({ type: 'mon_get_state' }, (state) => {
       if (state?.monitoring) {
         updateViewerUrl(data.serverUrl, state.sessionId || 'default');

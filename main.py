@@ -212,6 +212,54 @@ def load_jd_context():
 
 
 # =============================================================================
+# CLARIFICATION INTERCEPT
+# =============================================================================
+
+import re as _re
+
+_CLARIFY_PATTERNS = [
+    # "I am/was asking about X"
+    _re.compile(r"^i\s+(?:am|was|were)\s+asking\s+(?:about|for|regarding)\s+(.+)", _re.I),
+    # "I meant X" / "I mean X"
+    _re.compile(r"^i\s+meant?\s+(.+)", _re.I),
+    # "I'm asking about X"
+    _re.compile(r"^i'm\s+asking\s+(?:about|for)\s+(.+)", _re.I),
+    # "Actually I want to ask about X"
+    _re.compile(r"^actually\s+(?:i\s+)?(?:want|wanted)\s+to\s+ask\s+(?:about\s+)?(.+)", _re.I),
+    # "The question is about X"
+    _re.compile(r"^the\s+question\s+is\s+(?:about|regarding)\s+(.+)", _re.I),
+    # "It's about X" / "This is about X"
+    _re.compile(r"^(?:it'?s|this\s+is)\s+about\s+(.+)", _re.I),
+    # "I said X" — rare but useful
+    _re.compile(r"^i\s+said\s+(.+)", _re.I),
+]
+_CLARIFY_STRIP = _re.compile(r"[.!?]+$")
+
+
+def _extract_clarification(text: str):
+    """
+    Detect candidate clarifications like 'I am asking about decorators.'
+    Returns the corrected topic string, or None if not a clarification.
+    """
+    t = text.strip()
+    for pat in _CLARIFY_PATTERNS:
+        m = pat.match(t)
+        if m:
+            topic = _CLARIFY_STRIP.sub("", m.group(1).strip())
+            # Reject if too short or looks like noise
+            if len(topic.split()) >= 1 and len(topic) >= 3:
+                # Prefix with "What is" only if topic looks like a bare noun phrase
+                # (no question word, no verb at start)
+                lower = topic.lower()
+                has_q = any(lower.startswith(w) for w in
+                            ('what', 'how', 'why', 'when', 'where', 'explain', 'tell', 'define'))
+                if not has_q:
+                    topic = f"What is {topic}?"
+                return topic
+    return None
+
+
+# =============================================================================
 # QUESTION HANDLER (SINGLE-SHOT MODE)
 # =============================================================================
 
@@ -807,6 +855,21 @@ def processing_worker():
             if should_exit:
                 audio_queue.task_done()
                 break
+
+            # 5a. Clarification intercept — "I am asking about X" / "I meant X"
+            # Candidate is correcting a mis-transcribed/wrong previous answer.
+            # Re-route to the corrected topic and auto-learn the STT correction.
+            _clarified = _extract_clarification(validated)
+            if _clarified:
+                _prev_q = (fragment_context.get_recent_context() or {}).get('question', '')
+                print(f"[CLARIFY] Candidate corrected: '{_prev_q}' → '{_clarified}'")
+                if _prev_q and _prev_q.lower() != _clarified.lower():
+                    try:
+                        import stt_learner as _sl
+                        _sl.submit_correction(_prev_q, _clarified)
+                    except Exception:
+                        pass
+                validated = _clarified
 
             # 5. Process
             dlog.log(f"Passing to handle_question: '{validated}'", "INFO")

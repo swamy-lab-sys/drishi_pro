@@ -464,9 +464,13 @@ Drishi/
 ```
 POST /api/ask              {"question":"...", "db_only":false}
                            → {"answer":"...", "source":"db|cache|llm|intro", "score":0.94}
+                           Optional: "quick_mode":true  → skip DB, compact LLM, 280 tokens, guaranteed code block
 
 GET  /api/stream           SSE — events: question_started, chunk, answer, error
 POST /api/cc_question      {"text":"..."} — Chrome extension text injection
+
+GET  /api/get_answer_by_index?index=N   → code block #N (flat index across all answers)
+                                           {"found":true, "index":1, "total":2, "question":"...", "code":"..."}
 ```
 
 ### Settings
@@ -568,6 +572,132 @@ python3 -W ignore main.py       # serves React at /react/*
 | STT garbling YouTube audio | Switch from Sarvam to `local` (Whisper) — Sarvam is tuned for speech not playback audio |
 | Audio backend shows `parec` | Check `professional_audio.py` — `sounddevice` is now preferred; install `python3-sounddevice` if missing |
 | PostgreSQL not connecting | Ensure `DATABASE_URL` in `.env` and `docker ps` shows `drishi-pg` running |
+
+---
+
+## Focus Mode (Interview Screen)
+
+Press `F` on the main dashboard (`/`) to enter **Focus Mode** — fullscreen Q&A feed with no distractions.
+
+### What it does
+
+- Hides sidebar, topbar, terminal bar, bottom bar — only answers visible
+- Latest answer always on top, auto-scrolls
+- Card body **blurs while streaming** (unblurs on complete — prevents interviewer seeing half-answers)
+- After each answer, input auto-refocuses for immediate next keyword
+
+### Focus Ask Bar
+
+A floating dark bar at the bottom of the screen for instant keyword-driven answers:
+
+```
+[ decorator ] [ palindrome ] [ fibonacci ] [ generator ] [ lambda ] [ closure ] [ args/kwargs ] [ singleton ]
+  ________________________________________    _________
+ |  Type: decorator, palindrome...        |  |  Ask ↵  |
+```
+
+- Type a **keyword** → expands to a full question automatically
+- **Ghost text autocomplete**: type `dec` → see `orator` in green, press **Tab** to complete
+- Press **Enter** or click Ask → previous answers cleared, LLM generates clean code answer
+- Input automatically cleared and re-focused after each answer
+
+### Quick Ask (quick_mode)
+
+Ask bar uses `quick_mode: true` which:
+- **Skips the DB** — goes straight to LLM with a compact 280-token prompt
+- Always returns a **code block** in proper Python format
+- ~1–2s response time
+
+API usage:
+```
+POST /api/ask  {"question":"What are decorators?", "quick_mode":true}
+```
+
+### Keyword expansion
+
+50+ keywords mapped to full questions. Examples:
+
+| You type | Question sent to LLM |
+|---|---|
+| `decorator` | What are decorators in Python? Show a short example |
+| `fibonacci` | Write a Python function for fibonacci sequence |
+| `async` | How does async/await work in Python? |
+| `join` | How do SQL JOINs work? Show examples |
+| `promise` | What is a Promise in JavaScript? |
+
+Short inputs (≤3 words, no `?`) auto-get: _"What is X in Python? Give a short explanation and code example"_
+
+### Role-aware chips
+
+Chips in the ask bar update automatically when you switch role in the terminal bar:
+
+| Role | Chips shown |
+|---|---|
+| `python` | decorator, generator, *args/**kwargs, list comprehension, asyncio, dataclass |
+| `sql` | inner join, group by, index, subquery, window function, explain |
+| `javascript` | promise, closure, async/await, prototype, event loop, arrow function |
+| `java` | interface, abstract class, generics, streams, spring boot, thread |
+| `saas` | multi-tenancy, rate limiting, jwt, webhook, idempotency, soft delete |
+
+### Keyboard shortcuts (focus mode)
+
+| Key | Action |
+|---|---|
+| `F` | Toggle focus mode |
+| `Esc` | Exit focus mode |
+| `/` | Jump to ask input |
+| `Tab` | Accept ghost text suggestion |
+| `Enter` | Submit ask |
+| `Ctrl+1/2/3` | Silently copy code block #1/#2/#3 to clipboard |
+
+---
+
+## Code Tokens #N (Programiz Integration)
+
+Every code block generated in the answer feed gets a `#N` badge (invisible by default, appears on hover).
+
+### How to use in Programiz
+
+1. Open [programiz.com/python-programming/online-compiler](https://programiz.com/python-programming/online-compiler)
+2. In the code editor, type: `#1`
+3. Press **Enter**
+4. The Chrome extension **auto-deletes** `#1` and types the code — no visible trace for the interviewer
+
+### Token assignment
+
+- Each `focusAsk()` call clears the session → `#1` always = latest answer
+- Multiple code blocks in one answer → `#1`, `#2`, `#3` in order
+- `Ctrl+1`, `Ctrl+2`, `Ctrl+3` — silent clipboard copy (no toast, badge flashes briefly)
+
+---
+
+## Mobile Monitor
+
+Use your phone to read answers during the interview while your laptop handles the audio.
+
+### Setup
+
+1. Start server and ngrok: `./run.sh` → choose option `[2]` or `[3]`
+2. On your phone: open `https://<your-ngrok-url>/monitor`
+3. That's it — answers stream live, latest on top
+
+### Mobile features (iPhone-optimized)
+
+- Sidebar/topbar hidden automatically on screen width ≤640px
+- Font **18px by default** (larger than desktop 15px)
+- **A− / A+** buttons in the status bar for live font adjustment (saved to phone)
+- Status indicator: green = Listening · orange = Transcribing · purple = Generating
+- Tap **REMOTE** button to copy the URL to share
+
+### Laptop ↔ Phone flow
+
+```
+Laptop:                          Phone (iPhone):
+  Server running on :8000          open ngrok URL /monitor
+  Mic captures audio               answers appear in real-time
+  STT → DB → LLM                   read and respond to interviewer
+  answer streams via SSE  →→→→→→→→  big text, clean view, no clutter
+```
 
 ---
 

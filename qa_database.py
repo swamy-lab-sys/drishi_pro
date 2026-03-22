@@ -76,6 +76,11 @@ _hit_worker.start()
 # Invalidated on any write. Only winner's answer text fetched from DB.
 _score_cache: Optional[List] = None
 
+# Fast O(1) exact-match index: norm_q / norm_alias → row_id
+# Guarantees that an exact question match ALWAYS wins over any boost-inflated score,
+# regardless of hit_count ordering. Built alongside _score_cache, invalidated together.
+_exact_index: Optional[Dict[str, int]] = None
+
 # ── In-memory cache for role-specific prepared questions table ─────────────────
 # Maps role (str) → list of (id, norm_q, q_toks, answer)
 # Built on first lookup per role. Invalidated on any write to questions table.
@@ -120,13 +125,25 @@ def _get_score_cache() -> List:
         cache.append((r["id"], norm_q, q_toks, kw_toks, alias_entries))
 
     _score_cache = cache
+
+    # Build exact-match index (norm_q + all alias norms → row_id)
+    # Earlier rows (higher hit_count) take priority on duplicate norms.
+    exact: Dict[str, int] = {}
+    for (row_id, norm_q, q_toks, kw_toks, alias_entries) in cache:
+        exact.setdefault(norm_q, row_id)
+        for (norm_a, _) in alias_entries:
+            exact.setdefault(norm_a, row_id)
+    global _exact_index
+    _exact_index = exact
+
     return _score_cache
 
 
 def _invalidate_cache():
-    global _score_cache, _prepared_cache
+    global _score_cache, _prepared_cache, _exact_index
     _score_cache = None
     _prepared_cache = {}
+    _exact_index = None
 
 
 def _append_to_cache(row_id: int, norm: str, keywords: str = "", aliases: str = ""):
@@ -1578,14 +1595,24 @@ def find_answer(question: str, want_code: bool = False,
     if not input_toks:
         return None
 
-    best_score = 0.0
-    best_id = None
-    best_q_toks = frozenset()  # track winner's tokens — avoids second O(n) scan below
-
+    # ── Fast exact-match shortcut (O(1)) ──────────────────────────────────────
+    # Checks norm_q and all alias norms. If found, skip the full Jaccard scan.
+    # This guarantees an exact question match ALWAYS wins, regardless of how
+    # boost math scores other high-hit-count entries in the sorted cache.
     with _lock:
         cache = _get_score_cache()
+        _eidx = _exact_index
+
+    _fast_exact_id = _eidx.get(norm_input) if _eidx else None
+
+    best_score = 1.0 if _fast_exact_id is not None else 0.0
+    best_id    = _fast_exact_id
+    best_q_toks = frozenset()
 
     for (row_id, norm_q, q_toks, kw_toks, alias_entries) in cache:
+        # Fast exit: already have a perfect match from exact-index or prior iteration
+        if best_score >= 1.0:
+            break
         # Fast inline scoring (no function call overhead, pre-computed sets)
         if norm_input == norm_q:
             score = 1.0

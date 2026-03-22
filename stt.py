@@ -1108,9 +1108,34 @@ def _transcribe_sarvam(audio_array: np.ndarray):
         return text, 0.92
     except Exception as e:
         print(f"\n  ⚠⚠ SARVAM FALLBACK: {e}")
-        print("  ⚠⚠ Using local Whisper tiny.en — accuracy will be lower!")
         print("  ⚠⚠ Check SARVAM_API_KEY and internet connection.\n")
-        return _transcribe_local(audio_array)
+        try:
+            print("  ⚠⚠ Using local Whisper tiny.en — accuracy will be lower!")
+            return _transcribe_local(audio_array)
+        except (ImportError, OSError) as whisper_err:
+            # faster_whisper C-extension fails on older libstdc++ — retry Sarvam once more
+            print(f"  ⚠⚠ Local Whisper unavailable ({whisper_err.__class__.__name__}), retrying Sarvam...")
+            try:
+                import requests as _req, base64 as _b64, io as _io, wave as _wave, struct as _struct
+                wav_buf = _io.BytesIO()
+                with _wave.open(wav_buf, 'wb') as wf:
+                    wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(config.AUDIO_SAMPLE_RATE)
+                    pcm = (audio_array * 32767).clip(-32768, 32767).astype('int16')
+                    wf.writeframes(pcm.tobytes())
+                wav_buf.seek(0)
+                resp = _req.post(
+                    "https://api.sarvam.ai/speech-to-text",
+                    headers={"api-subscription-key": config.SARVAM_API_KEY},
+                    files={"file": ("audio.wav", wav_buf, "audio/wav")},
+                    data={"language_code": getattr(config, 'SARVAM_LANGUAGE', 'en-IN'), "model": "saarika:v2.5"},
+                    timeout=10,
+                )
+                if resp.ok:
+                    text = resp.json().get("transcript", "").strip()
+                    return text, 0.88
+            except Exception:
+                pass
+            return "", 0.0
 
 
 # ── Filler / noise filter ──────────────────────────────────────────────────────

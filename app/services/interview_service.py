@@ -89,6 +89,7 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
     original_question = (data.get("question") or "").strip()
     question = original_question
     db_only = bool(data.get("db_only", False))
+    quick_mode = bool(data.get("quick_mode", False))
     _t0 = time.time()
 
     if not question:
@@ -133,8 +134,8 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
     active_user = state.get_selected_user()
     user_role = (active_user or {}).get("role", "") if active_user else ""
 
-    # Priority 1: DB match (instant, <5ms)
-    db_result = qa_database.find_answer(question, want_code=wants_code, user_role=user_role)
+    # Priority 1: DB match (instant, <5ms) — skipped in quick_mode (need guaranteed code block)
+    db_result = None if quick_mode else qa_database.find_answer(question, want_code=wants_code, user_role=user_role)
     if db_result:
         db_answer, db_score, db_id = db_result
         answer_storage.set_complete_answer(
@@ -151,9 +152,9 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
             "original_question": original_question,
         }, 200
 
-    # Priority 2: Answer cache (LLM-generated answers from previous calls, <1ms)
+    # Priority 2: Answer cache — skipped in quick_mode (need fresh code-block answer)
     import answer_cache as _ac
-    cached = _ac.get_cached_answer(question, role=user_role)
+    cached = None if quick_mode else _ac.get_cached_answer(question, role=user_role)
     if cached:
         answer_storage.set_complete_answer(question, cached, {"source": "cache"})
         state.record_answer_latency((time.time() - _t0) * 1000)
@@ -178,6 +179,15 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
         try:
             import answer_cache
             from user_manager import build_resume_context_for_llm
+
+            if quick_mode:
+                # Quick ask: short focused answer, no streaming, ~0.8s TTFT
+                answer = llm_client.get_quick_answer(question)
+                if answer:
+                    answer_storage.set_complete_answer(question, answer, {"source": "api-quick"})
+                    answer_cache.cache_answer(question, answer, role=user_role)
+                    state.record_answer_latency((time.time() - _t0) * 1000)
+                return
 
             if wants_code:
                 answer = llm_client.get_coding_answer(question)

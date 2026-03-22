@@ -263,14 +263,16 @@
     .dot-py   { background: #3572A5; } .dot-sh  { background: #89E051; }
     .dot-sql  { background: #E38C00; } .dot-java { background: #B07219; }
     .dot-js   { background: #F1E05A; } .dot-yml  { background: #CB171E; }
-    .dot-def  { background: var(--text-muted); }
+    .dot-df   { background: #384D54; } .dot-def  { background: var(--text-muted); }
     .cb-copy {
       font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
       border: 1px solid var(--border); background: transparent;
       cursor: pointer; color: var(--text-muted); transition: all 0.15s;
     }
     .cb-copy:hover { background: var(--green-light); color: var(--green); border-color: var(--green); }
-    .ln-code { overflow-x: auto; }
+    .line-numbers { display: flex; }
+    .ln-nums { background: var(--bg); color: var(--text-muted); padding: 10px 8px; font-size: 11px; line-height: 1.6; text-align: right; user-select: none; white-space: pre; font-family: monospace; min-width: 36px; border-right: 1px solid var(--border); }
+    .ln-code { flex: 1; overflow-x: auto; }
     .ln-code pre { padding: 10px 14px; font-size: var(--fs-code); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
     /* Card footer */
@@ -306,8 +308,47 @@
     .feed-wrap::-webkit-scrollbar { width: 4px; }
     .feed-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+    /* Font size controls */
+    .fs-btn {
+      font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .fs-btn:hover { background: var(--green-light); color: var(--green); border-color: var(--green); }
+
+    /* ── Mobile / iPhone ── */
     @media(max-width: 768px) {
       .feed { padding: 12px 10px 48px; }
+    }
+    @media(max-width: 640px) {
+      /* Hide sidebar + topbar from base.html */
+      #sidebar  { display: none !important; }
+      #topbar   { display: none !important; }
+      #main-content { margin-left: 0 !important; width: 100% !important; margin-top: 0 !important; }
+      /* Bigger base font for easier reading */
+      :root { --fs: 18px; --fs-code: 15px; }
+      /* Compact terminal bar */
+      #terminal-bar { padding: 4px 10px; font-size: 10px; }
+      .tb-prompt { display: none; }
+      #ts-listening, #ts-transcribing, #ts-generating { font-size: 9px; padding: 2px 6px; }
+      .tb-latency { font-size: 9px; }
+      /* Listen bar: tighter */
+      .listen-bar { padding: 5px 10px; gap: 6px; }
+      #tr-text { font-size: 12px; }
+      .mode-toggle { display: none; }  /* hide mode toggle, not needed on phone */
+      /* Cards: full width, comfortable reading */
+      .feed { padding: 8px 6px 40px; max-width: 100%; }
+      .card-head { padding: 10px 12px 8px; }
+      .card-body { padding: 14px 12px; }
+      .qtext { font-size: calc(var(--fs) + 2px) !important; line-height: 1.5; }
+      .ans-bullet { font-size: var(--fs) !important; line-height: 1.65; }
+      .stream-text { font-size: var(--fs) !important; }
+      .para-block { font-size: var(--fs) !important; }
+      .ln-code pre { font-size: var(--fs-code) !important; }
+      /* Bigger copy button */
+      .copy-btn { width: 34px; height: 34px; font-size: 15px; }
+      /* Share remote btn: full width on mobile */
+      #share-remote-btn { font-size: 12px !important; padding: 5px 12px !important; }
     }
   </style>
 {% endblock %}
@@ -337,7 +378,9 @@
   <div class="listen-bar">
     <div class="listen-dot" id="ld"></div>
     <span id="tr-text">Listening for interview questions…</span>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+      <button class="fs-btn" onclick="monAdjustFs(-1)" title="Smaller text">A−</button>
+      <button class="fs-btn" onclick="monAdjustFs(+1)" title="Larger text">A+</button>
       <div class="mode-toggle">
         <button class="mode-btn active" id="mbt-bullet" onclick="setMode('bullet')">&#8226; Bullet</button>
         <button class="mode-btn" id="mbt-para"   onclick="setMode('para')">&#182; Para</button>
@@ -378,6 +421,7 @@
   let _sessionId = null;
   let _es = null, _reconnectDelay = 1500, _reconnectTimer = null;
   let _stateTimer = null, _trTimer = null;
+  let _chunkPending = new Set(), _chunkRaf = null;
   let _mode = localStorage.getItem('drishi_mon_mode') || 'bullet';
 
   /* ── Mode toggle ── */
@@ -441,7 +485,7 @@
       try {
         const item = JSON.parse(e.data);
         upsert(item);
-        rebuildFeed();
+        upsertCardDOM(item);
         setState('ready');
         clearTimeout(_stateTimer);
         _stateTimer = setTimeout(() => setState('listening'), 2500);
@@ -453,7 +497,7 @@
       try {
         const item = JSON.parse(e.data);
         upsert(item);
-        rebuildFeed();
+        upsertCardDOM(item);
         setState('generating');
       } catch (_) {}
     });
@@ -467,10 +511,18 @@
         if (idx >= 0) {
           _answers[idx].answer = (_answers[idx].answer || '') + (d.chunk || '');
           _answers[idx].is_complete = false;
-          patchCard(idx);
+          _chunkPending.add(idx);
+          if (!_chunkRaf) {
+            _chunkRaf = requestAnimationFrame(() => {
+              _chunkRaf = null;
+              _chunkPending.forEach(i => patchCard(i));
+              _chunkPending.clear();
+            });
+          }
         } else {
-          _answers.unshift({ question: d.question, answer: d.chunk || '', is_complete: false });
-          rebuildFeed();
+          const newItem = { question: d.question, answer: d.chunk || '', is_complete: false };
+          _answers.unshift(newItem);
+          upsertCardDOM(newItem);
         }
         setState('generating');
       } catch (_) {}
@@ -505,6 +557,34 @@
     else { _answers.unshift(item); }          // latest always at front
   }
 
+  /* ── Surgical card upsert (avoids full rebuild) ── */
+  function upsertCardDOM(item) {
+    const feed  = document.getElementById('feed');
+    const empty = document.getElementById('feed-empty');
+    const items = _answers.filter(a => a.question);
+    document.getElementById('tb-q-count').textContent = items.length;
+    if (!items.length) { empty.style.display = ''; return; }
+    empty.style.display = 'none';
+
+    const qnorm = (item.question || '').toLowerCase().trim();
+    const idx = _answers.findIndex(a => (a.question||'').toLowerCase().trim() === qnorm);
+    const existingCard = idx >= 0 ? feed.querySelector(`.qa-card[data-qidx="${idx}"]`) : null;
+
+    if (existingCard) {
+      const newEl = buildCard(item, idx);
+      feed.replaceChild(newEl, existingCard);
+      wireButtons(newEl);
+    } else {
+      // New card at front — shift all existing indices up by 1
+      feed.querySelectorAll('.qa-card').forEach(c => {
+        c.dataset.qidx = parseInt(c.dataset.qidx, 10) + 1;
+      });
+      const el = buildCard(item, 0);
+      feed.insertBefore(el, feed.firstChild);
+      wireButtons(el);
+    }
+  }
+
   /* ── Full rebuild ── */
   function rebuildFeed() {
     const feed  = document.getElementById('feed');
@@ -525,10 +605,6 @@
       const el = buildCard(item, idx);
       el.dataset.qidx = idx;
       feed.appendChild(el);          // items[0]=latest appended first → visually on top
-    });
-
-    feed.querySelectorAll('pre code').forEach(b => {
-      try { hljs && hljs.highlightElement(b); } catch (_) {}
     });
 
     wireButtons(feed);
@@ -553,7 +629,6 @@
         }
       }
     }
-    try { existing.querySelectorAll('pre code').forEach(b => hljs && hljs.highlightElement(b)); } catch (_) {}
     wireButtons(existing);
   }
 
@@ -616,10 +691,33 @@
     return formatAnswer(ansText);
   }
 
+  /* ── Language detection (mirrors index.html detectCodeLang) ── */
+  function detectLang(code) {
+    const c = (code || '').trim();
+    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|FROM|WHERE|GROUP BY|ORDER BY)\b/im.test(c)) return 'sql';
+    if (/^\s*(def |import |from |class |@\w|return |if |elif |else:|for |while |try:|except|with |async |await )/m.test(c)) return 'python';
+    if (/^\s*(FROM|RUN|COPY|CMD|EXPOSE|WORKDIR|ENV)\s/m.test(c)) return 'dockerfile';
+    if (/^---$|^[a-z_]+:\s*$/m.test(c) || /^  - (name|hosts|tasks):/m.test(c)) return 'yaml';
+    if (/^\s*(public |private |protected |static |class |interface |@Override|@\w+\()/.test(c) || /\b(void|int|long|String|boolean|List<|Map<)\s+\w+\s*[\(\{]/.test(c)) return 'java';
+    if (/^\s*(const |let |var |function |async |export |module\.|require\()/.test(c) || /=>\s*\{/.test(c)) return 'javascript';
+    if (/^(#!\/|sudo |apt |yum |systemctl |docker |kubectl |git |grep |awk |sed |find |curl |ps |df )/m.test(c)) return 'bash';
+    // Indented code heuristic — 2+ lines with indentation → python
+    const indented = c.split('\n').filter(l => /^\s{2,}\S/.test(l)).length;
+    if (indented >= 2) return 'python';
+    return null;
+  }
+
+  function looksLikeCode(text) {
+    const lines = text.split('\n').filter(l => l.length > 0);
+    if (lines.length < 2) return null;
+    return detectLang(lines.join('\n'));
+  }
+
   /* ── Format answer ── */
   function formatAnswer(text) {
     if (!text) return '';
 
+    // ① Fenced code blocks (``` ... ```)
     if (text.includes('```')) {
       return text.split(/(```[\w]*\n[\s\S]*?```)/g).map(part => {
         const m = part.match(/^```([\w]*)\n([\s\S]*)```$/);
@@ -630,6 +728,11 @@
       }).join('');
     }
 
+    // ② Raw code (no fences) — auto-detect by content
+    const codeLang = looksLikeCode(text);
+    if (codeLang) return renderCodeBlock(text, codeLang);
+
+    // ③ Bullets / paragraph
     return _mode === 'bullet' ? renderBullets(text) : `<div class="para-block">${renderInline(text)}</div>`;
   }
 
@@ -638,20 +741,29 @@
     return `<div class="answer-paras">${
       lines.map(l => {
         const content = l.replace(/^[-•*]\s+/, '');
-        return `<div class="ans-bullet"><div class="ans-dot"></div><div>${renderInline(content)}</div></div>`;
+        const isPersonal = /^I\b/.test(content);
+        return `<div class="ans-bullet${isPersonal ? ' personal' : ''}"><div class="ans-dot"></div><div>${renderInline(content)}</div></div>`;
       }).join('')
     }</div>`;
   }
 
   function renderCodeBlock(code, lang) {
-    const det = lang || detectLang(code);
-    const dotCls = { python:'dot-py', javascript:'dot-js', java:'dot-java', sql:'dot-sql', bash:'dot-sh', sh:'dot-sh', yaml:'dot-yml', yml:'dot-yml' }[det] || 'dot-def';
+    const det = lang || detectLang(code) || 'bash';
+    const dotCls = { python:'dot-py', javascript:'dot-js', java:'dot-java', sql:'dot-sql', bash:'dot-sh', sh:'dot-sh', yaml:'dot-yml', yml:'dot-yml', dockerfile:'dot-df' }[det] || 'dot-def';
+    const trimmed = code.trimEnd();
+    let hi;
+    try { hi = (typeof hljs !== 'undefined') ? hljs.highlight(trimmed, { language: det, ignoreIllegals: true }).value : esc(trimmed); }
+    catch (_) { hi = esc(trimmed); }
+    const nums = trimmed.split('\n').map((_, i) => String(i + 1)).join('\n');
     return `<div class="cb">
       <div class="cb-head">
-        <div class="cb-lang"><span class="cb-dot ${dotCls}"></span>${(det||'code').toUpperCase()}</div>
-        <button class="cb-copy" data-code="${escAttr(code.trimEnd())}">copy</button>
+        <div class="cb-lang"><span class="cb-dot ${dotCls}"></span>${det.toUpperCase()}</div>
+        <button class="cb-copy" data-code="${escAttr(trimmed)}">copy</button>
       </div>
-      <div class="ln-code"><pre><code class="language-${det}">${esc(code.trimEnd())}</code></pre></div>
+      <div class="line-numbers">
+        <pre class="ln-nums">${esc(nums)}</pre>
+        <div class="ln-code"><pre><code class="hljs">${hi}</code></pre></div>
+      </div>
     </div>`;
   }
 
@@ -660,16 +772,6 @@
     e = e.replace(/`([^`\n]+)`/g, (_, c) => `<code class="ic">${esc(c)}</code>`);
     e = e.replace(/\n/g, '<br>');
     return e;
-  }
-
-  function detectLang(code) {
-    const c = code.trim();
-    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP)\b/i.test(c)) return 'sql';
-    if (/^\s*(def |import |from |class |@\w+|print\()/m.test(c)) return 'python';
-    if (/^\s*(public |private |static |class |@Override)/m.test(c)) return 'java';
-    if (/^\s*(const |let |var |function |async |=>)/m.test(c)) return 'javascript';
-    if (/^---$|apiVersion:/m.test(c)) return 'yaml';
-    return 'bash';
   }
 
   /* ── Wire copy buttons ── */
@@ -756,6 +858,21 @@
     }
   }
   window.shareRemote = shareRemote;
+
+  /* ── Font size controls ── */
+  const _MON_FS = [13,15,17,19,22,26];
+  const _MON_FS_CODE = [11,13,14,15,17,19];
+  let _monFsIdx = parseInt(localStorage.getItem('drishi_mon_fs') || '1', 10);
+  function _applyMonFs(idx) {
+    idx = Math.max(0, Math.min(_MON_FS.length - 1, idx));
+    _monFsIdx = idx;
+    document.documentElement.style.setProperty('--fs', _MON_FS[idx] + 'px');
+    document.documentElement.style.setProperty('--fs-code', _MON_FS_CODE[idx] + 'px');
+    localStorage.setItem('drishi_mon_fs', idx);
+  }
+  function monAdjustFs(delta) { _applyMonFs(_monFsIdx + delta); }
+  window.monAdjustFs = monAdjustFs;
+  _applyMonFs(_monFsIdx);
 
   /* ── Start ── */
   connect();

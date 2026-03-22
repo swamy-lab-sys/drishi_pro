@@ -152,7 +152,7 @@ For any Linux command question, put the actual command in backticks in the FIRST
 ━━━ RULES ━━━
 - EXACTLY 3 bullets. NO sub-bullets. NO numbered lists.
 - NO colons inside bullets. Say it directly.
-- NO markdown bold. NO code blocks. Inline backticks only for shell commands.
+- NO markdown bold. NO code blocks. Use inline backticks for code snippets and shell commands.
 - BANNED WORDS: essentially, fundamentally, primarily, utilize, moreover, furthermore,
   additionally, consequently, thus, therefore, leverages, facilitates, notwithstanding.
 - USE INSTEAD: basically, mainly, use, also, so, but, to, lets you, helps.
@@ -652,7 +652,7 @@ For any question asking about a Linux command or shell tool, always put the actu
 ━━━ RULES ━━━
 - EXACTLY 3 bullets. NO sub-bullets. NO numbered lists.
 - NO colons inside bullets. Say it directly.
-- NO markdown bold. NO code blocks. Inline backticks only for shell commands.
+- NO markdown bold. NO code blocks. Use inline backticks for code snippets and shell commands.
 - BANNED WORDS: essentially, fundamentally, primarily, utilize, moreover, furthermore,
   additionally, consequently, thus, therefore, leverages, facilitates, notwithstanding,
   "it is worth noting", "it is important to note", "in order to", "allows for",
@@ -812,7 +812,7 @@ tail -f /var/log/app.log | grep --line-buffered ERROR
 
 ━━━ RULES ━━━
 - ZERO explanation before or after. Just the code.
-- NO comments unless the problem needs one line of context.
+- ZERO comments inside code. No # comments, no // comments, no /* */ blocks.
 - NO markdown fencing (no ```python or ```).
 - 3-20 lines max (infra scripts like Ansible/Terraform can be longer).
 - Python: no `if __name__` block unless asked.
@@ -1298,7 +1298,7 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
 
 
 _ROLE_CONTEXT = {
-    "python": "INTERVIEW ROLE: Python Developer. Use Python for ALL code examples. Focus on Python idioms, Django/FastAPI, async, testing, packaging.",
+    "python": "INTERVIEW ROLE: Python Developer. Use Python for ALL code examples. Focus on Python idioms, Django/FastAPI, async, testing, packaging. IMPORTANT: For the personal experience bullet, reference Python/programming work only. Do NOT mention telecom, SIP, SS7, Diameter, production support, grep, awk, or non-Python tools.",
     "java": "INTERVIEW ROLE: Java Developer. Use Java for ALL code examples. Focus on Spring Boot, JVM, multithreading, Maven/Gradle, design patterns.",
     "javascript": "INTERVIEW ROLE: JavaScript/Node.js Developer. Use JavaScript/TypeScript for ALL code examples. Focus on React, Node.js, async/await, REST APIs.",
     "sql": "INTERVIEW ROLE: Data/SQL Engineer. Always include SQL examples. Focus on query optimization, indexes, joins, window functions, stored procedures.",
@@ -1671,6 +1671,45 @@ RULES:
     except Exception as e:
         dlog.log_error("[LLM] correct_question_intent failed", e)
         return question
+
+
+_QUICK_PROMPT = """You are a Python developer answering a quick interview question. Be ultra concise.
+
+RULES:
+- If it is a concept question: 1-2 lines explanation + a clean Python code block using triple backticks.
+- If it is a coding question: ONLY a Python code block using triple backticks, no explanation text before it.
+- Code blocks MUST use ```python ... ``` format with proper indentation and newlines.
+- Max 120 tokens total. No filler. No "Here is", no "Sure", no "Certainly".
+- No numbered lists. No excessive bullets. Direct answer only.
+- For coding: write complete, runnable functions with a usage example comment at the end."""
+
+
+def get_quick_answer(question: str) -> str:
+    """
+    Fast focused answer for focus-mode Ask bar.
+    - Short system prompt → less prefill → faster TTFT
+    - 120 token cap → streams in ~0.8s instead of 2-3s
+    - Returns full text (not streaming) for simplicity
+    """
+    import config as _cfg
+    _role = getattr(_cfg, 'INTERVIEW_ROLE', 'python')
+    role_hint = _ROLE_CONTEXT.get(_role, _ROLE_CONTEXT.get('python', ''))
+    system = _QUICK_PROMPT
+    if role_hint:
+        system += f"\n\n{role_hint}"
+
+    try:
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=280,          # short = fast TTFT (~0.8s)
+            temperature=0.1,
+            system=system,
+            messages=[{"role": "user", "content": question}],
+        )
+        return (resp.content[0].text or '').strip()
+    except Exception as e:
+        dlog.log_error("[LLM] get_quick_answer failed", e)
+        return ""
 
 
 def generate_qa_payload(question: str, answer: str, wants_code: bool = False) -> dict:

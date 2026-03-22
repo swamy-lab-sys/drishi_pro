@@ -291,7 +291,15 @@ def control_toggle_mode_payload() -> dict:
 
 
 def answer_by_index_payload(index_raw: str) -> tuple[dict, int]:
-    """Return a specific stored answer by 1-based chronological index."""
+    """
+    Return code by 1-based index.
+
+    Strategy (in order):
+    1. Collect all code blocks across all answers (chronological, oldest first).
+       Block #1 = first code block in first answer, #2 = second code block overall, etc.
+    2. This lets the user ask one question with multiple examples and access #1 #2 #3
+       from Programiz individually.
+    """
     try:
         index = int(index_raw)
     except ValueError:
@@ -302,35 +310,46 @@ def answer_by_index_payload(index_raw: str) -> tuple[dict, int]:
         if not all_answers:
             return {"found": False, "error": "No questions found"}, 404
 
-        chronological_answers = list(reversed(all_answers))
+        chronological = list(reversed(all_answers))
+
+        # Build a flat list of code blocks across all answers
+        code_blocks = []  # list of (question, code_str)
+        _code_re = re.compile(r"```(?:\w+)?\n(.*?)```", re.DOTALL)
+        for ans in chronological:
+            raw = ans.get("answer", "")
+            if not raw or not ans.get("is_complete", True):
+                continue
+            matches = _code_re.findall(raw)
+            if matches:
+                for m in matches:
+                    code_blocks.append((ans.get("question", ""), m.strip()))
+            else:
+                # No code fence — check if it looks like raw code
+                stripped = raw.strip()
+                if (re.match(r"^(def |class |import |from |for |while |if |SELECT\b)", stripped)
+                        or ("\ndef " in stripped)
+                        or (stripped.count("\n") >= 2 and "(" in stripped and ":" in stripped)):
+                    code_blocks.append((ans.get("question", ""), stripped))
+
+        if not code_blocks:
+            return {"found": False, "error": "No code blocks found in any answer"}, 404
+
+        # Clamp index
         if index <= 0:
-            target_answer = chronological_answers[-1]
-            real_index = len(chronological_answers)
-        elif 1 <= index <= len(chronological_answers):
-            target_answer = chronological_answers[index - 1]
-            real_index = index
-        else:
+            index = 1
+        if index > len(code_blocks):
             return {
                 "found": False,
-                "error": f"Index {index} out of bounds (1-{len(chronological_answers)})",
+                "error": f"Index {index} out of bounds (1-{len(code_blocks)})",
             }, 404
 
-        raw_answer = target_answer.get("answer", "")
-        code = raw_answer
-        code_match = re.search(
-            r"```(?:python|py)?\n(.*?)```",
-            raw_answer,
-            re.DOTALL | re.IGNORECASE,
-        )
-        if code_match:
-            code = code_match.group(1)
-
+        question, code = code_blocks[index - 1]
         return {
             "found": True,
-            "index": real_index,
-            "total": len(chronological_answers),
-            "question": target_answer.get("question", ""),
-            "code": code.strip(),
+            "index": index,
+            "total": len(code_blocks),
+            "question": question,
+            "code": code,
         }, 200
     except Exception as exc:
         return {"found": False, "error": str(exc)}, 500

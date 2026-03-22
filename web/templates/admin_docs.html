@@ -675,6 +675,8 @@ code {
     <a href="#user-portal"><span class="nav-dot"></span>User Portal</a>
     <a href="#admin-panel"><span class="nav-dot"></span>Admin Panel</a>
 
+    <a href="#focus-mode"><span class="nav-dot"></span>Focus Mode &amp; Mobile</a>
+
     <div class="docs-nav-section">AI Features</div>
     <a href="#interview-pipeline"><span class="nav-dot"></span>Interview Pipeline</a>
     <a href="#classifier"><span class="nav-dot"></span>Question Classifier</a>
@@ -1119,6 +1121,113 @@ code {
       </table>
     </section>
 
+    <!-- ── FOCUS MODE ── -->
+    <div class="section-divider" id="focus-mode"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon" style="background:linear-gradient(135deg,#1a1a2e,#16213e);">🎯</div>
+        <h2>Focus Mode &amp; Mobile Monitor</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:720px;">
+        Press <kbd style="font-family:monospace;background:var(--bg);border:1px solid var(--border);padding:1px 6px;border-radius:4px;">F</kbd>
+        on the main dashboard to enter Focus Mode — fullscreen Q&amp;A feed with all chrome hidden.
+        Use <code>/monitor</code> on your iPhone to read answers during the interview.
+      </p>
+
+      <div class="card-grid cols-2" style="margin-bottom:20px;">
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#0f1117,#1a1a2e);">
+            <div class="feat-icon">🖥</div>
+            <div>
+              <h3>Focus Mode</h3>
+              <div class="feat-tag">Keyboard: F / Esc</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <ul>
+              <li>Hides sidebar, topbar, terminal bar, bottom bar</li>
+              <li>Card body <strong>blurs while streaming</strong> — unblurs on complete (interviewer can't see half-answers)</li>
+              <li>Input auto-refocuses after each answer</li>
+              <li>A− / A+ font controls top-right</li>
+              <li><code>/</code> key jumps to ask input; <code>Esc</code> exits</li>
+            </ul>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#065f46,#059669);">
+            <div class="feat-icon">📱</div>
+            <div>
+              <h3>Mobile Monitor</h3>
+              <div class="feat-tag">/monitor on iPhone</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <ul>
+              <li>Open <code>/monitor</code> over ngrok URL on your phone</li>
+              <li>Sidebar/topbar auto-hidden on ≤640px screen</li>
+              <li>18px default font (vs 15px desktop) for easy reading</li>
+              <li>A− / A+ font buttons in status bar, saved per device</li>
+              <li>Live SSE — answers stream as they generate</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-2" style="margin-bottom:20px;">
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#1e3a5f,#2563eb);">
+            <div class="feat-icon">⚡</div>
+            <div>
+              <h3>Focus Ask Bar</h3>
+              <div class="feat-tag">quick_mode LLM</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Floating dark bar at the bottom of focus mode. Type a keyword → instant clean answer with code.</p>
+            <ul>
+              <li><strong>Ghost text autocomplete</strong>: type <code>dec</code> → see <code>orator</code> in green, Tab to complete</li>
+              <li><strong>50+ keyword mappings</strong>: decorator, fibonacci, closure, async, join, promise…</li>
+              <li><strong>Role-aware chips</strong>: chips update when role switches (py/sql/js/java/saas)</li>
+              <li>Skips DB — always LLM with 280-token compact prompt</li>
+              <li>Clears previous answers before generating</li>
+            </ul>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#3730a3,#6d28d9);">
+            <div class="feat-icon">🔢</div>
+            <div>
+              <h3>Code Tokens #N</h3>
+              <div class="feat-tag">Programiz Integration</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Every code block gets an invisible <code>#N</code> badge. Hover to see it. Used with Chrome extension for auto-typing.</p>
+            <ul>
+              <li>Type <code>#1</code> + Enter in Programiz → extension deletes <code>#1</code> and auto-types the code</li>
+              <li><code>Ctrl+1</code> / <code>Ctrl+2</code> / <code>Ctrl+3</code> — silent clipboard copy (no toast)</li>
+              <li><code>#1</code> always = latest answer (session cleared on each Ask)</li>
+              <li>Multiple code blocks in one answer → <code>#1</code>, <code>#2</code>, <code>#3</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <table class="api-table">
+        <thead>
+          <tr><th>Keyboard Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>F</kbd></td><td>Toggle focus mode</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Exit focus mode</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Jump to ask input (focus mode only)</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Accept ghost text autocomplete suggestion</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Submit ask</td></tr>
+          <tr><td><kbd>Ctrl+1</kbd> / <kbd>Ctrl+2</kbd> / <kbd>Ctrl+3</kbd></td><td>Silent copy code block #1/#2/#3 to clipboard</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- ── INTERVIEW PIPELINE ── -->
     <div class="section-divider" id="interview-pipeline"></div>
     <section class="docs-section">
@@ -1524,6 +1633,26 @@ code {
           </tr>
         </thead>
         <tbody>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/ask</code></td>
+            <td>Submit question → answer (DB / cache / LLM). Optional <code>quick_mode:true</code> skips DB, 280-token compact LLM, guaranteed code block (~1–2s)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/stream</code></td>
+            <td>SSE stream — events: <code>question_started</code>, <code>chunk</code>, <code>answer</code>, <code>error</code></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/get_answer_by_index?index=N</code></td>
+            <td>Return code block #N (flat index across all answers in session). Used by Chrome extension ghost trigger (<code>#1</code> Enter in Programiz)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/clear_session</code></td>
+            <td>Wipe current session answers — called by Focus Ask before each new question</td>
+          </tr>
           <tr>
             <td><span class="method-badge post">POST</span></td>
             <td><code>/api/transcript</code></td>

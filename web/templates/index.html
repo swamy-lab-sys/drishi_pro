@@ -15,8 +15,8 @@
   <style>
     /* ── Interview-specific tokens ── */
     :root {
-      --fs: 14px;
-      --fs-code: 13px;
+      --fs: 16px;
+      --fs-code: 14px;
       --ic-bg: rgba(59,130,246,0.08);
       --ic-color: #2563EB;
       --code-bg: #F8FAFC;
@@ -187,10 +187,14 @@
       50% { opacity: 0.6; }
     }
 
+    /* Rainbow question text — pure CSS gradient, no JS, no animation = zero perf cost */
     .qtext {
-      flex: 1; font-size: 14px; font-weight: 600;
-      color: var(--text-dark); line-height: 1.4;
-      word-break: break-word;
+      flex: 1; font-size: calc(var(--fs) + 2px); font-weight: 700;
+      line-height: 1.4; word-break: break-word;
+      background: linear-gradient(100deg, #e11d48 0%, #ea580c 20%, #d97706 38%, #059669 55%, #2563eb 75%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .card-meta {
@@ -209,7 +213,7 @@
     .copy-btn:hover { background: var(--bg); color: var(--green); border-color: var(--green); }
 
     /* Card body */
-    .card-body { padding: 12px 14px; }
+    .card-body { padding: 14px 16px; }
 
     /* Thinking */
     .thinking { display: flex; align-items: center; gap: 5px; padding: 6px 0; }
@@ -227,15 +231,15 @@
 
     /* Streaming */
     .stream-text {
-      font-size: var(--fs); line-height: 1.5; color: var(--text-medium);
+      font-size: var(--fs); line-height: 1.65; color: var(--text-medium);
       word-break: break-word; min-height: 24px;
     }
     .stream-text::after { content: '▌'; color: var(--green); animation: blink 0.7s step-end infinite; }
     @keyframes blink { 50% { opacity: 0; } }
 
     /* Answer bullets */
-    .answer-paras { display: flex; flex-direction: column; gap: 6px; }
-    .ans-bullet { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs); line-height: 1.5; color: var(--text-dark); word-break: break-word; }
+    .answer-paras { display: flex; flex-direction: column; gap: 8px; }
+    .ans-bullet { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs); line-height: 1.65; color: var(--text-dark); word-break: break-word; }
     .ans-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; margin-top: calc(var(--fs) * 0.35); opacity: 0.7; }
     .ans-bullet.personal .ans-dot { background: var(--blue); }
 
@@ -254,7 +258,28 @@
 
     /* Code block */
     .cb { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--code-border); }
-    .cb-head { background: var(--bg); padding: 6px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--code-border); }
+    .cb-head { background: var(--bg); padding: 6px 12px; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1px solid var(--code-border); }
+
+    /* Code token badge #1 #2 #3 — stealth by default, only visible on hover */
+    .code-token-badge {
+      font-size: 11px; font-weight: 900; font-family: 'IBM Plex Mono', monospace;
+      padding: 2px 8px; border-radius: 5px; cursor: pointer; letter-spacing: 0.3px;
+      background: linear-gradient(135deg, #6d28d9, #2563eb);
+      color: #fff; border: none; margin-left: auto; flex-shrink: 0;
+      transition: opacity 0.2s, transform 0.1s;
+      user-select: none;
+      /* Hidden by default — only shows when mouse is near the code block */
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* Reveal on code block hover */
+    .cb:hover .code-token-badge {
+      opacity: 0.75;
+      pointer-events: auto;
+    }
+    .code-token-badge:hover { opacity: 1 !important; transform: scale(0.97); }
+    /* Flash on click (brief confirm) — no toast popup */
+    .code-token-badge.flash { opacity: 1 !important; background: #059669; }
     .cb-lang { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
     .cb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .dot-py { background: #3572A5; } .dot-sh { background: #89E051; } .dot-yml { background: #CB171E; }
@@ -263,9 +288,9 @@
     .cb-copy { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
     .cb-copy:hover { background: var(--green-light); color: var(--green); border-color: var(--green); }
     .line-numbers { display: flex; overflow-x: auto; }
-    .ln-nums { background: var(--bg); color: var(--text-muted); padding: 10px 8px; font-size: 11px; line-height: 1.6; text-align: right; user-select: none; white-space: pre; font-family: monospace; min-width: 36px; border-right: 1px solid var(--border); }
+    .ln-nums { background: var(--bg); color: var(--text-muted); padding: 12px 10px; font-size: 12px; line-height: 1.7; text-align: right; user-select: none; white-space: pre; font-family: monospace; min-width: 38px; border-right: 1px solid var(--border); }
     .ln-code { flex: 1; overflow-x: auto; }
-    .ln-code pre { padding: 10px 14px; font-size: var(--fs-code); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .ln-code pre { padding: 12px 16px; font-size: var(--fs-code); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
 
     /* Card footer */
     .card-foot {
@@ -303,8 +328,15 @@
     }
     .db-save-btn { background: var(--green-light); color: var(--green-dark); border: 1px solid rgba(34,122,74,0.3); }
     .db-save-btn:hover { background: rgba(34,122,74,0.2); }
-    .db-del-btn { background: var(--red-bg); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
-    .db-del-btn:hover { background: rgba(239,68,68,0.2); }
+    .db-del-btn {
+      background: linear-gradient(135deg, #e11d48, #dc2626);
+      color: #fff; border: none;
+      box-shadow: 0 1px 4px rgba(225,29,72,0.35);
+    }
+    .db-del-btn:hover {
+      background: linear-gradient(135deg, #be123c, #b91c1c);
+      box-shadow: 0 2px 8px rgba(225,29,72,0.5);
+    }
 
     /* Show older */
     .show-older-btn {
@@ -501,6 +533,222 @@
       .feed { padding: 0 10px 160px; }
     }
 
+    /* ── iPhone / Mobile responsive ── */
+    @media(max-width: 640px) {
+      /* Hide sidebar and adjust layout */
+      #sidebar { display: none !important; }
+      #main-content { margin-left: 0 !important; width: 100% !important; }
+      #topbar { display: none !important; }
+      /* Terminal bar: scrollable, compact */
+      #terminal-bar { padding: 4px 10px; font-size: 10px; }
+      .tb-prompt { font-size: 11px; margin-right: 6px; }
+      .tb-chip { font-size: 10px; padding: 2px 7px; }
+      /* Status bar: wrap on mobile */
+      .listen-status-bar { padding: 5px 10px; gap: 6px; flex-wrap: wrap; }
+      .listen-status-text { font-size: 12px; width: 100%; }
+      .controls-row { flex-wrap: wrap; gap: 4px; padding: 0; }
+      #share-remote-btn, #admin-toggle { display: none !important; }
+      /* Cards: full width, bigger text, easier to read */
+      .feed { padding: 0 8px 160px; }
+      .feed { max-width: 100% !important; }
+      .card-head { padding: 10px 12px 8px; }
+      .card-body { padding: 12px 12px; }
+      .card-foot { padding: 6px 12px; }
+      .qtext { font-size: calc(var(--fs) + 3px) !important; }
+      .ans-bullet { font-size: calc(var(--fs) + 1px) !important; }
+      .ln-code pre { font-size: calc(var(--fs-code) + 1px) !important; }
+      /* Bottom bar: full width */
+      #bottom-bar { left: 0; }
+      #ask-row { padding: 6px 10px 8px; }
+      #ask-input { font-size: 15px; height: 40px; }
+      #ask-btn { height: 40px; font-size: 14px; }
+      /* Focus exit: bigger on mobile */
+      #focus-exit { font-size: 13px; padding: 8px 16px; top: 8px; right: 8px; }
+    }
+
+    /* ── Focus Mode ── */
+    #focus-toggle {
+      font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text-muted);
+      cursor: pointer; letter-spacing: 0.3px; transition: all 0.15s; white-space: nowrap;
+    }
+    #focus-toggle:hover { border-color: #3B82F6; color: #3B82F6; }
+    body.focus-mode #focus-toggle { background: rgba(59,130,246,0.1); color: #3B82F6; border-color: #3B82F6; }
+
+    body.focus-mode #sidebar,
+    body.focus-mode #topbar,
+    body.focus-mode #terminal-bar,
+    body.focus-mode #listen-status-bar,
+    body.focus-mode #bottom-bar { display: none !important; }
+
+    /* Focus mode: hide DB controls (not needed during live interview) */
+    body.focus-mode .db-toggle-wrap,
+    body.focus-mode .db-save-btn,
+    body.focus-mode .db-del-btn,
+    body.focus-mode .conf-bar,
+    body.focus-mode .lat { display: none !important; }
+
+    body.focus-mode #main-content {
+      margin-left: 0 !important;
+      margin-top: 0 !important;
+    }
+    body.focus-mode .feed-wrap {
+      height: 100vh !important;
+      padding-bottom: 0;
+    }
+    body.focus-mode .feed {
+      padding-bottom: 40px;
+      max-width: 900px;
+    }
+
+    /* Focus mode overlay controls */
+    #focus-overlay-bar {
+      display: none;
+      position: fixed; top: 10px; right: 12px; z-index: 9999;
+      align-items: center; gap: 6px;
+    }
+    body.focus-mode #focus-overlay-bar { display: flex; }
+
+    #focus-exit {
+      font-size: 11px; font-weight: 700; padding: 5px 13px; border-radius: 6px;
+      border: 1px solid rgba(59,130,246,0.35); background: rgba(15,17,23,0.82);
+      color: rgba(255,255,255,0.7); cursor: pointer; transition: all 0.15s;
+      backdrop-filter: blur(4px);
+    }
+    #focus-exit:hover { background: rgba(59,130,246,0.25); color: #fff; border-color: #3B82F6; }
+
+    .focus-fs-btn {
+      font-size: 11px; font-weight: 800; padding: 5px 10px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.15); background: rgba(15,17,23,0.82);
+      color: rgba(255,255,255,0.6); cursor: pointer; transition: all 0.15s;
+      backdrop-filter: blur(4px);
+    }
+    .focus-fs-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+    /* ── Focus Mode floating ask bar ── */
+    #focus-ask-bar {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9990;
+      width: min(560px, 92vw);
+      background: rgba(12,14,20,0.93);
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 14px;
+      padding: 10px 12px;
+      gap: 8px;
+      align-items: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    body.focus-mode #focus-ask-bar { display: flex; }
+
+    #focus-ask-input {
+      flex: 1;
+      width: 100%;
+      height: 38px;
+      padding: 0 13px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 9px;
+      color: #f1f5f9;
+      font-size: 15px;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      outline: none;
+      min-width: 0;
+      transition: border-color 0.15s;
+    }
+    #focus-ask-input::placeholder { color: rgba(255,255,255,0.3); font-size: 13px; }
+    #focus-ask-input:focus { border-color: rgba(52,211,153,0.6); }
+
+    #focus-ask-btn {
+      height: 38px;
+      padding: 0 18px;
+      border-radius: 9px;
+      border: none;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    #focus-ask-btn:hover { opacity: 0.88; }
+    #focus-ask-btn:active { transform: scale(0.96); }
+
+    /* Hint chips below the input */
+    #focus-ask-hints {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 12px;
+      right: 12px;
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .fah-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .fah-chip:hover { background: rgba(52,211,153,0.15); color: #34d399; border-color: rgba(52,211,153,0.4); }
+
+    /* ── Ghost text autocomplete ── */
+    #focus-ask-ghost {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      padding: 0 13px;
+      font-size: 15px;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      white-space: nowrap;
+      overflow: hidden;
+      border-radius: 9px;
+    }
+    #focus-ask-ghost .ghost-typed {
+      color: transparent; /* hide the typed portion — input text shows through */
+      white-space: pre;
+    }
+    #focus-ask-ghost .ghost-suffix {
+      color: rgba(52,211,153,0.5);
+      font-style: italic;
+    }
+    #focus-ask-ghost .ghost-tab {
+      font-size: 10px;
+      font-style: normal;
+      color: rgba(52,211,153,0.7);
+      background: rgba(52,211,153,0.12);
+      border: 1px solid rgba(52,211,153,0.25);
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-left: 6px;
+    }
+
+    /* ── Answer blur during streaming (focus mode only) ── */
+    body.focus-mode .card.streaming .card-body {
+      filter: blur(4px);
+      transition: filter 0.4s ease;
+      user-select: none;
+    }
+    body.focus-mode .card.streaming .card-body:hover {
+      filter: blur(1px);
+    }
+
     /* ── Terminal Selector Bar ── */
     #terminal-bar {
       display: flex;
@@ -666,6 +914,13 @@
         <span id="user-label"></span>
       </div>
       <button id="admin-toggle" onclick="toggleAdminMode()" title="Admin mode — shows sharing &amp; remote controls">ADMIN</button>
+      <!-- Font size controls always-visible -->
+      <div style="display:flex;align-items:center;gap:1px;flex-shrink:0">
+        <button onclick="adjustFs(-1)" style="font-size:10px;font-weight:800;height:24px;padding:0 7px;border-radius:4px 0 0 4px;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);cursor:pointer;line-height:1" title="Smaller text">A−</button>
+        <span id="fs-val" style="font-size:10px;font-weight:700;min-width:22px;text-align:center;color:var(--text-muted);height:24px;display:flex;align-items:center;justify-content:center;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg);padding:0 3px"></span>
+        <button onclick="adjustFs(+1)" style="font-size:11px;font-weight:800;height:24px;padding:0 7px;border-radius:0 4px 4px 0;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);cursor:pointer;line-height:1" title="Larger text">A+</button>
+      </div>
+      <button id="focus-toggle" onclick="toggleFocus()" title="Focus mode — hides all chrome (F)">&#9974; FOCUS</button>
       <button id="share-remote-btn" onclick="shareRemote()" title="Copy remote viewer link to clipboard" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;" onmouseover="this.style.background='var(--green-light)';this.style.color='var(--green)';this.style.borderColor='var(--green)';" onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)';this.style.borderColor='var(--border)';">&#128279; REMOTE</button>
       <button class="btn btn-secondary btn-sm" onclick="openSt()" title="Settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -717,6 +972,37 @@
 
 <!-- Toast -->
 <div id="toast"></div>
+
+<!-- Focus mode overlay controls (A−, A+, Exit) -->
+<div id="focus-overlay-bar">
+  <button class="focus-fs-btn" onclick="adjustFs(-1)" title="Smaller text">A−</button>
+  <button class="focus-fs-btn" onclick="adjustFs(+1)" title="Larger text">A+</button>
+  <button id="focus-exit" onclick="toggleFocus()" title="Exit focus mode (Esc)">&#10005; Exit</button>
+</div>
+
+<!-- Focus mode floating ask bar -->
+<div id="focus-ask-bar" style="position:relative">
+  <div id="focus-ask-hints">
+    <span class="fah-chip" onclick="focusAskChip('decorator')">decorator</span>
+    <span class="fah-chip" onclick="focusAskChip('palindrome')">palindrome</span>
+    <span class="fah-chip" onclick="focusAskChip('fibonacci')">fibonacci</span>
+    <span class="fah-chip" onclick="focusAskChip('generator')">generator</span>
+    <span class="fah-chip" onclick="focusAskChip('lambda')">lambda</span>
+    <span class="fah-chip" onclick="focusAskChip('closure')">closure</span>
+    <span class="fah-chip" onclick="focusAskChip('args kwargs')">args/kwargs</span>
+    <span class="fah-chip" onclick="focusAskChip('singleton')">singleton</span>
+  </div>
+  <div style="position:relative;flex:1;display:flex;align-items:center;">
+    <div id="focus-ask-ghost" aria-hidden="true"></div>
+    <input id="focus-ask-input" type="text"
+      placeholder="Type keyword: decorator, palindrome, fibonacci..."
+      autocomplete="off" spellcheck="false"
+      onkeydown="_focusAskKey(event)"
+      oninput="_updateGhost(this.value)"
+      style="width:100%">
+  </div>
+  <button id="focus-ask-btn" onclick="focusAsk()">Ask ↵</button>
+</div>
 
 <!-- Bottom bar -->
 <div id="bottom-bar">
@@ -926,7 +1212,7 @@ const FS = [
   { fs: '24px', fc: '18px', label: '24' }, { fs: '26px', fc: '19px', label: '26' },
   { fs: '28px', fc: '20px', label: '28' }, { fs: '30px', fc: '22px', label: '30' },
 ];
-let _fsIdx = Math.min(FS.length - 1, Math.max(0, parseInt(localStorage.getItem('drishi_fs') || '1', 10)));
+let _fsIdx = Math.min(FS.length - 1, Math.max(0, parseInt(localStorage.getItem('drishi_fs') || '2', 10)));
 function applyFs(idx) {
   _fsIdx = Math.min(FS.length - 1, Math.max(0, idx));
   const sz = FS[_fsIdx];
@@ -1046,7 +1332,37 @@ function guessLang(code, hint) {
 }
 const LANG_DOT = { python:'dot-py', bash:'dot-sh', shell:'dot-sh', yaml:'dot-yml', dockerfile:'dot-df', sql:'dot-sql', hcl:'dot-hcl', java:'dot-java', javascript:'dot-js', css:'dot-css', plaintext:'dot-def' };
 
+// ── Single-line code expander ─────────────────────────────────────────────────
+// When code arrives as a single compressed line (LLM or DB), expand to multiline.
+function expandCode(code, lang) {
+  if (code.includes('\n')) return code; // Already multiline — leave alone
+  if (!lang || lang === 'bash' || lang === 'sql') return code; // Shell/SQL one-liners are ok
+
+  let c = code.trim();
+
+  if (lang === 'python') {
+    // Split at colon-space before statement keywords (block starters)
+    c = c.replace(/:\s+(?=def |class |if |elif |for |while |try:|except |with |return |import |from |raise |print\(|assert )/g, ':\n    ');
+    // else: body → else:\n    body
+    c = c.replace(/\belse:\s+(?!\n)/g, 'else:\n    ');
+    // elif cond: body → elif cond:\n    body
+    c = c.replace(/\b(elif\s+[^:]+):\s+(?!\n)/g, '$1:\n    ');
+    // Semicolons as statement separators
+    c = c.replace(/;\s*/g, '\n');
+    // return / raise / pass that appear after spaces (not already newlined)
+    c = c.replace(/\s{2,}(return |raise |pass\b|break\b|continue\b)/g, '\n    $1');
+  }
+
+  if (lang === 'java' || lang === 'javascript') {
+    // Split at { and } to get block structure
+    c = c.replace(/\s*\{\s*/g, ' {\n    ').replace(/\s*\}\s*/g, '\n}\n').replace(/;\s*/g, ';\n    ');
+  }
+
+  return c;
+}
+
 function renderCode(code, lang, cardNum) {
+  code = expandCode(code, lang); // Expand single-line code to proper multiline
   const dot = LANG_DOT[lang] || 'dot-def';
   let hi;
   try { hi = (typeof hljs !== 'undefined') ? hljs.highlight(code.trimEnd(), { language: lang === 'hcl' ? 'yaml' : lang, ignoreIllegals: true }).value : esc(code.trimEnd()); }
@@ -1054,7 +1370,30 @@ function renderCode(code, lang, cardNum) {
   const nums = code.trimEnd().split('\n').map((_,i) => String(i+1)).join('\n');
   const copyId = `cb_${cardNum}_${Math.random().toString(36).slice(2,7)}`;
   _copyStore.set(copyId, code.trimEnd());
-  return `<div class="cb"><div class="cb-head"><div class="cb-lang"><span class="cb-dot ${dot}"></span>${lang.toUpperCase()}</div><button class="cb-copy" data-copy-id="${esc(copyId)}">copy</button></div><div class="line-numbers"><pre class="ln-nums">${esc(nums)}</pre><div class="ln-code"><pre><code class="hljs">${hi}</code></pre></div></div></div>`;
+
+  // Assign #N token for quick-access from Programiz / focus mode
+  _codeTokenCount++;
+  const tokenId = `#${_codeTokenCount}`;
+  _codeTokenMap[tokenId] = code.trimEnd();
+  // Also expose globally so extension/typewriter can access
+  window._drishi_code = window._drishi_code || {};
+  window._drishi_code[tokenId] = code.trimEnd();
+
+  const tokenBadge = `<span class="code-token-badge" title="Type ${tokenId} in Programiz to auto-paste this code" onclick="copyCodeToken('${tokenId}')">${tokenId}</span>`;
+
+  return `<div class="cb"><div class="cb-head"><div class="cb-lang"><span class="cb-dot ${dot}"></span>${lang.toUpperCase()}</div>${tokenBadge}<button class="cb-copy" data-copy-id="${esc(copyId)}">copy</button></div><div class="line-numbers"><pre class="ln-nums">${esc(nums)}</pre><div class="ln-code"><pre><code class="hljs">${hi}</code></pre></div></div></div>`;
+}
+
+function copyCodeToken(tokenId) {
+  const code = _codeTokenMap[tokenId] || (window._drishi_code && window._drishi_code[tokenId]) || '';
+  if (!code) return;
+  navigator.clipboard.writeText(code).catch(() => {});
+  // Silent flash on the badge — no popup, no toast
+  const badge = document.querySelector(`.code-token-badge[onclick*="${tokenId}"]`);
+  if (badge) {
+    badge.classList.add('flash');
+    setTimeout(() => badge.classList.remove('flash'), 600);
+  }
 }
 
 function renderInline(raw) {
@@ -1090,7 +1429,7 @@ function buildAnswer(text, cardNum) {
   const rawLines = text.split('\n').filter(l => l.length > 0);
   const rawCodeLang = rawLines.length >= 1 ? detectCodeLang(rawLines) : null;
   if (rawCodeLang) return renderCode(text.trimEnd(), rawCodeLang, cardNum);
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => l.replace(/^[•\-\*–·]\s*/, ''));
+  const lines = rawLines.map(l => l.trim()).filter(l => l.length > 0).map(l => l.replace(/^[•\-\*–·]\s*/, ''));
   if (!lines.length) return '';
   const codeLang = looksLikeCode(lines);
   if (codeLang) return renderCode(lines.join('\n'), codeLang, cardNum);
@@ -1225,7 +1564,7 @@ function makeCard(ans) {
   const dbId = ans.is_complete ? extractDbId(ans.metrics) : null;
   const isStreaming = !ans.is_complete && !ans._thinking;
   let cls = 'card';
-  if (isStreaming) cls += ' active';
+  if (isStreaming) cls += ' active streaming';
   if (isAuto) cls += ' learned';
   if (unclear) cls += ' unclear';
   card.className = cls;
@@ -1353,6 +1692,7 @@ function completeCard(ans) {
   _chunkBuf.delete(key);  // Cancel any buffered chunks — completeCard owns the final render
   if (entry.staleTimer) { clearTimeout(entry.staleTimer); entry.staleTimer = null; }
   el.classList.remove('active');
+  el.classList.remove('streaming');
   el.style.borderColor = '#E3DDD4';
   el.style.borderLeftWidth = '1px';
   el.style.boxShadow = 'none';
@@ -1367,6 +1707,13 @@ function completeCard(ans) {
   if (!el.querySelector('.card-foot')) el.insertAdjacentHTML('beforeend', buildFooter(ans, dbId));
   clearQueueBadge();
   scrollToTop();
+  // Auto-refocus focus ask input after answer completes (focus mode only)
+  if (document.body.classList.contains('focus-mode')) {
+    const fi = document.getElementById('focus-ask-input');
+    if (fi && document.activeElement !== fi) {
+      setTimeout(() => { if (document.body.classList.contains('focus-mode')) fi.focus(); }, 300);
+    }
+  }
 }
 
 // ── Event delegation ──────────────────────────────────────────────────────────
@@ -1753,7 +2100,26 @@ function tbSetRole(role) {
   }).then(() => {
     const labels = { general:'General', python:'Python', java:'Java', javascript:'JavaScript', sql:'SQL', saas:'SaaS' };
     showToast('Role → ' + (labels[role] || role));
+    updateFocusChips(role);
   }).catch(() => {});
+}
+
+// ── Role-aware focus chips ──────────────────────────────────────────────────
+const _ROLE_CHIPS = {
+  general:    ['decorator','palindrome','fibonacci','generator','singleton','closure'],
+  python:     ['decorator','generator','*args/**kwargs','list comprehension','asyncio','dataclass'],
+  java:       ['interface','abstract class','generics','streams','spring boot','thread'],
+  javascript: ['promise','closure','async/await','prototype','event loop','arrow function'],
+  sql:        ['inner join','group by','index','subquery','window function','explain'],
+  saas:       ['multi-tenancy','rate limiting','jwt','webhook','idempotency','soft delete'],
+};
+function updateFocusChips(role) {
+  const hints = document.getElementById('focus-ask-hints');
+  if (!hints) return;
+  const chips = _ROLE_CHIPS[role] || _ROLE_CHIPS.general;
+  hints.innerHTML = chips.map(c =>
+    `<span class="fah-chip" onclick="focusAskChip('${c.replace(/'/g, "\\'")}')">${c}</span>`
+  ).join('');
 }
 
 async function _tbInit() {
@@ -1777,9 +2143,11 @@ async function _tbInit() {
   // Load current role chip
   try {
     const rd = await fetch('/api/interview_role').then(r => r.json());
+    const currentRole = rd.role || 'general';
     _tbClearRole();
-    const roleChip = document.getElementById('tbr-' + (rd.role || 'general'));
+    const roleChip = document.getElementById('tbr-' + currentRole);
     if (roleChip) roleChip.classList.add('active');
+    updateFocusChips(currentRole);
   } catch {}
 
   // Load users into select
@@ -1910,6 +2278,270 @@ function joinDrishiSession() {
   window.open(`/v/${val}`, '_blank');
 }
 
+// ── Focus mode ────────────────────────────────────────────────────────────────
+function toggleFocus(force) {
+  const on = force !== undefined ? force : !document.body.classList.contains('focus-mode');
+  document.body.classList.toggle('focus-mode', on);
+  localStorage.setItem('drishi_focus', on ? '1' : '0');
+  if (on) {
+    // Auto-focus the ask input after a short delay
+    setTimeout(() => {
+      const fi = document.getElementById('focus-ask-input');
+      if (fi) fi.focus();
+    }, 200);
+  }
+}
+document.addEventListener('keydown', e => {
+  // Ctrl+1/2/3 — silent code copy (works anywhere)
+  if ((e.ctrlKey || e.metaKey) && ['1','2','3'].includes(e.key)) {
+    const code = (_codeTokenMap || {})['#' + e.key];
+    if (code) {
+      e.preventDefault();
+      navigator.clipboard.writeText(code).catch(() => {});
+      // Tiny silent flash on the badge
+      const badges = document.querySelectorAll('.code-token-badge');
+      badges.forEach(b => { if (b.textContent === '#' + e.key) { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600); } });
+    }
+    return;
+  }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'f' || e.key === 'F') toggleFocus();
+  if (e.key === 'Escape') toggleFocus(false);
+  // Press / to jump to focus ask input when in focus mode
+  if (e.key === '/' && document.body.classList.contains('focus-mode')) {
+    e.preventDefault();
+    const fi = document.getElementById('focus-ask-input');
+    if (fi) { fi.focus(); fi.select(); }
+  }
+});
+
+// ── Ghost text autocomplete ────────────────────────────────────────────────
+function _getGhostSuggestion(typed) {
+  if (!typed) return null;
+  const lower = typed.toLowerCase().trim();
+  // Find first keyword that starts with typed text
+  for (const k of Object.keys(_KW)) {
+    if (k.startsWith(lower) && k !== lower) return k;
+  }
+  return null;
+}
+function _updateGhost(val) {
+  const ghost = document.getElementById('focus-ask-ghost');
+  if (!ghost) return;
+  if (!val || !val.trim()) { ghost.innerHTML = ''; return; }
+  const suggestion = _getGhostSuggestion(val);
+  if (!suggestion) { ghost.innerHTML = ''; return; }
+  const suffix = suggestion.slice(val.length);
+  ghost.innerHTML = `<span class="ghost-typed">${esc(val)}</span><span class="ghost-suffix">${esc(suffix)}</span><span class="ghost-tab">Tab</span>`;
+}
+function _focusAskKey(e) {
+  if (e.key === 'Tab') {
+    const inp = e.target;
+    const suggestion = _getGhostSuggestion(inp.value);
+    if (suggestion) {
+      e.preventDefault();
+      inp.value = suggestion;
+      _updateGhost('');
+      document.getElementById('focus-ask-ghost').innerHTML = '';
+    }
+  } else if (e.key === 'Escape') {
+    document.getElementById('focus-ask-ghost').innerHTML = '';
+    toggleFocus(false);
+  } else if (e.key === 'Enter') {
+    focusAsk();
+  }
+}
+
+// ── Focus ask — keyword expansion + smart question mapping ────────────────────
+const _KW = {
+  // Decorators
+  'decorator': 'What are decorators in Python? Show a short example',
+  'decorators': 'What are decorators in Python? Show a short example',
+  // Palindrome
+  'palindrome': 'Write a Python function to check if a string is a palindrome',
+  // Fibonacci
+  'fibonacci': 'Write a Python function for fibonacci sequence',
+  'fib': 'Write a Python function for fibonacci sequence',
+  // Anagram
+  'anagram': 'Write a Python function to check if two strings are anagrams',
+  // Generators
+  'generator': 'What are generators in Python? Show a short example with yield',
+  'generators': 'What are generators in Python? Show a short example with yield',
+  'yield': 'What is yield in Python? Show a generator example',
+  // Lambda
+  'lambda': 'What is a lambda function in Python? Show examples',
+  // Closure
+  'closure': 'What is a closure in Python? Show an example',
+  'closures': 'What is a closure in Python? Show an example',
+  // Args/kwargs
+  'args': 'What are *args and **kwargs in Python?',
+  'kwargs': 'What are *args and **kwargs in Python?',
+  'args kwargs': 'What are *args and **kwargs in Python?',
+  '*args': 'What are *args and **kwargs in Python?',
+  '**kwargs': 'What are *args and **kwargs in Python?',
+  // Singleton
+  'singleton': 'What is the singleton design pattern in Python? Show an example',
+  // GIL
+  'gil': 'What is the Python GIL?',
+  'global interpreter lock': 'What is the Python GIL?',
+  // Asyncio
+  'asyncio': 'What is asyncio in Python? Show async/await example',
+  'async': 'How does async/await work in Python?',
+  'await': 'How does async/await work in Python?',
+  // OOP
+  'inheritance': 'Explain inheritance in Python with a short example',
+  'polymorphism': 'Explain polymorphism in Python with a short example',
+  'encapsulation': 'What is encapsulation in Python? Show an example',
+  'abstraction': 'What is abstraction in Python?',
+  'dunder': 'What are dunder methods in Python? Give examples',
+  'magic methods': 'What are dunder/magic methods in Python?',
+  '__init__': 'What is __init__ in Python?',
+  // Data structures
+  'list comprehension': 'What is list comprehension in Python? Show examples',
+  'comprehension': 'What is list comprehension in Python? Show examples',
+  'dictionary comprehension': 'What is dictionary comprehension in Python?',
+  'iterator': 'What are iterators in Python?',
+  'context manager': 'What is a context manager in Python? Show with/as example',
+  'with statement': 'What is a context manager in Python? Show with/as example',
+  'dataclass': 'What are dataclasses in Python? Show an example',
+  'namedtuple': 'What is namedtuple in Python?',
+  // Algorithms
+  'prime': 'Write a Python function to check if a number is prime',
+  'is prime': 'Write a Python function to check if a number is prime',
+  'factorial': 'Write a Python function to calculate factorial',
+  'reverse': 'Write a Python function to reverse a string',
+  'binary search': 'Write a binary search function in Python',
+  'bubble sort': 'Write bubble sort algorithm in Python',
+  'merge sort': 'Write merge sort algorithm in Python',
+  'quick sort': 'Write quick sort algorithm in Python',
+  'sort': 'How do you sort a list in Python? Show different methods',
+  'stack': 'Implement a stack using a list in Python',
+  'queue': 'Implement a queue in Python',
+  'linked list': 'Implement a linked list in Python',
+  'tree': 'Explain binary tree in Python with an example',
+  'recursion': 'What is recursion? Show a Python example with factorial',
+  'memoization': 'What is memoization in Python? Show with functools.lru_cache',
+  'lru cache': 'What is functools.lru_cache in Python?',
+  // Django/FastAPI
+  'middleware': 'What is Django middleware? Show an example',
+  'signals': 'What are Django signals? Show an example',
+  'celery': 'What is Celery in Django? How do you use it?',
+  'serializer': 'What is a serializer in Django REST Framework?',
+  'viewset': 'What is a ViewSet in Django REST Framework?',
+  'orm': 'How does Django ORM work? Show query examples',
+  'migration': 'What is a migration in Django?',
+  'fastapi': 'How do you create a FastAPI endpoint? Show a short example',
+  // General CS
+  'cors': 'What is CORS and how do you handle it in Python/Django?',
+  'rest': 'What is REST API? Explain the HTTP methods',
+  'http methods': 'What are the HTTP methods? GET POST PUT DELETE PATCH',
+  'jwt': 'What is JWT authentication? How does it work?',
+  'n+1': 'What is the N+1 query problem in Django and how to fix it?',
+  'threading': 'What is threading in Python?',
+  'multiprocessing': 'What is multiprocessing in Python vs threading?',
+};
+
+function expandKeyword(text) {
+  const t = text.trim();
+  const lower = t.toLowerCase().replace(/[*]/g, '').trim();
+  // Exact match first
+  if (_KW[lower]) return _KW[lower];
+  // Partial: input matches start of a key
+  for (const [k, q] of Object.entries(_KW)) {
+    if (lower === k || k.startsWith(lower) || lower.startsWith(k)) return q;
+  }
+  // Contains match (looser)
+  for (const [k, q] of Object.entries(_KW)) {
+    if (lower.includes(k) || k.includes(lower)) return q;
+  }
+  // Short input (1-3 words, no '?') — add Python context
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length <= 3 && !t.includes('?')) {
+    return `What is ${t} in Python? Give a short explanation and code example`;
+  }
+  return t;
+}
+
+// Track global code block counter for #N tokens (reset each focusAsk call)
+let _codeTokenMap = {};   // token "#1" -> code string
+let _codeTokenCount = 0;
+
+async function focusAsk() {
+  const inp = document.getElementById('focus-ask-input');
+  const raw = (inp.value || '').trim();
+  if (!raw) return;
+  if (_askPending) return;
+
+  const question = expandKeyword(raw);
+  inp.value = '';
+
+  // Clear feed — show only the new answer (no clutter)
+  clearFeedForAsk();
+
+  // Reset code token counter for this new question
+  _codeTokenMap = {};
+  _codeTokenCount = 0;
+
+  // Update button state
+  const btn = document.getElementById('focus-ask-btn');
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  // Show placeholder with expanded question
+  inp.placeholder = question.length > 60 ? question.slice(0, 60) + '...' : question;
+  setTimeout(() => { inp.placeholder = 'Type keyword: decorator, palindrome, fibonacci...'; }, 6000);
+
+  _askPending = true;
+  const qkey = cardKey(question);
+  makeCard({ question: question, answer: '', is_complete: false, _thinking: true });
+
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, db_only: false, quick_mode: true, model: _model })
+    });
+    if (!r.ok) {
+      let msg = 'Error ' + r.status;
+      try { const d = await r.json(); msg = d.error || msg; } catch {}
+      toast(msg || 'Network error', 3500);
+      removeCardByKey(qkey);
+    } else {
+      const payload = await r.json();
+      const nq = (payload.question || '').trim();
+      if (nq) rekeyCard(question, nq);
+    }
+  } catch (e) {
+    toast('Network error — is server running?', 3500);
+    removeCardByKey(qkey);
+  } finally {
+    _askPending = false;
+    btn.textContent = 'Ask ↵';
+    btn.disabled = false;
+    inp.focus();
+  }
+}
+
+async function clearFeedForAsk() {
+  // Clear UI cards
+  cards.forEach((_, key) => removeCardByKey(key));
+  cards.clear();
+  _copyStore.clear();
+  _codeTokenMap = {};
+  _codeTokenCount = 0;
+  window._drishi_code = {};
+  const es = document.getElementById('empty-state');
+  if (es) es.style.display = 'none';
+  // Clear answer_storage on server so extension's #1 = this new answer
+  try { await fetch('/api/clear_session', { method: 'POST' }); } catch (_) {}
+}
+
+function focusAskChip(keyword) {
+  const inp = document.getElementById('focus-ask-input');
+  if (inp) { inp.value = keyword; inp.focus(); }
+  focusAsk();
+}
+
 // ── Admin mode toggle ─────────────────────────────────────────────────────────
 // Persisted in localStorage. When on: shows Remote Access box + Capture button.
 function toggleAdminMode() {
@@ -1942,6 +2574,10 @@ async function sendCaptureText() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
   if (typeof hljs !== 'undefined') hljs.configure({ ignoreUnhighlightedLang: true });
+  // Restore focus mode from localStorage
+  if (localStorage.getItem('drishi_focus') === '1') {
+    document.body.classList.add('focus-mode');
+  }
   // Restore admin mode from localStorage
   if (localStorage.getItem('drishi_admin') === '1') {
     document.body.classList.add('admin-mode');

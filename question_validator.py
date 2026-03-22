@@ -78,7 +78,9 @@ STT_CORRECTIONS = {
     r"\bmeet\s*migrations?\b": "makemigrations",
     r"\bmeat\s*migrations?\b": "makemigrations",
     r"\bmake\s*migrations?\b": "makemigrations",
-    # *args/**kwargs misheard
+    # *args/**kwargs misheard (Sarvam hears "args and kwargs" as "arcs and coax/cox/cogs")
+    r"\barcs?\s*and\s*co[ax][sx]?\b": "*args and **kwargs",
+    r"\barcs?\s*and\s*cogs?\b": "*args and **kwargs",
     r"\barcs?\s*and\s*kw\s*arcs?\b": "*args and **kwargs",
     r"\barks?\s*and\s*kw\s*arks?\b": "*args and **kwargs",
     r"\barcs?\s*and\s*kwas?\b": "*args and **kwargs",
@@ -94,7 +96,9 @@ STT_CORRECTIONS = {
     r"\bg\s*w\s*t\b": "JWT",
     # Django ORM misheard
     r"\bdjango\s*over\s*m\b": "Django ORM",
-    # CORS misheard
+    # CORS misheard (Sarvam hears "CORS" as "cross" or "cars")
+    r"\bcross\s+errors?\b": "CORS errors",
+    r"\bcross\s+error\b": "CORS error",
     r"\bcars\s*error": "CORS error",
     # Nginx misheard
     r"\bnvidia\s*architecture\s*engine\b": "Nginx",
@@ -102,6 +106,12 @@ STT_CORRECTIONS = {
     r"^right\s+here,?\s*": "Write a ",
     r"^right\s+there,?\s*": "Write a ",
     r"^righty\s+": "Write an ",
+    # Strip "Question," / "Question." / "Question number X," prefix (interviewer narration noise)
+    r"^question\s+number\s+\w+[,.]?\s+": "",
+    r"^question[,.]?\s+": "",
+    # Strip trailing "here is the solution/question/answer" (interviewer says this after posing question)
+    r"[,.]?\s*here\s+is\s+the\s+(?:solution|question|answer|code)\s*[.!]?\s*$": "",
+    r"[,.]?\s*here'?s\s+the\s+(?:solution|question|answer|code)\s*[.!]?\s*$": "",
     # Noise prefixes — background audio words before real question
     r"^async\s+out\s+there\.?\s*": "",
     r"^open\s*gl,?\s*": "",
@@ -184,7 +194,9 @@ STT_CORRECTIONS = {
     r"^thank\s+you,?\s+an\s+(ansible|example|iterator)\b": r"Write an \1",
     # Also handle "Right function to find" (drops "a")
     r"^(alright|right),?\s*,?\s+(function|code|program|decorator|generator)\s+to\b": r"Write a \2 to",
-    # Decorator misheard variants
+    # Decorator misheard variants (Sarvam hears "decorator" as "degradator/degrader/degraders")
+    r"\bdegradators?\b": "decorators",
+    r"\bdegraders?\b": "decorator",
     r"\bDecatur\b": "decorator",
     r"\bdecatur\b": "decorator",
     r"\bDecor\b(?=,|\s+in\b|\s+pattern|\s+function|\s+example)": "decorator",
@@ -2709,6 +2721,16 @@ def is_code_request(text: str) -> bool:
         "playbook for installing", "playbook for creating", "playbook for deploying",
         "playbook for configuring", "playbook for setting up", "playbook for setup",
         "playbook for launching", "playbook for provisioning",
+        # "create a program/script" variants (not just "write a program")
+        "create a program", "create a script", "create a function", "create a class",
+        "create a method", "create a solution", "create a python", "create a java",
+        # "python program to/for" — e.g. "create a Python program to print pyramids"
+        "python program to", "python program for", "python script to", "python script for",
+        "python code to", "python code for",
+        # Pattern / print program requests
+        "print pyramid", "print inverted", "print pattern", "print triangle",
+        "print diamond", "print star", "display pattern", "display pyramid",
+        "generate pattern", "generate pyramid",
         # Java code requests
         "write a java", "write java", "java program", "java code for",
         "java method", "java class for", "implement in java",
@@ -2754,6 +2776,16 @@ def is_code_request(text: str) -> bool:
         r'deque|ring buffer|bloom filter|graph|adjacency)',
         lower
     ):
+        return True
+    # "Implement [algorithm]" — always coding
+    if re.search(
+        r'\bimplement\s+(a |an |the )?(bubble|selection|insertion|merge|quick|heap|radix|counting|tim)?\s*'
+        r'(sort|search|binary search|dfs|bfs|dijkstra|dynamic programming)',
+        lower
+    ):
+        return True
+    # Bare "implement X sort/search" — e.g. "implement bubble sort in Python"
+    if re.search(r'\bimplement\b.{1,40}\b(sort|search|algorithm|stack|queue|tree)\b', lower):
         return True
 
     # Infra/code script pattern across all languages

@@ -445,4 +445,18 @@ def build_resume_context_for_llm(user: Optional[Dict] = None) -> str:
         'For unlisted technologies say "I have studied" or "I am familiar with" — never claim direct experience.'
     )
 
+    # When the interview role is a programming language, prevent domain-bleed
+    # (e.g. a telecom engineer being interviewed for Python should NOT mention SIP/SS7)
+    try:
+        import config as _cfg
+        _iview_role = getattr(_cfg, 'INTERVIEW_ROLE', 'general')
+        if _iview_role in ('python', 'java', 'javascript', 'sql'):
+            lines.append(
+                f'CODING INTERVIEW FOCUS: This is a {_iview_role.capitalize()} coding interview. '
+                'Keep all answers focused on programming concepts and the chosen language. '
+                'Do NOT reference unrelated domain experience (telecom, SIP, SS7, production support, etc.) in coding answers.'
+            )
+    except Exception:
+        pass
+
     return '\n'.join(lines)

@@ -349,6 +349,11 @@ def merge_with_context(new_text: str) -> tuple:
         if first_word in PRONOUN_STARTERS:
             return _build_merged_text(prev_q, new_text), True
 
+    # Guard: first-person sentences ("I am asking about...", "I meant...") are
+    # candidate clarifications, not continuations — never merge them
+    if re.match(r"^i\s+(am|was|have|had|would|can|do|meant|think|know|want|need)\b", new_lower):
+        return new_text, False
+
     # Guard: if new text starts with an explicit action verb, it's a standalone request
     _is_standalone_verb = bool(re.match(r'^(write|create|implement|define|build|generate|explain)\b', new_lower))
 
