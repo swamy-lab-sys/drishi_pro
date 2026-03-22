@@ -316,8 +316,16 @@ class DrishiAgent:
     def _on_message(self, ws, message):
         try:
             payload = json.loads(message)
-            if payload.get("type") == "control_command":
+            msg_type = payload.get("type")
+            if msg_type == "control_command":
                 self._handle(payload)
+            elif msg_type == "session_change":
+                # Server tells agent a new sender registered with a different session
+                new_sid = payload.get("session_id", "").strip()
+                if new_sid and new_sid != self._session_id:
+                    _log(f"session_change → {new_sid}, reconnecting")
+                    self._session_id = new_sid
+                    ws.close()
         except Exception as e:
             _log(f"msg_error: {e}")
 
@@ -332,6 +340,11 @@ class DrishiAgent:
     def run(self):
         headers = ["ngrok-skip-browser-warning: true"]
         while self._running:
+            # Re-read session_id on every reconnect — picks up sender's latest session
+            fresh_sid = _get_session_id()
+            if fresh_sid and fresh_sid != self._session_id:
+                _log(f"session_id updated: {self._session_id} → {fresh_sid}")
+                self._session_id = fresh_sid
             try:
                 self._ws = websocket.WebSocketApp(
                     self._ws_url,

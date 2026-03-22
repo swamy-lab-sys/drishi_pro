@@ -752,7 +752,7 @@
   let captionObserver = null;
   let chatObserver = null;
   let processedCaptions = new Set();
-  const CC_SILENCE_GAP_MS = 600;
+  const CC_SILENCE_GAP_MS = 400; // was 600 — flush 200ms faster
 
   function isGoogleMeet() {
     return window.location.href.includes('meet.google.com');
@@ -1234,7 +1234,7 @@
     if (chatObserver) return;
 
     // Poll for new chat messages (more reliable than mutation observer for chat)
-    chatObserver = setInterval(checkMeetChat, 1000);
+    chatObserver = setInterval(checkMeetChat, 500); // was 1000ms — detect chat 2× faster
     console.log(LOG, '💬 Chat observer started');
   }
 
@@ -1261,14 +1261,15 @@
           source: source,  // 'cc' or 'chat'
           platform: 'google-meet',
           timestamp: Date.now(),
-        })
+        }),
+        signal: AbortSignal.timeout(4000),  // don't hang on slow network
       });
 
       if (!response.ok) {
         console.warn(LOG, 'CC question send failed:', response.status);
       }
     } catch (e) {
-      console.warn(LOG, 'CC question send error:', e.message);
+      if (e.name !== 'TimeoutError') console.warn(LOG, 'CC question send error:', e.message);
     }
   }
 

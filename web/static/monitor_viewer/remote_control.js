@@ -18,6 +18,10 @@
     pendingMouseEvent: null,
     // BUGFIX: track whether mousedown originated inside video to guard mouseup
     mousedownInVideo: false,
+    // Pointer lock mode: virtual cursor accumulates relative mouse deltas
+    pointerLocked: false,
+    virtualX: 0.5,
+    virtualY: 0.5,
     keyMap: {
       "Control": "ctrl",
       "Alt": "alt",
@@ -136,6 +140,17 @@
     manager.videoElement.addEventListener("wheel", handleWheel, { passive: false });
     window.addEventListener("keydown", handleKeyDown, keyListenerOptions);
     window.addEventListener("keyup", handleKeyUp, keyListenerOptions);
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
+    document.addEventListener("pointerlockerror", handlePointerLockError);
+
+    // Request pointer lock so the browser stops intercepting Ctrl+W, F5, Ctrl+T, etc.
+    // This is what makes keyboard shortcuts work like TeamViewer/AnyDesk.
+    manager.virtualX = 0.5;
+    manager.virtualY = 0.5;
+    manager.videoElement.requestPointerLock({ unadjustedMovement: true }).catch(() => {
+      // unadjustedMovement not supported on all platforms — fall back to normal pointer lock
+      manager.videoElement.requestPointerLock().catch(() => {});
+    });
   }
 
   function stopTracking() {
@@ -149,6 +164,13 @@
     manager.videoElement.removeEventListener("wheel", handleWheel);
     window.removeEventListener("keydown", handleKeyDown, keyListenerOptions);
     window.removeEventListener("keyup", handleKeyUp, keyListenerOptions);
+    document.removeEventListener("pointerlockchange", handlePointerLockChange);
+    document.removeEventListener("pointerlockerror", handlePointerLockError);
+
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    manager.pointerLocked = false;
 
     if (manager.mouseRAF) {
       cancelAnimationFrame(manager.mouseRAF);
@@ -156,6 +178,39 @@
       manager.pendingMouseEvent = null;
     }
     manager.mousedownInVideo = false;
+  }
+
+  function handlePointerLockChange() {
+    manager.pointerLocked = (document.pointerLockElement === manager.videoElement);
+    if (manager.pointerLocked) {
+      // Show subtle overlay on video so user knows they're in locked mode
+      if (manager.videoElement) manager.videoElement.style.cursor = "none";
+      updateStatusText("Remote control active — press Alt+Z to unlock mouse");
+    } else {
+      if (manager.videoElement) manager.videoElement.style.cursor = "";
+      if (manager.active) {
+        updateStatusText("Remote control active (click video to re-lock mouse)");
+        // Re-request pointer lock on next click
+        if (manager.videoElement) {
+          manager.videoElement.addEventListener("click", _reLockOnClick, { once: true });
+        }
+      }
+    }
+  }
+
+  function handlePointerLockError() {
+    // Pointer lock failed (e.g. document not focused, or feature-policy blocked)
+    // Fall back gracefully — keyboard capture via capture:true still works for most keys
+    manager.pointerLocked = false;
+    if (manager.active) updateStatusText("Remote control active (use shortcut buttons for Ctrl+W, Alt+Tab)");
+  }
+
+  function _reLockOnClick() {
+    if (manager.active && manager.videoElement) {
+      manager.videoElement.requestPointerLock({ unadjustedMovement: true }).catch(() => {
+        manager.videoElement.requestPointerLock().catch(() => {});
+      });
+    }
   }
 
   function getVideoContentRect(video) {
@@ -191,6 +246,24 @@
       return;
     }
 
+    if (manager.pointerLocked) {
+      // Pointer lock mode: accumulate relative deltas into virtual cursor position
+      const rect = manager.videoElement.getBoundingClientRect();
+      const w = rect.width  || window.innerWidth;
+      const h = rect.height || window.innerHeight;
+      manager.virtualX = Math.min(1, Math.max(0, manager.virtualX + event.movementX / w));
+      manager.virtualY = Math.min(1, Math.max(0, manager.virtualY + event.movementY / h));
+
+      if (manager.mouseRAF) return;
+      const vx = manager.virtualX, vy = manager.virtualY;
+      manager.mouseRAF = requestAnimationFrame(() => {
+        manager.mouseRAF = null;
+        sendControl({ type: "control", action: "mouse_move", x_ratio: manager.virtualX, y_ratio: manager.virtualY });
+      });
+      return;
+    }
+
+    // Absolute mode (pointer lock not active)
     manager.pendingMouseEvent = event;
     if (manager.mouseRAF) {
       return;
@@ -239,8 +312,11 @@
   function handleKeyDown(event) {
     if (!manager.active) return;
 
-    // Toggle dashboard bypass
-    if (event.altKey && event.code === "KeyZ") return;
+    // Alt+Z = unlock mouse (exit pointer lock) without dropping remote control
+    if (event.altKey && event.code === "KeyZ") {
+      if (document.pointerLockElement) document.exitPointerLock();
+      return;
+    }
 
     event.preventDefault();
     event.stopPropagation();
@@ -253,6 +329,7 @@
 
   function handleKeyUp(event) {
     if (!manager.active) return;
+    if (event.altKey && event.code === "KeyZ") return;
 
     event.preventDefault();
     event.stopPropagation();

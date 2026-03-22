@@ -19,9 +19,9 @@ class WebRTCSender {
         this.stopStream();
         this.onStatusChange("stopped");
       });
-      // High-quality code sharing priority
+      // "detail" = mixed desktop content (text + graphics); best for remote desktop sharing
       if (videoTrack.contentHint !== undefined) {
-        videoTrack.contentHint = "text";
+        videoTrack.contentHint = "detail";
       }
     }
 

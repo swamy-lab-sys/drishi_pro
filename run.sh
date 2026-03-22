@@ -79,9 +79,78 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
 fi
 echo -e "  ${G}✓${D} Anthropic key loaded"
 
+# ── PostgreSQL (required) ─────────────────────────────────────────
+if [ -z "$DATABASE_URL" ]; then
+    echo -e "\n${R}ERROR: DATABASE_URL not set.${D}"
+    echo "  Add to .env:  DATABASE_URL=postgresql://drishi:drishi@localhost:5434/drishi"
+    exit 1
+fi
+
+# Auto-start drishi-pg Docker container if not running
+if command -v docker &>/dev/null; then
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^drishi-pg$'; then
+        echo -e "  ${Y}⚡${D} Starting PostgreSQL container (drishi-pg)..."
+        docker start drishi-pg > /dev/null 2>&1 || \
+        docker run -d --name drishi-pg \
+            -e POSTGRES_DB=drishi \
+            -e POSTGRES_USER=drishi \
+            -e POSTGRES_PASSWORD=drishi \
+            -p 5434:5432 \
+            postgres:14 > /dev/null 2>&1 || true
+        # Wait for PG to be ready (up to 10s)
+        for _i in 1 2 3 4 5; do
+            sleep 2
+            python3 -c "
+import pg8000.dbapi, os
+from urllib.parse import urlparse
+u = urlparse(os.environ['DATABASE_URL'])
+try:
+    pg8000.dbapi.connect(host=u.hostname, port=u.port or 5432,
+        user=u.username, password=u.password,
+        database=u.path.lstrip('/'), ssl_context=False).close()
+    print('ok')
+except: pass
+" 2>/dev/null | grep -q ok && break
+        done
+    fi
+fi
+
+# Verify connection
+PG_OK=$(python3 -c "
+import pg8000.dbapi, os
+from urllib.parse import urlparse
+u = urlparse(os.environ.get('DATABASE_URL',''))
+try:
+    pg8000.dbapi.connect(host=u.hostname, port=u.port or 5432,
+        user=u.username, password=u.password,
+        database=u.path.lstrip('/'), ssl_context=False).close()
+    print('ok')
+except Exception as e:
+    print(f'err:{e}')
+" 2>/dev/null)
+
+if [[ "$PG_OK" == ok ]]; then
+    echo -e "  ${G}✓${D} PostgreSQL connected (${DATABASE_URL%%@*}@...)"
+else
+    echo -e "\n${R}ERROR: Cannot connect to PostgreSQL.${D}"
+    echo "  DATABASE_URL=$DATABASE_URL"
+    echo "  Error: ${PG_OK#err:}"
+    echo ""
+    echo "  Start PostgreSQL:"
+    echo "  docker run -d --name drishi-pg -e POSTGRES_DB=drishi \\"
+    echo "    -e POSTGRES_USER=drishi -e POSTGRES_PASSWORD=drishi \\"
+    echo "    -p 5434:5432 postgres:14"
+    exit 1
+fi
+
 # ── Detect local IP ───────────────────────────────────────────────
 LOCAL_IP=$(python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect(('8.8.8.8',80)); print(s.getsockname()[0])" 2>/dev/null || echo "127.0.0.1")
 WEB_PORT="${WEB_PORT:-8000}"
+
+# ── Free port 8000 if Docker containers are holding it ────────────
+if fuser "${WEB_PORT}/tcp" &>/dev/null 2>&1; then
+    docker stop drishi-flask 2>/dev/null && sleep 1 || true
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 4 — Read launch config from .env (set via Admin UI → Settings → Launch)
@@ -177,9 +246,6 @@ fi
 #  STEP 9 — Data / DB
 # ═══════════════════════════════════════════════════════════════════
 mkdir -p ~/.drishi
-if [ ! -f ~/.drishi/qa_pairs.db ] || [ qa_pairs.db -nt ~/.drishi/qa_pairs.db ]; then
-    cp qa_pairs.db ~/.drishi/qa_pairs.db 2>/dev/null || true
-fi
 rm -f ~/.drishi/current_answer.json ~/.drishi/history.json 2>/dev/null || true
 echo -e "  ${G}✓${D} Fresh session ready"
 
@@ -202,6 +268,8 @@ if [ "$USE_NGROK" = "true" ]; then
     else
         echo ""
         echo -e "  Starting ngrok tunnel..."
+        # Kill any stale ngrok process (free tier: only 1 tunnel allowed)
+        pkill -x ngrok 2>/dev/null || true; sleep 0.5
         if [ -n "$NGROK_DOMAIN" ]; then
             ngrok http --url="$NGROK_DOMAIN" --request-header-add "ngrok-skip-browser-warning: true" "$WEB_PORT" --log=stdout > /tmp/ngrok.log 2>&1 &
         else
@@ -209,15 +277,15 @@ if [ "$USE_NGROK" = "true" ]; then
         fi
         NGROK_PID=$!
 
-        # Wait for URL (up to 10s)
+        # Wait for URL (up to 10s) — use Python urllib (avoids libssl crash from curl)
         for _i in 1 2 3 4 5; do
             sleep 2
-            NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null \
-                | python3 -c "
-import sys,json
+            NGROK_URL=$(python3 -c "
+import urllib.request, json, sys
 try:
-    d=json.load(sys.stdin)
-    t=[x for x in d.get('tunnels',[]) if x.get('proto')=='https']
+    with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=3) as r:
+        d = json.load(r)
+    t = [x for x in d.get('tunnels',[]) if x.get('proto')=='https']
     print(t[0]['public_url'] if t else '')
 except: print('')
 " 2>/dev/null || echo "")
@@ -319,4 +387,28 @@ echo -e "${G}║${D}  Press ${R}Ctrl+C${D} to stop                          ${G}
 echo -e "${G}╚═══════════════════════════════════════════════╝${D}"
 echo ""
 
-exec python3 -W ignore main.py
+# Fix libssl3 3.0.2-0ubuntu1.21 relocation bug (0x808 should be 0x008)
+if [ ! -f /tmp/libssl.so.3 ]; then
+  python3 -c "
+import struct, shutil
+src='/lib/x86_64-linux-gnu/libssl.so.3'
+dst='/tmp/libssl.so.3'
+with open(src,'rb') as f: data=bytearray(f.read())
+e_shoff=struct.unpack_from('<Q',data,40)[0]; e_shentsize=struct.unpack_from('<H',data,58)[0]
+e_shnum=struct.unpack_from('<H',data,60)[0]; e_shstrndx=struct.unpack_from('<H',data,62)[0]
+shstr_off=struct.unpack_from('<Q',data,e_shoff+e_shstrndx*e_shentsize+24)[0]
+rela_offset=rela_size=None
+for i in range(e_shnum):
+  sh=e_shoff+i*e_shentsize; sh_name=struct.unpack_from('<I',data,sh)[0]
+  name=data[shstr_off+sh_name:].split(b'\x00')[0].decode()
+  if name=='.rela.dyn':
+    rela_offset=struct.unpack_from('<Q',data,sh+24)[0]; rela_size=struct.unpack_from('<Q',data,sh+32)[0]; break
+if rela_offset:
+  for i in range(rela_size//24):
+    off=rela_offset+i*24; ri=struct.unpack_from('<Q',data,off+8)[0]
+    if ri&0xffffffff==0x808: struct.pack_into('<Q',data,off+8,(ri&0xffffffff00000000)|8)
+with open(dst,'wb') as f: f.write(data)
+" 2>/dev/null && echo "  ✓ libssl relocation fix applied" || true
+fi
+
+exec env LD_LIBRARY_PATH=/tmp python3 -W ignore main.py

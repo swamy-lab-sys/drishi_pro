@@ -1,0 +1,68 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 38px;
+  padding: 0 14px;
+  background: #0a0a0a;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+
+.brand {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.05em;
+  margin-right: 20px;
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.links::-webkit-scrollbar { display: none; }
+
+.link {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: rgba(255,255,255,0.45);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: color 0.1s, background 0.1s;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.05);
+}
+
+.link.active {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+}
+
+.flaskLink {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: rgba(255,255,255,0.2);
+  padding: 3px 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.flaskLink:hover {
+  color: rgba(255,255,255,0.55);
+  border-color: rgba(255,255,255,0.15);
+}

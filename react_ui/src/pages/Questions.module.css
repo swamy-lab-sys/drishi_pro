@@ -1,0 +1,247 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.body {
+  flex: 1;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+/* ── Search bar ── */
+.searchRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.searchInput {
+  flex: 1;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.searchInput::placeholder { color: var(--text-dim); }
+.searchInput:focus { border-color: var(--green); }
+
+/* ── Filter chips ── */
+.filterRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.filterChip:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+}
+
+.filterChip.active {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.chipCount {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.2);
+}
+
+.filterChip:not(.active) .chipCount {
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+
+/* ── Meta row ── */
+.metaRow {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ── Table ── */
+.tableWrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table thead tr {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid var(--border-soft);
+  transition: background 0.08s;
+}
+
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--bg-card);
+}
+
+.table td {
+  padding: 10px 14px;
+  vertical-align: top;
+}
+
+.numCell {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 40px;
+}
+
+.questionCell {
+  max-width: 400px;
+}
+
+.questionText {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.tagPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.tagPill {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--blue-dim);
+  color: var(--blue);
+  border: 1px solid rgba(59,130,246,0.2);
+  font-family: var(--font-mono);
+}
+
+.typeBadge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.typeTheory  { background: var(--blue-dim);  color: var(--blue); }
+.typeCoding  { background: var(--purple-dim); color: var(--purple); }
+.typeSQL     { background: var(--amber-dim);  color: var(--amber); }
+.typeGeneral { background: var(--bg-card);    color: var(--text-muted); border: 1px solid var(--border); }
+
+.hitCell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.hitBadge {
+  display: inline-block;
+  background: var(--green-light);
+  color: var(--green-dark);
+  border: 1px solid rgba(0,200,150,0.2);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.actionsCell {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.iconBtn {
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg);
+  cursor: pointer;
+  transition: all 0.12s;
+  line-height: 1;
+}
+
+.iconBtn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.deleteIcon:hover {
+  color: var(--red);
+  border-color: rgba(239,68,68,0.4);
+  background: var(--red-dim);
+}
+
+.emptyRow td {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-dim);
+  font-size: 13px;
+}

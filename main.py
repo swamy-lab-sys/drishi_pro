@@ -42,6 +42,7 @@ from llm_client import (
     humanize_response,
 )
 from app.services.settings_service import get_server_ip
+from app.services.user_service import _load_active_user_from_file
 from resume_loader import load_resume, load_job_description
 from user_manager import is_introduction_question, build_resume_context_for_llm
 from stt import transcribe, load_model as load_stt_model
@@ -55,6 +56,7 @@ import queue
 
 # Debug logging
 import debug_logger as dlog
+import event_bus
 
 # =============================================================================
 # AUTO-LEARN BACKGROUND WORKER
@@ -248,7 +250,6 @@ def handle_question(question_text: str) -> bool:
         # selected from the UI. Read it here so main.py picks up runtime user changes.
         if not _active_user or not ((_active_user.get('self_introduction') or '').strip()):
             try:
-                from app.services.user_service import _load_active_user_from_file
                 _file_user = _load_active_user_from_file()
                 if _file_user:
                     state.set_selected_user(_file_user)
@@ -343,6 +344,15 @@ def handle_question(question_text: str) -> bool:
 
         # Step 3b: Check Q&A database BEFORE calling LLM
         _active_user = state.get_selected_user()
+        # Cross-process sync: if web UI changed the user, pick it up from shared file
+        if not _active_user:
+            try:
+                _fu = _load_active_user_from_file()
+                if _fu:
+                    state.set_selected_user(_fu)
+                    _active_user = _fu
+            except Exception:
+                pass
         _user_role = (_active_user or {}).get("role", "") if _active_user else ""
         _db_t0 = time.time()
         db_result = qa_database.find_answer(question_text, want_code=wants_code, user_role=_user_role)
@@ -588,18 +598,21 @@ def processing_worker():
             _pipeline_start = time.time()
             stt_start = time.time()
             state.mark_transcription_start()
+            event_bus.push_stt_event(config.STT_BACKEND, 0, 'start')
             transcription, score = transcribe(audio)
             transcription = transcription.strip()
             state.mark_transcription_end()
             stt_time = time.time() - stt_start
 
             if not transcription or len(transcription) < 5:
+                event_bus.push_stt_event(config.STT_BACKEND, stt_time * 1000, 'silent')
                 if config.VERBOSE:
                     print(f"[PERF] Transcribe: {stt_time*1000:.0f}ms | skipped (empty/short)")
                 audio_queue.task_done()
                 continue
 
             # Always log STT result + timing
+            event_bus.push_stt_event(config.STT_BACKEND, stt_time * 1000, 'done')
             print(f"\n[PERF] STT:      {stt_time*1000:.0f}ms")
             print(f"[TEXT] '{transcription}'")
 
@@ -734,7 +747,7 @@ def processing_worker():
             # Intro shortcut: bypass validation for "introduce yourself" commands
             # Validator rejects these with no_question_pattern but they're valid for us
             if is_introduction_question(full_text):
-                state.wait_until_idle(timeout=30.0)
+                state.wait_until_idle(timeout=10.0)
                 handle_question(full_text)
                 fragment_context.save_context(full_text, "voice")
                 audio_queue.task_done()
@@ -785,7 +798,7 @@ def processing_worker():
 
             # 4. Action Gate (Concurrency Protection)
             gate_start = time.time()
-            state.wait_until_idle(timeout=30.0)
+            state.wait_until_idle(timeout=10.0)
             gate_wait = time.time() - gate_start
 
             if gate_wait > 0.05:
@@ -909,9 +922,9 @@ def start(boot_start_time: float = None):
     import stt
     import numpy as np
     if config.STT_BACKEND == "deepgram":
-        import threading as _thr
-        _thr.Thread(target=stt._get_deepgram_session, daemon=True).start()
-        stt.transcribe(np.zeros(16000, dtype=np.float32))
+        print("  Warming up Deepgram session (TLS handshake)...")
+        _dg_ok = stt._get_deepgram_session()
+        print("  ✓ Deepgram session ready")
     elif config.STT_BACKEND == "sarvam":
         # Real connectivity test — send 1s of silence to verify Sarvam API responds
         print("  Testing Sarvam API connection...")
@@ -942,6 +955,13 @@ def start(boot_start_time: float = None):
         qa_database.find_answer("what is python", want_code=False)
     except Exception:
         pass
+
+    # Update state with active model names (shown in /api/session-info)
+    _stt_info = stt.get_model_info()
+    state.set_active_models(
+        stt=_stt_info.get('backend', config.STT_BACKEND) + '/' + _stt_info.get('name', config.STT_MODEL),
+        llm=config.LLM_MODEL,
+    )
 
     print("✓ System Ready")
 

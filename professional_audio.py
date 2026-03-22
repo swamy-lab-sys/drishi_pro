@@ -19,8 +19,12 @@ CHANNELS = 1
 CHUNK_SIZE = 480  # 30ms
 BYTES_PER_CHUNK = CHUNK_SIZE * 4  # float32 = 4 bytes per sample
 
-# Detect best available backend — sounddevice first (uses PulseAudio on Linux,
-# which respects PULSE_SOURCE to select the capture device)
+# Detect best available backend.
+# Always try sounddevice first — on Linux it routes through PulseAudio and
+# correctly honours PULSE_SOURCE to select the capture device (mic or monitor).
+# Only fall back to parec if sounddevice is unavailable.
+import shutil as _shutil
+
 _BACKEND = None
 sd = None
 pyaudio_module = None
@@ -44,10 +48,8 @@ if not _BACKEND:
     except Exception:
         pass
 
-if not _BACKEND:
-    import shutil as _shutil
-    if _shutil.which("parec"):
-        _BACKEND = "parec"
+if not _BACKEND and _shutil.which("parec"):
+    _BACKEND = "parec"
 
 if _BACKEND:
     print(f"  [Audio] Backend: {_BACKEND}")

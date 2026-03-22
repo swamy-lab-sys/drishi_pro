@@ -1,9 +1,10 @@
 // Drishi Enterprise — AudioWorklet Processor
 // Replaces the deprecated ScriptProcessorNode.
-// Accumulates 128-sample render quanta into CHUNK_SIZE (4096) blocks,
+// Accumulates 128-sample render quanta into CHUNK_SIZE (1024) blocks,
 // then transfers them to the main thread via a zero-copy postMessage.
+// 1024 samples @ 16kHz = 64ms per chunk (was 256ms at 4096).
 
-const CHUNK_SIZE = 4096;
+const CHUNK_SIZE = 1024;
 
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {

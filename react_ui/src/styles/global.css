@@ -1,0 +1,123 @@
+/* ── Drishi React UI — Global Styles (Light Theme) ──────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Core palette — light theme */
+  --bg:           #F0F4F8;
+  --bg-surface:   #FFFFFF;
+  --bg-sidebar:   #FFFFFF;
+  --bg-card:      #F8FAFB;
+  --bg-chip:      rgba(0,0,0,0.05);
+
+  /* Borders & shadows */
+  --border:       #E8ECF0;
+  --border-soft:  #F1F5F9;
+  --shadow:       0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:    0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
+
+  /* Text */
+  --text:         #1A1A2E;
+  --text-muted:   #6B7280;
+  --text-dim:     #9CA3AF;
+
+  /* Brand green */
+  --green:        #00C896;
+  --green-dark:   #00A87E;
+  --green-light:  #E8FAF5;
+  --green-dim:    rgba(0,200,150,0.12);
+
+  /* Other accents */
+  --blue:         #3B82F6;
+  --blue-dim:     rgba(59,130,246,0.12);
+  --amber:        #F59E0B;
+  --amber-dim:    rgba(245,158,11,0.12);
+  --purple:       #8B5CF6;
+  --purple-dim:   rgba(139,92,246,0.12);
+  --red:          #EF4444;
+  --red-dim:      rgba(239,68,68,0.12);
+  --orange:       #F97316;
+  --orange-dim:   rgba(249,115,22,0.12);
+
+  /* Typography */
+  --font-sans:  'Inter', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Spacing */
+  --radius:     8px;
+  --radius-sm:  6px;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--green-dark);
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.2);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  50%  { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(1);   opacity: 0.7; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

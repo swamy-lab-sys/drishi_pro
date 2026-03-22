@@ -39,7 +39,15 @@ const ghostEl = {
 };
 
 /* ── Config ── */
-const RTC_CONFIGURATION = window.RTC_CONFIGURATION || { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] };
+const RTC_CONFIGURATION = window.RTC_CONFIGURATION || {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302"] },
+    { urls: ["stun:stun1.l.google.com:19302"] },
+    { urls: ["stun:stun2.l.google.com:19302"] },
+    { urls: ["stun:stun3.l.google.com:19302"] },
+    { urls: ["stun:global.stun.twilio.com:3478"] },
+  ]
+};
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 15000];
 let _userDisconnected = false;
 /* ── Logic to fetch session_id and key from path or query ── */
@@ -231,8 +239,13 @@ function updateControlUI(status, message) {
   switch (status) {
     case "granted":
       if (overlay) overlay.style.display = "flex";
-      if (btn) { btn.style.display = "flex"; btn.style.color = "var(--success)"; btn.title = "Stop Remote Control"; }
+      if (btn) { btn.style.display = "flex"; btn.style.color = "var(--success)"; btn.title = "Stop Remote Control (Alt+Z to unlock mouse)"; }
       if (skPanel) skPanel.style.display = "flex";
+      // Fullscreen lets Chrome pass more keyboard events to our handler
+      if (!document.fullscreenElement && el.appShell) {
+        el.appShell.requestFullscreen().catch(() => {});
+      }
+      showControlPrompt("Remote control active — mouse locked. Alt+Z to unlock.");
       break;
     case "available":
       if (overlay) overlay.style.display = "none";
@@ -248,6 +261,7 @@ function updateControlUI(status, message) {
       if (overlay) overlay.style.display = "none";
       if (skPanel) skPanel.style.display = "none";
       if (btn) { btn.style.display = "none"; }
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       break;
     default:
       if (overlay) overlay.style.display = "none";

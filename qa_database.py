@@ -22,23 +22,21 @@ Question types: 'theory' | 'coding' | 'both'
 
 import queue as _queue
 import re
-import sqlite3
+
+# Pre-built translation table: strip punctuation in a single C-level pass
+# (faster than re.sub for punctuation removal — no regex engine overhead)
+_PUNCT_STRIP = str.maketrans('?.!,;:\'"()[]{}\\-/|', '                  ')
+_SPACE_RE    = re.compile(r'\s+')  # compiled once at import time
 import threading
 import time
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 
-# ── Config ────────────────────────────────────────────────────────────────────
-try:
-    import config
-    _DB_DIR = Path(config.ANSWERS_DIR).expanduser()
-except Exception:
-    _DB_DIR = Path.home() / ".drishi"
+import db_backend as _pgb
 
-DB_PATH = _DB_DIR / "qa_pairs.db"
+# ── Config ────────────────────────────────────────────────────────────────────
 MATCH_THRESHOLD = 0.65
 _lock = threading.Lock()
-_tls = threading.local()  # Thread-local storage for connection caching
 
 # Batch hit-count update queue — avoids spawning a thread per DB hit
 _hit_queue: _queue.Queue = _queue.Queue()
@@ -256,33 +254,13 @@ _MIGRATE_USER_DOMAIN = "ALTER TABLE users ADD COLUMN domain TEXT DEFAULT '';"
 _MIGRATE_USER_UPDATED_AT = "ALTER TABLE users ADD COLUMN updated_at TEXT DEFAULT '';"
 
 
-def _get_conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    # WAL mode: readers never block writers and vice versa (critical for
-    # concurrent audio pipeline + web server access).
-    conn.execute("PRAGMA journal_mode=WAL")
-    # Slightly relaxed durability — OS crash is acceptable, process crash is not.
-    conn.execute("PRAGMA synchronous=NORMAL")
-    return conn
+def _get_conn():
+    return _pgb.get_conn()
 
 
-def _get_read_conn() -> sqlite3.Connection:
-    """Thread-local read connection — configured once per thread, never closed.
-    Used by hot-path read functions (find_answer, _get_score_cache) to avoid
-    per-call connection setup overhead (~5-10ms saved per query).
-    """
-    conn = getattr(_tls, 'read_conn', None)
-    if conn is not None:
-        return conn
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    _tls.read_conn = conn
-    return conn
+def _get_read_conn():
+    """Thread-local persistent read connection — never call .close() on this."""
+    return _pgb.get_read_conn()
 
 
 def init_db():
@@ -319,8 +297,8 @@ def init_db():
             try:
                 conn.execute(sql)
                 conn.commit()
-            except sqlite3.OperationalError:
-                pass  # Column already exists
+            except Exception:
+                pass  # Column already exists (sqlite3.OperationalError or psycopg2 DuplicateColumn)
 
         # Create ext_users and usage_log tables if they don't exist (safe migration)
         conn.executescript("""
@@ -352,7 +330,7 @@ def init_db():
         ]:
             try:
                 conn.execute(idx_sql)
-            except sqlite3.OperationalError:
+            except Exception:
                 pass
 
         conn.commit()
@@ -1459,9 +1437,9 @@ def normalize_question(q: str) -> str:
     if not q:
         return ""
     q = q.lower().strip()
-    q = re.sub(r"[?.!,;:'\"()\[\]{}\-/\\|]+", " ", q)
+    q = q.translate(_PUNCT_STRIP)    # single C-level pass, no regex engine
     q = q.replace("_", " ")          # select_related → select related
-    q = re.sub(r"\s+", " ", q).strip()
+    q = _SPACE_RE.sub(" ", q).strip() # pre-compiled, avoids re.compile per call
     return q
 
 

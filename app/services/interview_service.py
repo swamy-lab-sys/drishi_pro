@@ -98,6 +98,15 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
 
     if is_introduction_question(question):
         active_user = state.get_selected_user()
+        if not active_user or not (active_user.get("self_introduction") or "").strip():
+            try:
+                from app.services.user_service import _load_active_user_from_file
+                _fu = _load_active_user_from_file()
+                if _fu:
+                    state.set_selected_user(_fu)
+                    active_user = _fu
+            except Exception:
+                pass
         if active_user and (active_user.get("self_introduction") or "").strip():
             intro = active_user["self_introduction"].strip()
             answer_storage.set_complete_answer(question, intro, {"source": "intro"})
@@ -144,7 +153,7 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
 
     # Priority 2: Answer cache (LLM-generated answers from previous calls, <1ms)
     import answer_cache as _ac
-    cached = _ac.get_cached_answer(question)
+    cached = _ac.get_cached_answer(question, role=user_role)
     if cached:
         answer_storage.set_complete_answer(question, cached, {"source": "cache"})
         state.record_answer_latency((time.time() - _t0) * 1000)
@@ -192,7 +201,7 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
             if answer:
                 src_tag = "api-code" if wants_code else "api"
                 answer_storage.set_complete_answer(question, answer, {"source": src_tag})
-                answer_cache.cache_answer(question, answer)
+                answer_cache.cache_answer(question, answer, role=user_role)
                 state.record_answer_latency((time.time() - _t0) * 1000)
                 try:
                     from main import _submit_for_learning
@@ -511,6 +520,15 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
 
     if is_introduction_question(question_text):
         active_user = state.get_selected_user()
+        if not active_user or not (active_user.get("self_introduction") or "").strip():
+            try:
+                from app.services.user_service import _load_active_user_from_file
+                _fu = _load_active_user_from_file()
+                if _fu:
+                    state.set_selected_user(_fu)
+                    active_user = _fu
+            except Exception:
+                pass
         if active_user and (active_user.get("self_introduction") or "").strip():
             intro = active_user["self_introduction"].strip()
             answer_storage.set_complete_answer(question_text, intro, {"source": "intro"})

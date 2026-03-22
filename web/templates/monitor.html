@@ -1,567 +1,422 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Drishi Monitor</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% extends "base.html" %}
+{% block title %}Monitor{% endblock %}
+{% block page_name %}Monitor{% endblock %}
+
+{% block head_extra %}
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
   <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
+    /* ── Monitor-specific tokens ── */
     :root {
-      --bg:        #F5F1EB;
-      --surface:   #FFFFFF;
-      --border:    #E3DDD4;
-      --text:      #161B2E;
-      --muted:     #3A4254;
-      --dim:       #717C8C;
-      --accent:    #227A4A;
-      --green:     #227A4A;
-      --grad:      linear-gradient(135deg, #227A4A, #2E9E88);
-      --amber:     #D97706;
-      --red:       #E53535;
-      --code-bg:   #F8F6F2;
+      --fs:       15px;
+      --fs-code:  13px;
+      --ic-bg:    rgba(59,130,246,0.08);
+      --ic-color: #2563EB;
+      --code-bg:  #F8FAFC;
+      --code-border: #E3DDD4;
+      --db-c:     #1A5E38;
+      --db-bg:    rgba(34,122,74,0.08);
+      --llm-c:    #3B82F6;
+      --llm-bg:   rgba(59,130,246,0.08);
+      --cache-c:  #F59E0B;
+      --cache-bg: rgba(245,158,11,0.08);
     }
 
-    html, body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-      height: 100vh;
-      overflow: hidden;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    /* ── Layout: full viewport stack ── */
-    .app {
+    /* ── Terminal state bar ── */
+    #terminal-bar {
       display: flex;
-      flex-direction: column;
-      height: 100vh;
+      align-items: center;
+      gap: 0;
+      background: #0F1117;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 5px 16px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      flex-shrink: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+    #terminal-bar::-webkit-scrollbar { display: none; }
 
-    /* ── Status bar (compact 36px) ── */
-    .status-bar {
-      height: 36px;
-      background: var(--surface);
+    .tb-prompt { color: #34D399; font-weight: 700; margin-right: 10px; flex-shrink: 0; font-size: 13px; }
+    .tb-label  { color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-right: 6px; }
+    .tb-sep    { color: rgba(255,255,255,0.12); margin: 0 10px; flex-shrink: 0; font-size: 14px; }
+
+    .tb-state {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.25);
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .tb-state .dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+    .tb-state.s-listening   { color: #34D399; border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.08); }
+    .tb-state.s-listening   .dot { animation: pulse 2s ease-in-out infinite; }
+    .tb-state.s-transcribing{ color: #F5A12F; border-color: rgba(245,161,47,0.3); background: rgba(245,161,47,0.08); }
+    .tb-state.s-transcribing .dot { animation: pulse 0.7s ease-in-out infinite; }
+    .tb-state.s-generating  { color: #8B5CF6; border-color: rgba(139,92,246,0.3); background: rgba(139,92,246,0.08); }
+    .tb-state.s-generating  .dot { animation: spin 1s linear infinite; border-radius: 2px; }
+    .tb-state.s-offline     { color: #EF4444; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    @keyframes spin   { to { transform: rotate(360deg); } }
+
+    .tb-latency { margin-left: auto; color: rgba(255,255,255,0.2); font-size: 10px; flex-shrink: 0; padding-left: 16px; }
+    .tb-latency span { color: #34D399; font-weight: 600; }
+
+    .tb-count { color: rgba(255,255,255,0.2); font-size: 10px; margin-left: 12px; flex-shrink: 0; }
+    .tb-count span { color: #F5A12F; font-weight: 700; }
+
+    /* ── Listening / transcribing status bar ── */
+    .listen-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 20px;
+      background: var(--white);
       border-bottom: 1px solid var(--border);
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      min-height: 32px;
       flex-shrink: 0;
     }
-
-    /* Logo */
-    .logo-area {
-      display: flex; align-items: center; gap: 7px; flex-shrink: 0;
-    }
-    .logo-text {
-      font-size: 12px; font-weight: 800; letter-spacing: 1px;
-      color: var(--text);
-    }
-
-    /* ── Inline state indicators ── */
-    .state-bar {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      flex: 1;
-    }
-
-    .state-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-      color: var(--dim);
-      text-transform: uppercase;
-    }
-
-    .state-item .dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--dim);
+    .listen-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 1.4s ease-in-out infinite;
       flex-shrink: 0;
     }
+    .listen-dot.warn { background: var(--orange); }
+    .listen-dot.off  { background: var(--red); animation: none; }
+    @keyframes pulse-dot { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.1)} }
 
-    .state-item.active-listening  { color: var(--green); }
-    .state-item.active-listening  .dot { background: var(--green); animation: pulse 2s ease-in-out infinite; }
-    .state-item.active-transcribing { color: var(--amber); }
-    .state-item.active-transcribing .dot { background: var(--amber); animation: pulse 0.7s ease-in-out infinite; }
-    .state-item.active-generating  { color: var(--accent); }
-    .state-item.active-generating  .dot { background: var(--accent); animation: spin 1s linear infinite; }
-    .state-item.active-ready       { color: var(--green); }
-    .state-item.active-ready       .dot { background: var(--green); }
-    .state-item.active-offline     { color: var(--red); }
-    .state-item.active-offline     .dot { background: var(--red); }
-
-    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
-    @keyframes spin   { to { transform: rotate(360deg); border-radius: 2px; } }
-
-    .sb-spacer { flex: 1; }
+    #tr-text {
+      flex: 1; font-size: 12px; color: var(--text-muted); font-style: italic;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: color 0.15s;
+    }
+    #tr-text.active { color: var(--orange); font-style: normal; font-weight: 500; }
 
     /* Mode toggle */
     .mode-toggle {
-      display: flex;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      flex-shrink: 0;
+      display: flex; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden; flex-shrink: 0;
     }
     .mode-btn {
-      padding: 4px 10px;
-      font-size: 10px;
-      font-weight: 700;
-      cursor: pointer;
-      border: none;
-      background: transparent;
-      color: var(--dim);
-      transition: all 0.1s;
-      white-space: nowrap;
-      font-family: 'Plus Jakarta Sans', monospace;
-      letter-spacing: 0.5px;
+      padding: 3px 9px; font-size: 10px; font-weight: 700;
+      cursor: pointer; border: none; background: transparent; color: var(--text-muted);
+      transition: all 0.15s; white-space: nowrap; height: 24px;
+      display: flex; align-items: center;
     }
-    .mode-btn.active { background: linear-gradient(135deg, #227A4A, #2E9E88); color: #fff; }
-    .mode-btn:not(.active):hover { color: var(--muted); }
+    .mode-btn.active { background: var(--green); color: #fff; }
+    .mode-btn:not(.active):hover { color: var(--text-dark); }
 
-    /* ── Transcribing bar ── */
-    .tr-bar {
-      padding: 5px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 28px;
-      background: var(--surface);
-      font-size: 11px;
-      flex-shrink: 0;
-    }
-    .tr-prefix { color: var(--accent); flex-shrink: 0; font-weight: 700; }
-    .tr-text {
-      flex: 1;
-      color: var(--dim);
-      font-style: italic;
-      transition: color 0.15s;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .tr-text.active { color: var(--amber); font-style: normal; }
-
-    /* ── Main feed (scrollable) ── */
-    .feed {
+    /* ── Feed ── */
+    .feed-wrap {
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
     }
-
-    /* ── Empty state ── */
-    .empty-state {
-      padding: 60px 24px;
-      color: var(--dim);
-      font-size: 13px;
-      line-height: 2.2;
-      text-align: center;
-    }
-    .empty-icon {
-      font-size: 40px; display: block; margin-bottom: 16px;
-    }
-    .empty-state .prompt { color: var(--dim); margin-bottom: 8px; font-family: monospace; font-size: 13px; }
-    .empty-state .msg { color: var(--muted); font-size: 14px; }
-
-    /* ── Q&A item ── */
-    .qa-item {
-      padding: 22px 20px 24px;
-      border-bottom: 1px solid var(--border);
-    }
-    .qa-item:first-child { border-top: 1px solid var(--border); }
-
-    /* ── Question row ── */
-    .q-row {
+    .feed {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px 20px 48px;
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 16px;
+      flex-direction: column;
+      gap: 12px;
     }
-    .src-badge {
-      font-size: 9px;
-      font-weight: 800;
-      padding: 3px 7px;
-      border-radius: 6px;
-      flex-shrink: 0;
-      margin-top: 2px;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-    }
-    .src-badge.db  { background: rgba(34,122,74,0.1);  color: #1A5E38; border: 1px solid rgba(34,122,74,0.25); }
-    .src-badge.api { background: rgba(59,130,246,0.1); color: #2457B5; border: 1px solid rgba(59,130,246,0.25); }
-    .src-badge.gen { background: rgba(245,158,11,0.1); color: #92590A; border: 1px solid rgba(245,158,11,0.25); }
 
-    .q-text {
-      flex: 1;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--muted);
-      line-height: 1.4;
+    .feed-empty {
+      text-align: center; padding: 80px 20px;
+      color: var(--text-muted); font-size: 14px; line-height: 2.6;
     }
+    .feed-empty .big { font-size: 48px; margin-bottom: 16px; }
+    .pulse-dots { display: inline-flex; gap: 6px; align-items: center; margin-top: 12px; }
+    .pulse-dots span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green); opacity: 0.4;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+    }
+    .pulse-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .pulse-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    /* ── QA Card (identical style to index.html) ── */
+    .qa-card {
+      background: var(--white);
+      border-radius: 12px;
+      box-shadow: var(--card-shadow);
+      border: 1px solid var(--card-border);
+      overflow: hidden;
+      animation: slideIn 0.1s ease-out;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .qa-card.active {
+      border-color: var(--blue);
+      border-left: 3px solid var(--blue);
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card header */
+    .card-head {
+      display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;
+      padding: 10px 14px 8px; border-bottom: 1px solid var(--border);
+    }
+    .qnum {
+      font-size: 10px; font-weight: 800; color: var(--blue);
+      background: rgba(59,130,246,0.08); padding: 2px 7px; border-radius: 4px;
+      flex-shrink: 0; margin-top: 2px; white-space: nowrap;
+    }
+    .q-state {
+      font-size: 9px; font-weight: 800; letter-spacing: 0.4px;
+      padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-top: 3px; white-space: nowrap;
+    }
+    .q-state.answering {
+      background: rgba(245,158,11,0.15); color: var(--orange);
+      border: 1px solid rgba(245,158,11,0.3);
+    }
+    .q-state.complete {
+      background: var(--green-light); color: var(--green-dark);
+    }
+    .qtext {
+      flex: 1; font-size: var(--fs); font-weight: 600;
+      color: var(--text-dark); line-height: 1.4; word-break: break-word;
+    }
+    .card-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; }
+    .qtime { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
     .copy-btn {
-      flex-shrink: 0;
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--dim);
-      border-radius: 6px;
-      padding: 3px 10px;
-      font-size: 10px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.1s;
-      white-space: nowrap;
-      font-family: 'Inter', sans-serif;
+      width: 26px; height: 26px; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; color: var(--text-muted); font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; flex-shrink: 0;
     }
-    .copy-btn:hover  { border-color: var(--accent); color: var(--accent); }
-    .copy-btn.copied { border-color: var(--green);  color: var(--green); }
+    .copy-btn:hover { background: var(--bg); color: var(--green); border-color: var(--green); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
 
-    /* ── Thinking indicator ── */
-    .thinking {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--amber);
-      font-size: 13px;
-      padding: 4px 0;
-    }
-    .thinking-dots { display: flex; gap: 4px; }
-    .thinking-dots span {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--amber);
-      opacity: 0.3;
+    /* Card body */
+    .card-body { padding: 12px 14px; }
+
+    /* Thinking */
+    .thinking { display: flex; align-items: center; gap: 5px; padding: 6px 0; }
+    .thinking span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); opacity: 0.35;
       animation: think 1.2s ease-in-out infinite;
     }
-    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
-    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes think { 0%,100%{opacity:0.2;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.2)} }
+    .thinking span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes think {
+      0%,100%{opacity:0.25;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.2)}
+    }
 
-    /* ── Streaming text ── */
+    /* Streaming */
     .stream-text {
-      font-size: 22px;
-      line-height: 1.65;
-      color: var(--text);
-      word-break: break-word;
+      font-size: var(--fs); line-height: 1.55; color: var(--text-medium);
+      word-break: break-word; min-height: 24px;
     }
-    .stream-text::after {
-      content: '▌';
-      color: var(--accent);
-      animation: blink 0.7s step-end infinite;
-    }
-    @keyframes blink { 50% { opacity: 0; } }
+    .stream-text::after { content: '▌'; color: var(--green); animation: blink 0.7s step-end infinite; }
+    @keyframes blink { 50%{opacity:0} }
 
-    /* ── BULLET MODE ── */
-    .bullets-wrap { display: flex; flex-direction: column; gap: 12px; }
-    .bullet-item {
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      font-size: 22px;
-      line-height: 1.65;
-      color: var(--text);
-      word-break: break-word;
+    /* Answer bullets */
+    .answer-paras { display: flex; flex-direction: column; gap: 6px; }
+    .ans-bullet {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: var(--fs); line-height: 1.55; color: var(--text-dark); word-break: break-word;
     }
-    .bullet-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--accent);
-      flex-shrink: 0;
-      margin-top: 14px;
-    }
-    .bullet-item .ic {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 18px;
-      background: rgba(34,122,74,0.1);
-      color: var(--green-dark, #1A5E38);
-      padding: 1px 6px;
-      border-radius: 4px;
-      border: 1px solid rgba(34,122,74,0.2);
+    .ans-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+      flex-shrink: 0; margin-top: calc(var(--fs) * 0.38); opacity: 0.7;
     }
 
-    /* ── PARAGRAPH MODE ── */
-    .para-wrap {
-      font-size: 22px;
-      line-height: 1.75;
-      color: var(--text);
-      word-break: break-word;
-    }
-    .para-wrap .ic {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 18px;
-      background: rgba(34,122,74,0.1);
-      color: var(--green-dark, #1A5E38);
-      padding: 1px 6px;
-      border-radius: 4px;
-      border: 1px solid rgba(34,122,74,0.2);
+    /* Paragraph mode */
+    .para-block { font-size: var(--fs); line-height: 1.75; color: var(--text-dark); word-break: break-word; }
+    .para-block p { margin-bottom: 6px; }
+    .para-block p:last-child { margin-bottom: 0; }
+
+    /* Inline code */
+    .ic {
+      font-family: 'IBM Plex Mono', monospace; font-size: calc(var(--fs) - 1.5px);
+      background: var(--ic-bg); color: var(--ic-color);
+      padding: 1px 5px; border-radius: 4px; border: 1px solid var(--code-border); white-space: nowrap;
     }
 
-    /* ── Code block ── */
-    .code-block {
-      margin: 16px 0 8px;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid var(--border);
+    /* Code block */
+    .cb { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--code-border); }
+    .cb-head {
+      background: var(--bg); padding: 6px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--code-border);
     }
-    .code-head {
-      background: var(--surface);
-      padding: 7px 14px;
-      display: flex;
-      align-items: center;
-      border-bottom: 1px solid var(--border);
-      justify-content: space-between;
+    .cb-lang { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+    .cb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-py   { background: #3572A5; } .dot-sh  { background: #89E051; }
+    .dot-sql  { background: #E38C00; } .dot-java { background: #B07219; }
+    .dot-js   { background: #F1E05A; } .dot-yml  { background: #CB171E; }
+    .dot-def  { background: var(--text-muted); }
+    .cb-copy {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; color: var(--text-muted); transition: all 0.15s;
     }
-    .code-lang {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--dim);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .lang-dot { width: 7px; height: 7px; border-radius: 50%; }
-    .lang-dot.py   { background: #3572A5; }
-    .lang-dot.js   { background: #F1E05A; }
-    .lang-dot.java { background: #B07219; }
-    .lang-dot.sql  { background: #E38C00; }
-    .lang-dot.bash { background: #89E051; }
-    .lang-dot.yaml { background: #CB171E; }
-    .lang-dot.def  { background: var(--accent); }
+    .cb-copy:hover { background: var(--green-light); color: var(--green); border-color: var(--green); }
+    .ln-code { overflow-x: auto; }
+    .ln-code pre { padding: 10px 14px; font-size: var(--fs-code); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
-    .code-copy {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 3px 9px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      background: transparent;
-      cursor: pointer;
-      color: var(--dim);
-      transition: all 0.1s;
+    /* Card footer */
+    .card-foot {
+      display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+      padding: 6px 14px; border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.02);
     }
-    .code-copy:hover  { border-color: var(--accent); color: var(--accent); }
-    .code-copy.copied { border-color: var(--green);  color: var(--green); }
-
-    .code-body { overflow-x: auto; background: var(--code-bg); }
-    .code-body pre { margin: 0; background: var(--code-bg) !important; }
-    .code-body pre code {
-      font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
-      font-size: 16px !important;
-      line-height: 1.6 !important;
-      padding: 14px 16px !important;
-      display: block;
-      tab-size: 4;
-      white-space: pre;
-      background: var(--code-bg) !important;
+    .src-badge {
+      font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 2px 7px; border-radius: 4px; white-space: nowrap; flex-shrink: 0;
     }
+    .src-db    { background: var(--db-bg);    color: var(--db-c); }
+    .src-llm   { background: var(--llm-bg);   color: var(--llm-c); }
+    .src-cache { background: var(--cache-bg); color: var(--cache-c); }
+    .lat { font-size: 10px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+    .conf-bar { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+    .conf-track { width: 38px; height: 4px; border-radius: 5px; background: var(--border); overflow: hidden; }
+    .conf-fill { height: 100%; border-radius: 5px; transition: width 0.4s; }
 
-    /* ── Footer ── */
-    .footer-bar {
-      height: 30px;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 10px;
-      color: var(--dim);
-      flex-shrink: 0;
+    /* Toast */
+    #mon-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--text-dark); color: #F9FAFB;
+      padding: 8px 18px; border-radius: 20px;
+      font-size: 13px; font-weight: 600;
+      opacity: 0; transition: opacity 0.25s;
+      z-index: 9999; pointer-events: none; white-space: nowrap;
     }
-    .f-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-      transition: all 0.3s;
-    }
-    .f-dot.off  { background: var(--red); }
-    .f-dot.warn { background: var(--amber); }
-    .f-txt { flex: 1; font-weight: 500; }
-    .f-count { font-weight: 700; color: var(--accent); }
-    .f-time  { color: var(--border); font-size: 10px; }
+    #mon-toast.show { opacity: 1; }
 
-    /* ── Toast ── */
-    .toast {
-      position: fixed;
-      top: 44px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 6px 16px;
-      font-size: 11px;
-      font-weight: 700;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
-      z-index: 200;
-      white-space: nowrap;
-    }
-    .toast.ok  { border-color: rgba(34,197,94,0.4); color: var(--green); opacity: 1; }
-    .toast.err { border-color: rgba(239,68,68,0.4); color: var(--red);   opacity: 1; }
+    /* Scrollbar */
+    .feed-wrap::-webkit-scrollbar { width: 4px; }
+    .feed-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 3px; height: 3px; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    /* ── Mobile adjustments ── */
-    @media(max-width:480px) {
-      .bullet-item, .para-wrap, .stream-text { font-size: 20px !important; }
-      .code-body pre code { font-size: 14px !important; }
-      .q-text { font-size: 13px; }
+    @media(max-width: 768px) {
+      .feed { padding: 12px 10px 48px; }
     }
   </style>
-</head>
-<body>
-<div class="app">
+{% endblock %}
 
-  <!-- ── Status bar ── -->
-  <div class="status-bar">
-    <div class="logo-area">
-      <svg width="24" height="24" viewBox="0 0 30 30" fill="none">
-        <defs>
-          <linearGradient id="mLogoGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#227A4A"/>
-            <stop offset="100%" stop-color="#2E9E88"/>
-          </linearGradient>
-        </defs>
-        <rect width="30" height="30" rx="8" fill="url(#mLogoGrad)"/>
-        <text x="15" y="21" text-anchor="middle" font-family="Plus Jakarta Sans,system-ui" font-size="17" font-weight="800" fill="white">D</text>
-      </svg>
-      <span class="logo-text">drishi</span>
-    </div>
-    <div class="state-bar" id="stateBar">
-      <div class="state-item" id="si-listening">
-        <div class="dot"></div><span>Listening</span>
+{% block content %}
+<div style="display:flex;flex-direction:column;height:calc(100vh - var(--header-h));overflow:hidden;">
+
+  <!-- ── Terminal state bar ── -->
+  <div id="terminal-bar">
+    <span class="tb-prompt">$</span>
+
+    <span class="tb-label">STATE</span>
+    <span class="tb-state" id="ts-listening"><span class="dot"></span>Listening</span>
+    <span class="tb-state" id="ts-transcribing"><span class="dot"></span>Transcribing</span>
+    <span class="tb-state" id="ts-generating"><span class="dot"></span>Generating</span>
+
+    <div class="tb-sep">|</div>
+
+    <span class="tb-label">LIVE</span>
+    <span id="ts-conn" style="font-size:10px;color:rgba(255,255,255,0.25);font-weight:600;">connecting…</span>
+
+    <span class="tb-count">questions: <span id="tb-q-count">0</span></span>
+    <div class="tb-latency">avg &nbsp;<span id="tb-lat-val">—</span>ms</div>
+  </div>
+
+  <!-- ── Listening / transcribing bar ── -->
+  <div class="listen-bar">
+    <div class="listen-dot" id="ld"></div>
+    <span id="tr-text">Listening for interview questions…</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="mbt-bullet" onclick="setMode('bullet')">&#8226; Bullet</button>
+        <button class="mode-btn" id="mbt-para"   onclick="setMode('para')">&#182; Para</button>
       </div>
-      <div class="state-item" id="si-transcribing">
-        <div class="dot"></div><span>Transcribing</span>
-      </div>
-      <div class="state-item" id="si-generating">
-        <div class="dot"></div><span>Generating</span>
-      </div>
-      <div class="state-item" id="si-ready">
-        <div class="dot"></div><span>Ready</span>
-      </div>
-    </div>
-    <div class="sb-spacer"></div>
-    <a href="/" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:4px 10px;text-decoration:none;transition:all 0.15s;flex-shrink:0" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Home
-    </a>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="btn-bullet" onclick="setMode('bullet')">• Bullet</button>
-      <button class="mode-btn"        id="btn-para"   onclick="setMode('para')">¶ Para</button>
+      <button id="share-remote-btn" onclick="shareRemote()" title="Copy remote viewer link to clipboard"
+        style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;"
+        onmouseover="this.style.background='var(--green-light)';this.style.color='var(--green)';this.style.borderColor='var(--green)';"
+        onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)';this.style.borderColor='var(--border)';">
+        &#128279; REMOTE
+      </button>
     </div>
   </div>
 
-  <!-- ── Transcribing bar ── -->
-  <div class="tr-bar" id="trBar">
-    <span class="tr-prefix">›</span>
-    <span class="tr-text" id="trText">waiting for speech…</span>
-  </div>
-
-  <!-- ── Main feed ── -->
-  <div class="feed" id="feed">
-    <div class="empty-state" id="emptyState">
-      <span class="empty-icon">🎤</span>
-      <div class="prompt">drishi monitor</div>
-      <div class="msg">Listening for interview questions…<br>
-        <span style="font-size:12px;color:var(--dim)">Answers appear here in real time</span>
+  <!-- ── Feed (latest at top) ── -->
+  <div class="feed-wrap" id="feed-wrap">
+    <div class="feed" id="feed">
+      <div class="feed-empty" id="feed-empty">
+        <div class="big">🎤</div>
+        <div>Drishi Monitor — waiting for questions…</div>
+        <div style="font-size:12px;color:var(--text-muted)">Answers stream here in real time. Latest always on top.</div>
+        <div class="pulse-dots">
+          <span></span><span></span><span></span>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Footer ── -->
-  <div class="footer-bar">
-    <div class="f-dot off" id="fDot"></div>
-    <span class="f-txt" id="fTxt">Connecting…</span>
-    <span class="f-count" id="fCount"></span>
-    <span class="f-time" id="fTime"></span>
-  </div>
+</div><!-- flex column wrapper -->
 
-</div><!-- .app -->
-
-<!-- ── Toast ── -->
-<div class="toast" id="toast"></div>
+<div id="mon-toast"></div>
 
 <script>
 (function () {
   'use strict';
 
-  let _answers = [], _es = null, _stateTimer = null;
-  let _trTimer = null, _reconnectTimer = null, _reconnectDelay = 1500;
+  /* ── State ── */
+  let _answers = [];
+  let _sessionId = null;
+  let _es = null, _reconnectDelay = 1500, _reconnectTimer = null;
+  let _stateTimer = null, _trTimer = null;
   let _mode = localStorage.getItem('drishi_mon_mode') || 'bullet';
 
-  // ── Mode toggle ──────────────────────────────────────────────────────────────
-  function setMode(mode) {
-    _mode = mode;
-    localStorage.setItem('drishi_mon_mode', mode);
-    document.getElementById('btn-bullet').classList.toggle('active', mode === 'bullet');
-    document.getElementById('btn-para').classList.toggle('active', mode === 'para');
-    renderAll();
+  /* ── Mode toggle ── */
+  function setMode(m) {
+    _mode = m;
+    localStorage.setItem('drishi_mon_mode', m);
+    document.getElementById('mbt-bullet').classList.toggle('active', m === 'bullet');
+    document.getElementById('mbt-para').classList.toggle('active', m === 'para');
+    rebuildFeed();
   }
   window.setMode = setMode;
+  document.getElementById('mbt-bullet').classList.toggle('active', _mode === 'bullet');
+  document.getElementById('mbt-para').classList.toggle('active', _mode === 'para');
 
-  (function initMode() {
-    document.getElementById('btn-bullet').classList.toggle('active', _mode === 'bullet');
-    document.getElementById('btn-para').classList.toggle('active', _mode === 'para');
-  })();
-
-  // ── State machine ────────────────────────────────────────────────────────────
-  const STATE_IDS = ['si-listening', 'si-transcribing', 'si-generating', 'si-ready'];
+  /* ── Terminal state ── */
+  const TS = {
+    listening:    { id: 'ts-listening',    cls: 's-listening',    dot: '',     conn: '● LIVE',  connCls: '#34D399' },
+    transcribing: { id: 'ts-transcribing', cls: 's-transcribing', dot: 'warn', conn: '● LIVE',  connCls: '#F5A12F' },
+    generating:   { id: 'ts-generating',   cls: 's-generating',   dot: '',     conn: '● LIVE',  connCls: '#8B5CF6' },
+    offline:      { id: null,              cls: '',               dot: 'off',  conn: '✕ OFFLINE', connCls: '#EF4444' },
+    connecting:   { id: null,              cls: '',               dot: 'off',  conn: 'connecting…', connCls: 'rgba(255,255,255,0.25)' },
+  };
 
   function setState(state) {
-    STATE_IDS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.className = 'state-item';
+    ['ts-listening','ts-transcribing','ts-generating'].forEach(id => {
+      document.getElementById(id).className = 'tb-state';
     });
+    const s = TS[state] || TS.connecting;
+    if (s.id) document.getElementById(s.id).className = 'tb-state ' + s.cls;
 
-    const ftxt = document.getElementById('fTxt');
-    const fdot = document.getElementById('fDot');
+    const ld = document.getElementById('ld');
+    ld.className = 'listen-dot' + (s.dot ? ' ' + s.dot : '');
 
-    const map = {
-      listening:    { id: 'si-listening',    cls: 'active-listening',    txt: 'Listening…' },
-      transcribing: { id: 'si-transcribing', cls: 'active-transcribing', txt: 'Transcribing…' },
-      generating:   { id: 'si-generating',   cls: 'active-generating',   txt: 'Generating…' },
-      ready:        { id: 'si-ready',        cls: 'active-ready',        txt: 'Ready' },
-      offline:      { id: null,              cls: '',                     txt: 'Offline — reconnecting…' },
-      connecting:   { id: null,              cls: '',                     txt: 'Connecting…' },
-    };
-
-    const s = map[state] || map.connecting;
-    if (s.id) {
-      const el = document.getElementById(s.id);
-      if (el) el.className = 'state-item ' + s.cls;
-    }
-
-    ftxt.textContent = s.txt;
-    fdot.className = 'f-dot';
-    if (state === 'offline' || state === 'connecting') fdot.classList.add('off');
-    if (state === 'transcribing') fdot.classList.add('warn');
+    const conn = document.getElementById('ts-conn');
+    conn.textContent = s.conn;
+    conn.style.color = s.connCls;
   }
 
-  // ── SSE Connection ──────────────────────────────────────────────────────────
+  /* ── SSE ── */
   function connect() {
     if (_es) { try { _es.close(); } catch (_) {} }
     setState('connecting');
@@ -570,31 +425,35 @@
 
     _es.addEventListener('init', e => {
       try {
-        const payload = JSON.parse(e.data);
-        const answers = Array.isArray(payload) ? payload : (payload.answers || []);
-        _answers = answers;
-        renderAll();
+        const p = JSON.parse(e.data);
+        const arr = Array.isArray(p) ? p : (p.answers || []);
+        if (!Array.isArray(p) && p.session_id) _sessionId = p.session_id;
+        // Reverse so newest is at index 0
+        _answers = arr.slice().reverse();
+        rebuildFeed();
         setState('listening');
         _reconnectDelay = 1500;
+        updateLatency();
       } catch (_) {}
     });
 
     _es.addEventListener('answer', e => {
       try {
         const item = JSON.parse(e.data);
-        upsertAnswer(item);
-        renderAll();
+        upsert(item);
+        rebuildFeed();
         setState('ready');
         clearTimeout(_stateTimer);
         _stateTimer = setTimeout(() => setState('listening'), 2500);
+        updateLatency();
       } catch (_) {}
     });
 
     _es.addEventListener('question', e => {
       try {
         const item = JSON.parse(e.data);
-        upsertAnswer(item);
-        renderAll();
+        upsert(item);
+        rebuildFeed();
         setState('generating');
       } catch (_) {}
     });
@@ -602,18 +461,18 @@
     _es.addEventListener('chunk', e => {
       try {
         const d = JSON.parse(e.data);
-        if (d.question) {
-          const q = (d.question || '').toLowerCase().trim();
-          const idx = _answers.findIndex(a => (a.question || '').toLowerCase().trim() === q);
-          if (idx >= 0) {
-            _answers[idx].answer = (_answers[idx].answer || '') + (d.chunk || '');
-            _answers[idx].is_complete = false;
-          } else {
-            _answers.unshift({ question: d.question, answer: d.chunk || '', is_complete: false });
-          }
-          setState('generating');
-          renderAll();
+        if (!d.question) return;
+        const qnorm = d.question.toLowerCase().trim();
+        const idx = _answers.findIndex(a => (a.question||'').toLowerCase().trim() === qnorm);
+        if (idx >= 0) {
+          _answers[idx].answer = (_answers[idx].answer || '') + (d.chunk || '');
+          _answers[idx].is_complete = false;
+          patchCard(idx);
+        } else {
+          _answers.unshift({ question: d.question, answer: d.chunk || '', is_complete: false });
+          rebuildFeed();
         }
+        setState('generating');
       } catch (_) {}
     });
 
@@ -638,123 +497,161 @@
     };
   }
 
-  // ── Answer store ─────────────────────────────────────────────────────────────
-  function upsertAnswer(item) {
-    const q = (item.question || '').toLowerCase().trim();
-    const idx = _answers.findIndex(a => (a.question || '').toLowerCase().trim() === q);
+  /* ── Answer store ── */
+  function upsert(item) {
+    const qnorm = (item.question || '').toLowerCase().trim();
+    const idx = _answers.findIndex(a => (a.question||'').toLowerCase().trim() === qnorm);
     if (idx >= 0) { _answers[idx] = item; }
-    else { _answers.unshift(item); }
+    else { _answers.unshift(item); }          // latest always at front
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
-  function renderAll() {
+  /* ── Full rebuild ── */
+  function rebuildFeed() {
     const feed  = document.getElementById('feed');
-    const empty = document.getElementById('emptyState');
-    const count = document.getElementById('fCount');
-
+    const empty = document.getElementById('feed-empty');
     const items = _answers.filter(a => a.question);
-    count.textContent = items.length ? `${items.length}q` : '';
 
-    if (items.length === 0) {
+    document.getElementById('tb-q-count').textContent = items.length;
+
+    if (!items.length) {
       empty.style.display = '';
-      feed.querySelectorAll('.qa-item').forEach(el => el.remove());
+      feed.querySelectorAll('.qa-card').forEach(el => el.remove());
       return;
     }
     empty.style.display = 'none';
-    feed.querySelectorAll('.qa-item').forEach(el => el.remove());
+    feed.querySelectorAll('.qa-card').forEach(el => el.remove());
 
-    items.slice(0, 8).forEach((item, idx) => {
-      const el = document.createElement('div');
-      el.className = 'qa-item';
-
-      const src      = (item.metrics && item.metrics.source) || '';
-      const isDb     = src.startsWith('db-');
-      const isGen    = !item.is_complete;
-      const badgeCls = isDb ? 'db' : (isGen ? 'gen' : 'api');
-      const badgeTxt = isDb ? 'DB' : (isGen ? 'GEN' : 'AI');
-
-      const qText  = (item.question || '').trim();
-      const ansText = (item.answer  || '').trim();
-
-      let ansHtml = '';
-      if (!item.is_complete) {
-        ansHtml = ansText
-          ? `<div class="stream-text">${esc(ansText)}</div>`
-          : `<div class="thinking"><span>generating</span><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
-      } else {
-        ansHtml = formatAnswer(ansText);
-      }
-
-      el.innerHTML = `
-        <div class="q-row">
-          <span class="src-badge ${badgeCls}">${badgeTxt}</span>
-          <span class="q-text">${esc(qText)}</span>
-          <button class="copy-btn" data-ans="${escAttr(ansText)}">copy</button>
-        </div>
-        <div class="ans-body">${ansHtml}</div>`;
-
-      feed.appendChild(el);
+    items.forEach((item, idx) => {
+      const el = buildCard(item, idx);
+      el.dataset.qidx = idx;
+      feed.appendChild(el);          // items[0]=latest appended first → visually on top
     });
 
-    feed.querySelectorAll('pre code').forEach(block => {
-      try { hljs.highlightElement(block); } catch (_) {}
+    feed.querySelectorAll('pre code').forEach(b => {
+      try { hljs && hljs.highlightElement(b); } catch (_) {}
     });
 
-    feed.querySelectorAll('.copy-btn').forEach(btn => {
-      btn.addEventListener('click', () => copyText(btn.dataset.ans || '', btn));
-    });
-    feed.querySelectorAll('.code-copy').forEach(btn => {
-      btn.addEventListener('click', () => copyText(btn.dataset.code || '', btn));
-    });
-
-    updateTime();
+    wireButtons(feed);
   }
 
-  // ── Format answer ─────────────────────────────────────────────────────────────
+  /* ── Patch only the answer body of an in-progress card ── */
+  function patchCard(idx) {
+    const feed = document.getElementById('feed');
+    const existing = feed.querySelector(`.qa-card[data-qidx="${idx}"]`);
+    const item = _answers[idx];
+    if (!existing || !item) return;
+
+    const body = existing.querySelector('.card-body');
+    if (body) {
+      body.innerHTML = renderAnswerBody(item);
+      const head = existing.querySelector('.card-head');
+      if (head) {
+        const stateEl = head.querySelector('.q-state');
+        if (stateEl) {
+          stateEl.className = 'q-state ' + (item.is_complete ? 'complete' : 'answering');
+          stateEl.textContent = item.is_complete ? 'DONE' : 'ANSWERING';
+        }
+      }
+    }
+    try { existing.querySelectorAll('pre code').forEach(b => hljs && hljs.highlightElement(b)); } catch (_) {}
+    wireButtons(existing);
+  }
+
+  /* ── Build card DOM ── */
+  function buildCard(item, idx) {
+    const el = document.createElement('div');
+    el.className = 'qa-card' + (item.is_complete === false ? ' active' : '');
+    el.dataset.qidx = idx;
+
+    const src     = (item.metrics && item.metrics.source) || '';
+    const isDb    = src.startsWith('db');
+    const isCache = src === 'cache' || src === 'answer_cache';
+    const srcCls  = isDb ? 'src-db' : (isCache ? 'src-cache' : 'src-llm');
+    const srcLbl  = isDb ? 'DB' : (isCache ? 'CACHE' : 'AI');
+
+    const qText   = (item.question || '').trim();
+    const latMs   = item.metrics && item.metrics.latency_ms ? item.metrics.latency_ms + 'ms' : '';
+    const score   = item.metrics && item.metrics.score ? (item.metrics.score * 100 | 0) + '%' : '';
+    const ts      = item.timestamp ? new Date(item.timestamp * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+    const isDone  = item.is_complete !== false;
+    const stCls   = isDone ? 'complete' : 'answering';
+    const stTxt   = isDone ? 'DONE' : 'ANSWERING';
+
+    const ansText = (item.answer || '').trim();
+
+    el.innerHTML = `
+      <div class="card-head">
+        <span class="qnum">#${_answers.length - idx}</span>
+        <span class="q-state ${stCls}">${stTxt}</span>
+        <span class="qtext">${esc(qText)}</span>
+        <div class="card-meta">
+          ${ts ? `<span class="qtime">${ts}</span>` : ''}
+          <button class="copy-btn" title="Copy answer" data-ans="${escAttr(ansText)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="card-body">${renderAnswerBody(item)}</div>
+      <div class="card-foot">
+        <span class="src-badge ${srcCls}">${srcLbl}</span>
+        ${score ? `<div class="conf-bar"><span>${score}</span><div class="conf-track"><div class="conf-fill" style="width:${score};background:var(--green)"></div></div></div>` : ''}
+        ${latMs ? `<span class="lat">${latMs}</span>` : ''}
+      </div>`;
+
+    return el;
+  }
+
+  /* ── Render answer body ── */
+  function renderAnswerBody(item) {
+    const ansText = (item.answer || '').trim();
+    if (item.is_complete === false) {
+      if (!ansText) {
+        return `<div class="thinking"><span></span><span></span><span></span></div>`;
+      }
+      return `<div class="stream-text">${esc(ansText)}</div>`;
+    }
+    if (!ansText) return '';
+    return formatAnswer(ansText);
+  }
+
+  /* ── Format answer ── */
   function formatAnswer(text) {
     if (!text) return '';
 
     if (text.includes('```')) {
-      const parts = text.split(/(```[\w]*\n[\s\S]*?```)/g);
-      return parts.map(part => {
+      return text.split(/(```[\w]*\n[\s\S]*?```)/g).map(part => {
         const m = part.match(/^```([\w]*)\n([\s\S]*)```$/);
-        if (m) { return renderCodeBlock(m[2], m[1] || ''); }
-        const trimmed = part.trim();
-        if (!trimmed) return '';
-        return _mode === 'bullet'
-          ? renderBullets(trimmed)
-          : `<div class="para-wrap">${renderInline(trimmed)}</div>`;
+        if (m) return renderCodeBlock(m[2], m[1] || '');
+        const t = part.trim();
+        if (!t) return '';
+        return _mode === 'bullet' ? renderBullets(t) : `<div class="para-block">${renderInline(t)}</div>`;
       }).join('');
     }
 
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    if (!lines.length) return '';
-
-    if (_mode === 'bullet') return renderBullets(text);
-    return `<div class="para-wrap">${renderInline(text)}</div>`;
+    return _mode === 'bullet' ? renderBullets(text) : `<div class="para-block">${renderInline(text)}</div>`;
   }
 
   function renderBullets(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const items = lines.map(l => {
-      const content = l.replace(/^[-•*]\s+/, '');
-      return `<div class="bullet-item"><div class="bullet-dot"></div><div>${renderInline(content)}</div></div>`;
-    }).join('');
-    return `<div class="bullets-wrap">${items}</div>`;
+    return `<div class="answer-paras">${
+      lines.map(l => {
+        const content = l.replace(/^[-•*]\s+/, '');
+        return `<div class="ans-bullet"><div class="ans-dot"></div><div>${renderInline(content)}</div></div>`;
+      }).join('')
+    }</div>`;
   }
 
   function renderCodeBlock(code, lang) {
-    const detectedLang = lang || detectLang(code);
-    const dotClass = langDot(detectedLang);
-    const codeEsc = esc(code.trimEnd());
-    return `<div class="code-block">
-      <div class="code-head">
-        <div class="code-lang"><span class="lang-dot ${dotClass}"></span>${detectedLang.toUpperCase() || 'CODE'}</div>
-        <button class="code-copy" data-code="${escAttr(code.trimEnd())}">copy</button>
+    const det = lang || detectLang(code);
+    const dotCls = { python:'dot-py', javascript:'dot-js', java:'dot-java', sql:'dot-sql', bash:'dot-sh', sh:'dot-sh', yaml:'dot-yml', yml:'dot-yml' }[det] || 'dot-def';
+    return `<div class="cb">
+      <div class="cb-head">
+        <div class="cb-lang"><span class="cb-dot ${dotCls}"></span>${(det||'code').toUpperCase()}</div>
+        <button class="cb-copy" data-code="${escAttr(code.trimEnd())}">copy</button>
       </div>
-      <div class="code-body">
-        <pre><code class="language-${detectedLang}">${codeEsc}</code></pre>
-      </div>
+      <div class="ln-code"><pre><code class="language-${det}">${esc(code.trimEnd())}</code></pre></div>
     </div>`;
   }
 
@@ -775,66 +672,94 @@
     return 'bash';
   }
 
-  function langDot(lang) {
-    const map = { python:'py', javascript:'js', java:'java', sql:'sql', bash:'bash', sh:'bash', yaml:'yaml', yml:'yaml' };
-    return map[lang] || 'def';
+  /* ── Wire copy buttons ── */
+  function wireButtons(root) {
+    root.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.replaceWith(btn.cloneNode(true));  // remove old listeners
+    });
+    root.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => copyText(btn.dataset.ans || '', btn));
+    });
+    root.querySelectorAll('.cb-copy').forEach(btn => {
+      btn.replaceWith(btn.cloneNode(true));
+    });
+    root.querySelectorAll('.cb-copy').forEach(btn => {
+      btn.addEventListener('click', () => copyText(btn.dataset.code || '', btn));
+    });
   }
 
-  // ── Transcribing ─────────────────────────────────────────────────────────────
+  /* ── Transcribing ── */
   function showTranscribing(text) {
-    const el = document.getElementById('trText');
+    const el = document.getElementById('tr-text');
     if (text) {
       el.textContent = text;
-      el.className = 'tr-text active';
+      el.className = 'active';
       clearTimeout(_trTimer);
       _trTimer = setTimeout(() => {
-        el.textContent = 'waiting for speech…';
-        el.className = 'tr-text';
-        if (document.getElementById('si-transcribing').classList.contains('active-transcribing')) {
-          setState('listening');
-        }
-      }, 4000);
+        el.textContent = 'Listening for interview questions…';
+        el.className = '';
+        setState('listening');
+      }, 4500);
     }
   }
 
-  // ── Copy ──────────────────────────────────────────────────────────────────────
+  /* ── Latency ── */
+  async function updateLatency() {
+    try {
+      const info = await fetch('/api/session-info').then(r => r.json());
+      const ms = info.avg_latency_ms;
+      document.getElementById('tb-lat-val').textContent = ms ? ms : '—';
+    } catch (_) {}
+  }
+
+  /* ── Copy ── */
   async function copyText(text, btn) {
     try {
       await navigator.clipboard.writeText(text);
-      const orig = btn.textContent;
-      btn.textContent = '✓';
       btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
-    } catch (_) { showToast('copy failed', 'err'); }
+      const orig = btn.innerHTML;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1500);
+    } catch (_) { showToast('copy failed'); }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  /* ── Helpers ── */
   function esc(s) {
-    return String(s || '')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function escAttr(s) {
-    return String(s || '')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&#34;');
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&#34;');
   }
-  function showToast(msg, type) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'toast ' + (type || '');
-    setTimeout(() => { t.className = 'toast'; }, 2200);
-  }
-  function updateTime() {
-    const el = document.getElementById('fTime');
-    el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  function showToast(msg) {
+    const t = document.getElementById('mon-toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
   }
 
-  // ── Start ─────────────────────────────────────────────────────────────────────
+  /* ── Share remote viewer URL ── */
+  async function shareRemote() {
+    let sid = _sessionId;
+    if (!sid) {
+      try {
+        const info = await fetch('/api/session-info').then(r => r.json());
+        sid = info.session_id;
+        if (sid) _sessionId = sid;
+      } catch (_) {}
+    }
+    if (!sid) { showToast('Session not ready — try again'); return; }
+    const url = `${location.origin}/v/${sid}/12`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Remote link copied! Open on phone or 2nd screen.');
+    } catch (_) {
+      window.open(url, '_blank');
+    }
+  }
+  window.shareRemote = shareRemote;
+
+  /* ── Start ── */
   connect();
-  setInterval(updateTime, 1000);
+  setInterval(updateLatency, 5000);
 })();
 </script>
-
-</body>
-</html>
+{% endblock %}

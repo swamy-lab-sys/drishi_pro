@@ -781,17 +781,120 @@
       color: #64748b;
       line-height: 1.5;
     }
+
+    /* ── Login screen ── */
+    #loginScreen input:focus {
+      border-color: #818cf8 !important;
+    }
+    #loginBtn:hover { opacity: .88; }
+    #loginBtn:active { opacity: .75; }
+    #loginBtn:disabled { opacity: .45; cursor: default; }
+
+    /* Slide-out login screen */
+    #loginScreen.hiding {
+      animation: slideUp .22s ease-in forwards;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(0); opacity: 1; }
+      to   { transform: translateY(-12px); opacity: 0; }
+    }
+
+    /* Header user chip */
+    #headerUser { display: none; }
+    #headerUser.visible { display: flex !important; }
   </style>
 </head>
 
 <body>
 
+  <!-- ══════════════════════════════════════════════════════════
+       LOGIN SCREEN — shown until session validated
+       Rendered instantly (no loader blocking first paint)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="loginScreen" style="
+    position:fixed;inset:0;background:#0d1117;z-index:1000;
+    display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- Login Header -->
+    <div style="background:linear-gradient(135deg,#1a1d2e,#141827);padding:18px 20px 14px;border-bottom:1px solid #252840;text-align:center;">
+      <div style="font-size:26px;margin-bottom:6px;">🎙</div>
+      <div style="font-size:16px;font-weight:800;color:#818cf8;letter-spacing:-.3px;">Drishi</div>
+      <div style="font-size:11px;color:#475569;margin-top:2px;">AI Interview Assistant</div>
+    </div>
+
+    <!-- Login Body -->
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 20px 14px;">
+      <div style="font-size:18px;font-weight:800;color:#e2e8f0;text-align:center;margin-bottom:4px;">Welcome Back</div>
+      <div style="font-size:11px;color:#475569;text-align:center;margin-bottom:20px;">Enter your token to sign in</div>
+
+      <!-- User Token (only field needed) -->
+      <div style="margin-bottom:8px;">
+        <label style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;display:block;margin-bottom:5px;">USER TOKEN</label>
+        <input id="loginToken" type="password" autocomplete="off" spellcheck="false"
+          placeholder="Your personal token (from admin)"
+          style="width:100%;background:#141827;border:1px solid #252840;border-radius:8px;
+                 padding:9px 12px;color:#e2e8f0;font-size:13px;outline:none;
+                 box-sizing:border-box;transition:border-color .15s;"
+          onfocus="this.style.borderColor='#818cf8'" onblur="this.style.borderColor='#252840'" />
+      </div>
+      <!-- Server URL info (configured once in Settings) -->
+      <div id="loginServerHint" style="margin-bottom:8px;padding:7px 10px;background:#0a0e1a;border:1px solid #1e293b;border-radius:6px;font-size:10px;color:#475569;text-align:center;">
+        Server: <span id="loginServerUrl" style="color:#818cf8;font-weight:700;">not configured</span>
+        &nbsp;·&nbsp;
+        <span onclick="document.getElementById('loginScreen').style.display='none';document.getElementById('tabSettings').click();"
+          style="color:#60a5fa;cursor:pointer;text-decoration:underline;">Configure in Settings</span>
+      </div>
+
+      <!-- Inline error -->
+      <div id="loginError" style="min-height:20px;margin-bottom:10px;font-size:11px;font-weight:600;color:#f87171;text-align:center;opacity:0;transition:opacity .2s;"></div>
+
+      <!-- Login button -->
+      <button id="loginBtn" onclick="doLogin()"
+        style="width:100%;background:linear-gradient(135deg,#818cf8,#6366f1);border:none;
+               border-radius:9px;padding:12px;color:white;font-size:13px;font-weight:700;
+               cursor:pointer;transition:opacity .15s;letter-spacing:-.1px;">
+        Sign In
+      </button>
+
+      <div style="margin-top:14px;text-align:center;font-size:10px;color:#334155;">
+        Don't have a token? Contact your admin
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SESSION-EXPIRED TOAST (non-blocking inline message)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="sessionExpiredBanner" style="
+    display:none;position:fixed;top:0;left:0;right:0;z-index:999;
+    background:#7f1d1d;padding:7px 14px;font-size:11px;font-weight:700;
+    color:#fca5a5;text-align:center;border-bottom:1px solid #991b1b;">
+    Session expired. Please sign in again.
+  </div>
+
   <!-- Header -->
   <div class="header">
     <div class="logo">🎙</div>
-    <div class="title">Drishi Enterprise</div>
+    <div class="title" id="headerTitle">Drishi Enterprise</div>
     <div class="status-dot" id="dot"></div>
     <div class="status-txt" id="statusTxt">Checking...</div>
+    <!-- User chip (shown after login) -->
+    <div id="headerUser" style="display:none;align-items:center;gap:5px;margin-left:4px;">
+      <div style="background:#818cf811;border:1px solid #818cf833;border-radius:12px;
+                  padding:2px 8px;display:flex;align-items:center;gap:4px;">
+        <span style="font-size:9px;">👤</span>
+        <span id="headerUserName" style="font-size:10px;font-weight:700;color:#c7d2fe;
+              max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      </div>
+      <button id="btnLogout" title="Sign out"
+        style="background:none;border:1px solid #334155;border-radius:5px;
+               padding:2px 6px;font-size:9px;font-weight:700;color:#475569;
+               cursor:pointer;transition:all .15s;white-space:nowrap;"
+        onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'"
+        onmouseout="this.style.borderColor='#334155';this.style.color='#475569'">
+        ⎋ Out
+      </button>
+    </div>
   </div>
 
   <!-- Tabs -->
@@ -975,7 +1078,7 @@
       <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:.5px;margin-bottom:8px;">SERVER CONNECTION</div>
       <div style="margin-bottom:8px;">
         <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Server URL</label>
-        <input id="settingsUrl" type="url" placeholder="https://particulate-arely-unrenovative.ngrok-free.dev" style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;padding:7px 10px;
+        <input id="settingsUrl" type="url" placeholder="https://your-ngrok-url.ngrok-free.app or http://192.168.x.x:8000" style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;padding:7px 10px;
                  color:#e2e8f0;font-size:12px;outline:none;box-sizing:border-box;" />
       </div>
       <div style="margin-bottom:10px;">

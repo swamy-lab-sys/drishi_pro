@@ -1,0 +1,167 @@
+/* ── TerminalBar ────────────────────────────────────────────────────────────── */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 40px;
+  background: #1A1A2E;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.bar::-webkit-scrollbar { display: none; }
+
+.prompt {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--green);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sep {
+  color: rgba(255,255,255,0.2);
+  font-size: 13px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.4);
+  margin-right: 2px;
+}
+
+.chip {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6);
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.85);
+}
+
+/* STT active — green */
+.chip.active {
+  background: rgba(0,200,150,0.2);
+  border-color: rgba(0,200,150,0.5);
+  color: #00C896;
+}
+
+/* LLM active — purple */
+.chip.activeLlm {
+  background: rgba(139,92,246,0.2);
+  border-color: rgba(139,92,246,0.5);
+  color: #c4b5fd;
+}
+
+/* USER select */
+.userSelect {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.65);
+  cursor: pointer;
+  outline: none;
+  max-width: 110px;
+}
+.userSelect:focus {
+  border-color: rgba(0,200,150,0.4);
+}
+
+/* Latency display */
+.latency {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.latVal {
+  color: var(--green);
+}
+
+/* ── STT live status ─────────────────────────────────────────────────────────── */
+.sttStatus {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.dot {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.dotPulse {
+  font-size: 9px;
+  line-height: 1;
+  animation: sttPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes sttPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+/* phase=start — orange pulsing */
+.sttBusy {
+  color: #f59e0b;
+  border-color: rgba(245,158,11,0.3);
+  background: rgba(245,158,11,0.08);
+}
+
+/* phase=done — green */
+.sttDone {
+  color: #00C896;
+  border-color: rgba(0,200,150,0.3);
+  background: rgba(0,200,150,0.08);
+}
+
+/* phase=silent — dim */
+.sttSilent {
+  color: rgba(255,255,255,0.25);
+  border-color: transparent;
+  background: transparent;
+}
+
+/* phase=idle — dim gray */
+.sttIdle {
+  color: rgba(255,255,255,0.35);
+  border-color: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+}

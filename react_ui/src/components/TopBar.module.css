@@ -1,0 +1,96 @@
+.topBar {
+  height: 56px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.breadcrumbSep {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.breadcrumb span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badgeGreen {
+  background: var(--green-light);
+  color: var(--green-dark);
+}
+
+.badgeAmber {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.badgeRed {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.badgeGray {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.btn:hover {
+  opacity: 0.88;
+}
+
+.btnGreen {
+  background: var(--green);
+  color: #fff;
+}
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.btnGhost:hover {
+  background: var(--bg-card);
+}

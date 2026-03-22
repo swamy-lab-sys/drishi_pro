@@ -1,5 +1,251 @@
-// BASE URL loaded from storage — supports both local and Render.com
-let BASE = 'https://particulate-arely-unrenovative.ngrok-free.dev';
+// ══════════════════════════════════════════════════════════════════════════════
+// GLOBAL STATE — declared first to avoid let TDZ crash in boot IIFE
+// ══════════════════════════════════════════════════════════════════════════════
+let BASE        = '';          // server URL — set from chrome.storage or session
+let USER_TOKEN  = '';          // per-user token
+let SECRET_CODE = '';
+let isOnline    = false;
+let lastHash    = '';
+let pollTimer   = null;
+let serverOnline = false;
+let typingState  = 'idle';
+let _activeTab   = 'monitor';
+let _lastAnswers  = [];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION MANAGEMENT
+// localStorage key: drishi_session
+// TTL: 7 days from loginTimestamp
+// Never logs token — all log lines use redacted placeholder
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _SESSION_KEY  = 'drishi_session';
+const _SESSION_TTL  = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+
+/** Persist session to localStorage. Never call with raw token in log. */
+function _saveSession(token, name, role, serverUrl) {
+  try {
+    localStorage.setItem(_SESSION_KEY, JSON.stringify({
+      token, name, role, serverUrl,
+      loginTimestamp: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+/** Load session. Returns null if missing or expired. */
+function _loadSession() {
+  try {
+    const raw = localStorage.getItem(_SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s.token || !s.serverUrl) { _clearSession(); return null; }
+    if (Date.now() - (s.loginTimestamp || 0) > _SESSION_TTL) {
+      _clearSession();
+      return null;
+    }
+    return s;
+  } catch (_) { return null; }
+}
+
+/** Wipe session from localStorage. */
+function _clearSession() {
+  try { localStorage.removeItem(_SESSION_KEY); } catch (_) {}
+}
+
+/** Show the login screen (instant, no animation). */
+function _showLogin(expiredMsg = '') {
+  const ls = document.getElementById('loginScreen');
+  ls.classList.remove('hiding');
+  ls.style.display = 'flex';
+  if (expiredMsg) _setLoginError(expiredMsg);
+  // Show current server URL hint so user knows where they're logging into
+  chrome.storage.sync.get({ serverUrl: '' }, (d) => {
+    const hintEl = document.getElementById('loginServerUrl');
+    if (hintEl) hintEl.textContent = d.serverUrl
+      ? d.serverUrl.replace(/^https?:\/\//, '')
+      : 'not configured — set in Settings';
+  });
+  // Hide header user chip
+  document.getElementById('headerUser').classList.remove('visible');
+}
+
+/** Dismiss login screen with a quick slide-up animation. */
+function _dismissLogin() {
+  const ls = document.getElementById('loginScreen');
+  ls.classList.add('hiding');
+  setTimeout(() => { ls.style.display = 'none'; }, 230);
+}
+
+/** Show inline error on login form. */
+function _setLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.opacity = msg ? '1' : '0';
+}
+
+/** Apply authenticated session: update globals, header, chrome.storage. */
+function _applySession(sess) {
+  BASE       = (sess.serverUrl || '').replace(/\/$/, '');
+  USER_TOKEN = sess.token || '';
+  // Update header
+  const nameEl = document.getElementById('headerUserName');
+  if (nameEl) nameEl.textContent = sess.name || USER_TOKEN;
+  document.getElementById('headerUser').classList.add('visible');
+  // Sync to chrome.storage for background.js / audio_offscreen.js
+  chrome.storage.sync.set({ serverUrl: BASE, userToken: USER_TOKEN });
+}
+
+/**
+ * Silently validate the stored session against the server.
+ * Non-blocking: called after dashboard is already shown.
+ * On failure → logout softly.
+ */
+async function _validateSessionBackground(sess) {
+  try {
+    const base = (sess.serverUrl || '').replace(/\/$/, '');
+    const r = await fetch(
+      `${base}/api/validate?user_token=${encodeURIComponent(sess.token)}`,
+      { headers: { 'ngrok-skip-browser-warning': 'true' }, signal: AbortSignal.timeout(4000) }
+    );
+    if (!r.ok) {
+      // Server rejected token — soft logout
+      _clearSession();
+      _showLogin('Session expired. Please sign in again.');
+    }
+    // On success: optionally refresh name/role from server
+    if (r.ok) {
+      const d = await r.json();
+      if (d.valid && d.name && d.name !== sess.name) {
+        sess.name = d.name;
+        sess.role = d.role;
+        _saveSession(sess.token, sess.name, sess.role, sess.serverUrl);
+        const nameEl = document.getElementById('headerUserName');
+        if (nameEl) nameEl.textContent = d.name;
+      }
+    }
+  } catch (_) {
+    // Network offline — do nothing, keep showing dashboard
+  }
+}
+
+/**
+ * Login button handler.
+ * Reads server URL from chrome.storage (set once in Settings).
+ * User only needs to enter their personal token.
+ */
+async function doLogin() {
+  const tokenInput = document.getElementById('loginToken');
+  const btn        = document.getElementById('loginBtn');
+  const token      = (tokenInput.value || '').trim();
+
+  _setLoginError('');
+  if (!token) { _setLoginError('Enter your user token.'); tokenInput.focus(); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Authenticating…';
+
+  // Get server URL from storage (configured once in Settings tab)
+  chrome.storage.sync.get({ serverUrl: '' }, async (data) => {
+    const serverUrl = (data.serverUrl || BASE || '').replace(/\/$/, '');
+
+    if (!serverUrl) {
+      _setLoginError('No server configured. Go to Settings and enter the Server URL first.');
+      btn.disabled    = false;
+      btn.textContent = 'Sign In';
+      return;
+    }
+
+    // Update the hint
+    const hintEl = document.getElementById('loginServerUrl');
+    if (hintEl) hintEl.textContent = serverUrl.replace(/^https?:\/\//, '');
+
+    try {
+      const r = await fetch(
+        `${serverUrl}/api/validate?user_token=${encodeURIComponent(token)}`,
+        { headers: { 'ngrok-skip-browser-warning': 'true' }, signal: AbortSignal.timeout(6000) }
+      );
+      const d = r.ok ? await r.json() : null;
+
+      if (!r.ok || !d?.valid) {
+        _setLoginError(d?.error || 'Token not recognised. Contact admin.');
+        btn.disabled    = false;
+        btn.textContent = 'Sign In';
+        return;
+      }
+
+      // ── Success ──
+      const sess = { token, name: d.name || token, role: d.role || '', serverUrl };
+      _saveSession(token, sess.name, sess.role, serverUrl);
+      _applySession(sess);
+      _dismissLogin();
+
+      chrome.storage.sync.set({ serverUrl, userToken: token }, () => {
+        BASE       = serverUrl;
+        USER_TOKEN = token;
+        poll();
+        loadSettingsForm();
+        updatePortalCard();
+        loadUserIdentity(token);
+      });
+
+    } catch (e) {
+      _setLoginError('Cannot reach server. Check Settings → Server URL.');
+      btn.disabled    = false;
+      btn.textContent = 'Sign In';
+    }
+  });
+}
+
+/** Logout: clear session, show login. */
+function doLogout() {
+  _clearSession();
+  USER_TOKEN = '';
+  // Clear chrome.storage token too
+  chrome.storage.sync.set({ userToken: '' });
+  // Reset header
+  document.getElementById('headerUser').classList.remove('visible');
+  _showLogin();
+  // Clear token input in login form for privacy
+  document.getElementById('loginToken').value = '';
+}
+
+// ── Boot: session check runs before anything else ────────────────────────────
+// This is synchronous localStorage read — completes in <1ms, no UI freeze.
+;(function bootSessionCheck() {
+  const sess = _loadSession();
+  if (sess) {
+    // Valid session: apply immediately (instant, no network)
+    _applySession(sess);
+    // Dismiss login screen immediately
+    document.getElementById('loginScreen').style.display = 'none';
+    // Background validation (non-blocking — dashboard already shown)
+    _validateSessionBackground(sess);
+  } else {
+    // No valid session: show login, keep main UI behind it
+    // Pre-fill server URL from chrome.storage if available
+    // Show server URL hint on login screen
+    chrome.storage.sync.get({ serverUrl: '' }, (d) => {
+      const hintEl = document.getElementById('loginServerUrl');
+      if (hintEl) hintEl.textContent = d.serverUrl
+        ? d.serverUrl.replace(/^https?:\/\//, '')
+        : 'not configured — set in Settings';
+    });
+  }
+})();
+
+// ── Logout button ────────────────────────────────────────────────────────────
+document.getElementById('btnLogout').addEventListener('click', () => {
+  if (confirm('Sign out of Drishi?')) doLogout();
+});
+
+// ── Enter key on login form ──────────────────────────────────────────────────
+document.getElementById('loginToken').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END SESSION MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── Ngrok bypass header (required when tunnelled via ngrok) ───────────────────
 const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
@@ -11,16 +257,6 @@ function apiFetch(url, opts = {}) {
     headers: { ...NGROK_HEADERS, ...(opts.headers || {}) },
   });
 }
-
-let SECRET_CODE  = '';
-let USER_TOKEN   = '';   // per-user token set in Settings
-let isOnline     = false;
-let lastHash     = '';
-let pollTimer    = null;
-let serverOnline = false;
-let typingState  = 'idle';
-let _activeTab   = 'monitor';
-let _lastAnswers  = [];
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
 function switchTab(tab) {
@@ -40,18 +276,29 @@ function switchTab(tab) {
 }
 
 // ── Bootstrap — load settings ──────────────────────────────
+// Session check already ran (bootSessionCheck above). Only need chrome.storage
+// for SECRET_CODE and to fill settings form. BASE / USER_TOKEN already set
+// from session if authenticated.
 chrome.storage.sync.get({
-  serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev',
+  serverUrl: '',
   secretCode: '',
   userToken: '',
 }, (data) => {
-  BASE        = (data.serverUrl || 'https://particulate-arely-unrenovative.ngrok-free.dev').replace(/\/$/, '');
+  // If session was already applied, respect session values for BASE/USER_TOKEN.
+  // Otherwise fall through to chrome.storage values (settings-tab saves).
+  const sess = _loadSession();
+  if (!sess) {
+    BASE       = (data.serverUrl || '').replace(/\/$/, '');
+    USER_TOKEN = data.userToken || '';
+  }
   SECRET_CODE = data.secretCode || '';
-  USER_TOKEN  = data.userToken  || '';
-  poll(); // Initial poll on open
-  loadSettingsForm();
-  updatePortalCard();
-  if (USER_TOKEN) loadUserIdentity(USER_TOKEN);
+  // Only run dashboard boot if authenticated
+  if (USER_TOKEN || sess) {
+    poll();
+    loadSettingsForm();
+    updatePortalCard();
+    if (USER_TOKEN) loadUserIdentity(USER_TOKEN);
+  }
 });
 
 // Listen for messages from background
@@ -590,6 +837,14 @@ document.getElementById('settingsSave').addEventListener('click', () => {
     poll();
     updatePortalCard();
     if (token) loadUserIdentity(token);
+    // Keep session in sync when settings change
+    const sess = _loadSession();
+    if (sess && token) {
+      _saveSession(token, sess.name, sess.role, url);
+      const nameEl = document.getElementById('headerUserName');
+      if (nameEl && sess.name) nameEl.textContent = sess.name;
+      document.getElementById('headerUser').classList.add('visible');
+    }
     setTimeout(() => setSettingsMsg('', ''), 3000);
   });
 });
@@ -892,6 +1147,6 @@ function setSettingsMsg(text, color) {
           }
         }
       } catch (e) { }
-    }, 5000);
+    }, 10000); // was 5000 — reduce background health pings
   });
 })();

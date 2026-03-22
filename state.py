@@ -503,86 +503,74 @@ def get_current_metrics() -> Optional[PerformanceMetrics]:
 
 def mark_audio_start():
     """Mark audio capture start time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.audio_capture_start = time.time()
+    if _current_metrics:  # no lock: single writer per question (GIL-safe float assign)
+        _current_metrics.audio_capture_start = time.time()
 
 
 def mark_audio_end():
     """Mark audio capture end time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.audio_capture_end = time.time()
+    if _current_metrics:
+        _current_metrics.audio_capture_end = time.time()
 
 
 def mark_silence_detected():
     """Mark silence detection time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.silence_detected = time.time()
+    if _current_metrics:
+        _current_metrics.silence_detected = time.time()
 
 
 def mark_transcription_start():
     """Mark transcription start time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.transcription_start = time.time()
+    if _current_metrics:
+        _current_metrics.transcription_start = time.time()
 
 
 def mark_transcription_end():
     """Mark transcription end time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.transcription_end = time.time()
+    if _current_metrics:
+        _current_metrics.transcription_end = time.time()
 
 
 def mark_llm_start():
     """Mark LLM generation start time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.llm_start = time.time()
+    if _current_metrics:
+        _current_metrics.llm_start = time.time()
 
 
 def mark_llm_end():
     """Mark LLM generation end time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.llm_end = time.time()
+    if _current_metrics:
+        _current_metrics.llm_end = time.time()
 
 
 def mark_validation_start():
     """Mark validation start time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.validation_start = time.time()
+    if _current_metrics:
+        _current_metrics.validation_start = time.time()
 
 
 def mark_validation_end():
     """Mark validation end time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.validation_end = time.time()
+    if _current_metrics:
+        _current_metrics.validation_end = time.time()
 
 
 def mark_ui_start():
     """Mark UI render start time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.ui_start = time.time()
+    if _current_metrics:
+        _current_metrics.ui_start = time.time()
 
 
 def mark_ui_end():
     """Mark UI render end time."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.ui_end = time.time()
+    if _current_metrics:
+        _current_metrics.ui_end = time.time()
 
 
 def mark_ui_update():
     """Mark UI update time (legacy - use mark_ui_start/mark_ui_end)."""
-    with _metrics_lock:
-        if _current_metrics:
-            _current_metrics.ui_start = time.time()
+    if _current_metrics:
+        _current_metrics.ui_start = time.time()
 
 
 def finalize_metrics() -> Optional[dict]:

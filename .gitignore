@@ -34,3 +34,8 @@ get-pip.py
 # OS
 .DS_Store
 Thumbs.db
+
+# React UI
+react_ui/node_modules/
+react_ui/dist/
+web/static/react/

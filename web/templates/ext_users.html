@@ -155,9 +155,9 @@ tbody tr:hover { background: var(--bg); }
             <option value="general">General</option>
           </select>
         </div>
-        <div class="form-field" style="max-width:90px">
-          <label>DB User ID</label>
-          <input id="fDbUserId" type="number" value="1" min="1" />
+        <div class="form-field" style="max-width:160px">
+          <label>Linked Profile</label>
+          <select id="fDbUserId"><option value="1">Loading…</option></select>
         </div>
         <div style="padding-bottom:1px">
           <button class="btn btn-primary" onclick="createUser()">+ Add User</button>
@@ -231,7 +231,18 @@ const SPEED_STYLES = {
 };
 
 /* ── Load users ── */
+let _profileMap = {};  // id → name, loaded once
+
 async function loadUsers() {
+  // Keep profile map fresh
+  try {
+    const r = await fetch('/api/users');
+    if (r.ok) {
+      const users = await r.json();
+      _profileMap = {};
+      users.forEach(u => { _profileMap[u.id] = u.name; });
+    }
+  } catch(_) {}
   try {
     const r = await apiFetch(`${BASE}/api/ext_users`);
     if (!r.ok) {
@@ -264,7 +275,10 @@ function renderUsers(users) {
         <strong>${esc(u.name||'—')}</strong>
         <small>${esc(u.token)}</small>
       </td>
-      <td style="color:var(--text-medium);font-size:12px">${esc(u.role||'—')}</td>
+      <td style="color:var(--text-medium);font-size:12px">
+        ${esc(u.role||'—')}
+        ${u.db_user_id ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">👤 ${esc(_profileMap[u.db_user_id] || 'User #'+u.db_user_id)}</div>` : ''}
+      </td>
       <td>
         ${u.active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-inactive">Disabled</span>'}
         ${u.connected ? ' <span class="badge badge-live">● Live</span>' : ''}
@@ -418,5 +432,18 @@ function esc(s) {
 
 loadUsers();
 setInterval(loadUsers, 10000);
+
+// Populate Linked Profile dropdown from /api/users
+(async function loadProfileDropdown() {
+  try {
+    const r = await fetch('/api/users');
+    if (!r.ok) return;
+    const users = await r.json();
+    const sel = document.getElementById('fDbUserId');
+    sel.innerHTML = users.map(u =>
+      `<option value="${u.id}">${esc(u.name)} (${esc(u.role || 'no role')})</option>`
+    ).join('');
+  } catch (_) {}
+})();
 </script>
 {% endblock %}

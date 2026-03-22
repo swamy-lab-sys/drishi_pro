@@ -1,0 +1,80 @@
+/* ── Monitor page ───────────────────────────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 16px;
+  gap: 12px;
+}
+
+/* ── Status pill ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pillIdle {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--bg-card);
+}
+.pillIdle .dot {
+  background: var(--text-dim);
+}
+
+.pillListening {
+  color: var(--green-dark);
+  border-color: rgba(0,200,150,0.3);
+  background: var(--green-light);
+}
+.pillListening .dot {
+  background: var(--green);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.pillGenerating {
+  color: var(--blue);
+  border-color: rgba(59,130,246,0.3);
+  background: var(--blue-dim);
+}
+.pillGenerating .dot {
+  background: var(--blue);
+  animation: pulse-dot 0.8s ease-in-out infinite;
+}
+
+/* ── Feed ── */
+.feed {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ── Idle message ── */
+.idle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-family: var(--font-mono);
+}

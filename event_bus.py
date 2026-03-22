@@ -35,15 +35,24 @@ def unsubscribe(q: queue.Queue):
 
 def _push(event_type: str, data: dict):
     """Non-blocking push to all live subscriber queues."""
+    # Snapshot subscribers under lock, then push outside it.
+    # This keeps the lock duration O(1) instead of O(subscribers × queue_op).
     with _lock:
-        dead = []
-        for q in _subscribers:
-            try:
-                q.put_nowait({"t": event_type, "d": data})
-            except queue.Full:
-                dead.append(q)   # Slow/disconnected client
-        for q in dead:
-            _subscribers.remove(q)
+        subs = list(_subscribers)
+    event = {"t": event_type, "d": data}
+    dead = []
+    for q in subs:
+        try:
+            q.put_nowait(event)
+        except queue.Full:
+            dead.append(q)
+    if dead:
+        with _lock:
+            for q in dead:
+                try:
+                    _subscribers.remove(q)
+                except ValueError:
+                    pass
 
 
 def push_chunk(question: str, chunk: str):
@@ -74,3 +83,13 @@ def push_question_started(question: str):
 def push_status(msg: str):
     """Push a status message."""
     _push("status", {"msg": msg})
+
+
+def push_stt_event(backend: str, ms: float, phase: str):
+    """Push STT pipeline phase event.
+    phase: 'start' — STT is running
+           'done'  — STT finished successfully (ms = latency)
+           'silent'— STT returned empty (no speech detected)
+           'error' — STT failed / fell back
+    """
+    _push("stt", {"backend": backend, "ms": round(ms), "phase": phase})

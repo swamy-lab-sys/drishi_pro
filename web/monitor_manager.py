@@ -265,6 +265,16 @@ class MonitorManager:
             s.logs.append(log_entry)
         return log_entry
 
+    def broadcast_to_all_agents(self, payload: dict) -> None:
+        """Send a message to every connected agent across all sessions."""
+        with self._lock:
+            sessions_copy = list(self._sessions.items())
+        for _, s in sessions_copy:
+            with s.lock:
+                aws = s.agent_ws
+            if aws:
+                _send_json(aws, payload)
+
     def agent_connected(self, session_id: str) -> bool:
         s = self._get_session(session_id)
         with s.lock:

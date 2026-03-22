@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, render_template
+import os
+from pathlib import Path
+
+from flask import Blueprint, render_template, send_from_directory
 
 ui_bp = Blueprint("ui", __name__)
+
+# Path to the Vite production build (npm run build → web/static/react/)
+_REACT_BUILD = Path(__file__).parents[3] / "web" / "static" / "react"
+
+
+def _react_index():
+    """Serve the React SPA index.html."""
+    return send_from_directory(str(_REACT_BUILD), "index.html")
 
 
 @ui_bp.route("/")
@@ -87,3 +98,54 @@ def user_portal(token):
 def admin_docs():
     """Admin-only documentation page — full project reference."""
     return render_template("admin_docs.html")
+
+
+# ── React SPA routes (served from web/static/react/ build) ──────────────────
+# Old Flask routes remain unchanged; React lives on /react/* paths.
+# In dev mode these are served by Vite (port 5173). In production they come here.
+
+@ui_bp.route("/react/")
+@ui_bp.route("/react")
+def react_dashboard():
+    """React main dashboard (SPA)."""
+    if not _REACT_BUILD.exists():
+        return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/monitor")
+def react_monitor():
+    """React monitor page (SPA) — same build, different route handled by React Router."""
+    if not _REACT_BUILD.exists():
+        return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/settings")
+def react_settings():
+    """React settings page (SPA)."""
+    if not _REACT_BUILD.exists():
+        return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/qa-manager")
+def react_qa_manager():
+    """React QA Manager page (SPA)."""
+    if not _REACT_BUILD.exists():
+        return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/ext-users")
+def react_ext_users():
+    """React Ext Users page (SPA)."""
+    if not _REACT_BUILD.exists():
+        return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/assets/<path:filename>")
+def react_assets(filename):
+    """Serve Vite build assets (JS/CSS chunks)."""
+    return send_from_directory(str(_REACT_BUILD / "assets"), filename)

@@ -11,6 +11,11 @@ let SECRET_CODE = '';
 let audioOffscreenCreated = false;
 let audioStreamActive = false;
 
+// ── Sarvam key cache (avoid repeated /api/stt_config fetches on quick restart)
+let _sarvamKeyCache    = null;
+let _sarvamKeyCacheAt  = 0;
+const SARVAM_KEY_TTL_MS = 60000; // 60 seconds
+
 // ── Ngrok bypass ─────────────────────────────────────────────────────
 const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
 function apiFetch(url, opts = {}) {
@@ -776,36 +781,45 @@ async function handleAudioStart(sendResponse, userToken = '') {
       captureTabUrl:   targetTab.url  || '',
     });
 
-    // Create offscreen document if not already open — do this BEFORE getMediaStreamId
-    // so the document is ready and the streamId token doesn't expire while we wait.
-    if (!audioOffscreenCreated) {
-      await chrome.offscreen.createDocument({
-        url: chrome.runtime.getURL('audio_offscreen.html'),
-        reasons: ['USER_MEDIA'],
-        justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio endpoint',
-      });
-      audioOffscreenCreated = true;
-    }
-
     // Load current server settings
-    const stored = await chrome.storage.sync.get({ serverUrl: SERVER_URL, secretCode: SECRET_CODE });
+    const stored     = await chrome.storage.sync.get({ serverUrl: SERVER_URL, secretCode: SECRET_CODE });
     const serverUrl  = stored.serverUrl  || SERVER_URL;
     const secretCode = stored.secretCode || SECRET_CODE;
 
-    // Fetch STT config (Sarvam key) from server .env — never hardcoded in extension
-    let sarvamKey = '';
-    try {
-      const tokenParam = secretCode ? `?token=${encodeURIComponent(secretCode)}&ngrok-skip-browser-warning=1`
-                                    : '?ngrok-skip-browser-warning=1';
-      const cfgResp = await fetch(`${serverUrl}/api/stt_config${tokenParam}`,
-        { signal: AbortSignal.timeout(5000) });
-      if (cfgResp.ok) {
-        const cfg = await cfgResp.json();
-        sarvamKey = cfg.sarvam_key || '';
+    // Parallelize: create offscreen doc AND fetch stt_config simultaneously
+    const offscreenPromise = audioOffscreenCreated
+      ? Promise.resolve()
+      : chrome.offscreen.createDocument({
+          url: chrome.runtime.getURL('audio_offscreen.html'),
+          reasons: ['USER_MEDIA'],
+          justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio endpoint',
+        }).then(() => { audioOffscreenCreated = true; });
+
+    // Use cached Sarvam key if fresh (< 60s), otherwise fetch
+    const sarvamKeyPromise = (async () => {
+      const now = Date.now();
+      if (_sarvamKeyCache !== null && now - _sarvamKeyCacheAt < SARVAM_KEY_TTL_MS) {
+        return _sarvamKeyCache;
       }
-    } catch (e) {
-      console.warn('[AudioStream] Could not fetch stt_config:', e.message);
-    }
+      try {
+        const tokenParam = secretCode
+          ? `?token=${encodeURIComponent(secretCode)}&ngrok-skip-browser-warning=1`
+          : '?ngrok-skip-browser-warning=1';
+        const cfgResp = await fetch(`${serverUrl}/api/stt_config${tokenParam}`,
+          { signal: AbortSignal.timeout(3000) });  // was 5000
+        if (cfgResp.ok) {
+          const cfg = await cfgResp.json();
+          _sarvamKeyCache   = cfg.sarvam_key || '';
+          _sarvamKeyCacheAt = Date.now();
+          return _sarvamKeyCache;
+        }
+      } catch (e) {
+        console.warn('[AudioStream] Could not fetch stt_config:', e.message);
+      }
+      return _sarvamKeyCache || '';
+    })();
+
+    const [, sarvamKey] = await Promise.all([offscreenPromise, sarvamKeyPromise]);
     console.log(`[AudioStream] Starting — Sarvam STT: ${sarvamKey ? 'ON (client-side)' : 'OFF (raw PCM)'}`);
 
     // Get streamId as late as possible (token expires ~2s) — right before sending to offscreen doc

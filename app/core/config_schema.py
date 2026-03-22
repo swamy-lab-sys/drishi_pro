@@ -8,6 +8,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
+
+# Load .env from project root (so `python3 main.py` works without run.sh)
+_env_file = Path(__file__).parent.parent.parent / '.env'
+if _env_file.exists():
+    with open(_env_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _, _v = _line.partition('=')
+                if _k.strip() not in os.environ:  # don't override shell exports
+                    os.environ[_k.strip()] = _v.strip()
 
 
 def _get_bool(name: str, default: bool) -> bool:

@@ -3,17 +3,23 @@
 // Mode B (no sarvamKey):   stream raw PCM-16 binary to /ws/audio (original behavior)
 //
 // Uses AudioWorklet (no deprecation warnings) with ScriptProcessorNode fallback.
+// Performance tuned: 64ms chunks, 1.0s silence, en-IN Sarvam (no auto-detect), abort stale requests.
 
-const SAMPLE_RATE = 16000;
-const BUFFER_SIZE = 4096; // 256ms per callback at 16kHz
+const SAMPLE_RATE       = 16000;
+const BUFFER_SIZE       = 1024; // 64ms per callback at 16kHz (was 256ms/4096)
 const WS_PING_INTERVAL_MS = 15000; // keepalive ping to prevent 1005 disconnects
+const WS_CONNECT_TIMEOUT  = 4000;  // ms (was 8000)
 
-let audioCtx     = null;
-let wsConn       = null;
-let activeStream = null;
-let processor    = null;   // AudioWorkletNode or ScriptProcessorNode
-let audioElement = null;   // passthrough: keeps tab audio audible while capturing
-let wsPingTimer  = null;   // keepalive interval
+let audioCtx          = null;
+let wsConn            = null;
+let wsServerUrl       = null;  // stored for reconnect
+let wsUserToken       = null;
+let wsSecretCode      = null;
+let activeStream      = null;
+let processor         = null;  // AudioWorkletNode or ScriptProcessorNode
+let audioElement      = null;  // passthrough: keeps tab audio audible while capturing
+let wsPingTimer       = null;  // keepalive interval
+let sarvamAbortCtrl   = null;  // AbortController for in-flight Sarvam request
 
 // ── Message handler ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -70,19 +76,21 @@ function float32ToPcm16(float32) {
 }
 
 // ── Sarvam AI transcription ───────────────────────────────────────────────────
-async function transcribeWithSarvam(int16Samples, sarvamKey) {
+async function transcribeWithSarvam(int16Samples, sarvamKey, signal) {
   const wavBuffer = encodePcm16ToWav(int16Samples, SAMPLE_RATE);
   const blob = new Blob([wavBuffer], { type: 'audio/wav' });
   const formData = new FormData();
   formData.append('file', blob, 'audio.wav');
   formData.append('model', 'saarika:v2.5');
-  formData.append('language_code', 'unknown');
+  formData.append('language_code', 'en-IN');  // fixed → skips auto-detect (~400ms saved)
   formData.append('with_timestamps', 'false');
 
+  // Use passed-in AbortController so caller can cancel a stale in-flight request
   const resp = await fetch('https://api.sarvam.ai/speech-to-text', {
     method: 'POST',
     headers: { 'api-subscription-key': sarvamKey },
     body: formData,
+    signal: signal || null,
   });
 
   if (!resp.ok) {
@@ -96,6 +104,10 @@ async function transcribeWithSarvam(int16Samples, sarvamKey) {
 // ── Start capture ─────────────────────────────────────────────────────────────
 async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToken = '') {
   stopCapture();
+  // Store for WS reconnect
+  wsServerUrl  = serverUrl;
+  wsSecretCode = secretCode;
+  wsUserToken  = userToken;
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
@@ -116,7 +128,7 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   wsConn.binaryType = 'arraybuffer';
 
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('WebSocket connection timed out (8s)')), 8000);
+    const timer = setTimeout(() => reject(new Error('WebSocket connection timed out (4s)')), WS_CONNECT_TIMEOUT);
     wsConn.onopen = () => {
       clearTimeout(timer);
       console.log('[Drishi] WS connected →', wsUrl);
@@ -140,8 +152,14 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
     console.log(`[Drishi] WS closed (${evt.code})`);
     clearInterval(wsPingTimer);
     wsPingTimer = null;
-    stopCapture();
-    chrome.runtime.sendMessage({ type: 'audio_status', status: 'stopped', reason: 'ws_closed' }).catch(() => {});
+    // Auto-reconnect on unexpected close (not 1000 = normal stop)
+    if (evt.code !== 1000 && activeStream && wsServerUrl) {
+      console.log('[Drishi] WS dropped unexpectedly — reconnecting in 1.5s...');
+      setTimeout(() => reconnectWs(), 1500);
+    } else {
+      stopCapture();
+      chrome.runtime.sendMessage({ type: 'audio_status', status: 'stopped', reason: 'ws_closed' }).catch(() => {});
+    }
   };
 
   // ── Audio context ───────────────────────────────────────────────────────────
@@ -164,8 +182,8 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
 
   // ── Mode A state (Sarvam client-side STT) ──────────────────────────────────
   const SILENCE_THRESHOLD  = 0.008;
-  const SILENCE_CHUNKS_END = 6;       // 6 × 256ms ≈ 1.5s of silence → flush
-  const MIN_SPEECH_SAMPLES = 12000;   // 0.75s minimum
+  const SILENCE_CHUNKS_END = 16;      // 16 × 64ms = 1.0s of silence → flush (was 6×256ms=1.5s)
+  const MIN_SPEECH_SAMPLES = 8000;    // 0.5s minimum (was 0.75s/12000)
   const MAX_BUFFER_SAMPLES = 96000;   // 6s safety cap
 
   let pcmBuffer     = [];
@@ -175,10 +193,17 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   let transcribing  = false;
 
   async function flushBuffer() {
-    if (transcribing || bufferSamples < MIN_SPEECH_SAMPLES) {
+    if (bufferSamples < MIN_SPEECH_SAMPLES) {
       pcmBuffer = []; bufferSamples = 0; inSpeech = false; silenceCount = 0;
       return;
     }
+    // Cancel any stale in-flight request before starting new one
+    if (sarvamAbortCtrl) {
+      sarvamAbortCtrl.abort();
+    }
+    sarvamAbortCtrl = new AbortController();
+    const currentAbort = sarvamAbortCtrl;
+
     transcribing = true;
     const total = new Int16Array(bufferSamples);
     let offset = 0;
@@ -186,15 +211,17 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
     pcmBuffer = []; bufferSamples = 0; inSpeech = false; silenceCount = 0;
     try {
       console.log(`[Drishi] Sarvam STT: ${total.length} samples (${(total.length / SAMPLE_RATE).toFixed(1)}s)`);
-      const text = await transcribeWithSarvam(total, sarvamKey);
+      const text = await transcribeWithSarvam(total, sarvamKey, currentAbort.signal);
+      if (currentAbort.signal.aborted) return; // newer segment superseded this one
       console.log(`[Drishi] Sarvam result: "${text}"`);
       if (text && text.length >= 4 && wsConn && wsConn.readyState === WebSocket.OPEN) {
         wsConn.send(JSON.stringify({ type: 'text_question', text }));
       }
     } catch (e) {
-      console.error('[Drishi] Sarvam error:', e.message);
+      if (e.name !== 'AbortError') console.error('[Drishi] Sarvam error:', e.message);
     } finally {
       transcribing = false;
+      if (sarvamAbortCtrl === currentAbort) sarvamAbortCtrl = null;
     }
   }
 
@@ -257,12 +284,52 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   console.log(`[Drishi] Capturing tab audio at ${SAMPLE_RATE / 1000}kHz | mode=${sarvamKey ? 'Sarvam STT' : 'raw PCM'} | engine=${useWorklet ? 'AudioWorklet' : 'ScriptProcessorNode'}`);
 }
 
+// ── WS reconnect (called when WS drops but stream is still active) ────────────
+async function reconnectWs() {
+  if (!activeStream || !wsServerUrl) return;
+  try {
+    const base   = wsServerUrl.replace(/\/$/, '');
+    const wsBase = base.replace(/^https/, 'wss').replace(/^http/, 'ws');
+    const params = new URLSearchParams({ 'ngrok-skip-browser-warning': '1' });
+    if (wsSecretCode) params.set('token', wsSecretCode);
+    if (wsUserToken)  params.set('user_token', wsUserToken);
+    const wsUrl = `${wsBase}/ws/audio?${params.toString()}`;
+
+    wsConn = new WebSocket(wsUrl);
+    wsConn.binaryType = 'arraybuffer';
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('reconnect timeout')), WS_CONNECT_TIMEOUT);
+      wsConn.onopen  = () => { clearTimeout(t); resolve(); };
+      wsConn.onerror = () => { clearTimeout(t); reject(new Error('reconnect failed')); };
+    });
+    // Re-attach close handler
+    wsConn.onclose = (evt) => {
+      clearInterval(wsPingTimer); wsPingTimer = null;
+      if (evt.code !== 1000 && activeStream && wsServerUrl) {
+        setTimeout(() => reconnectWs(), 1500);
+      }
+    };
+    // Restart ping
+    wsPingTimer = setInterval(() => {
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+        wsConn.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, WS_PING_INTERVAL_MS);
+    console.log('[Drishi] WS reconnected →', wsUrl);
+  } catch (e) {
+    console.error('[Drishi] WS reconnect failed:', e.message);
+    chrome.runtime.sendMessage({ type: 'audio_status', status: 'stopped', reason: 'reconnect_failed' }).catch(() => {});
+  }
+}
+
 // ── Stop capture ──────────────────────────────────────────────────────────────
 function stopCapture() {
+  if (sarvamAbortCtrl) { sarvamAbortCtrl.abort(); sarvamAbortCtrl = null; }
   if (wsPingTimer)  { clearInterval(wsPingTimer); wsPingTimer = null; }
   if (audioElement) { try { audioElement.pause(); audioElement.srcObject = null; } catch (_) {} audioElement = null; }
   if (processor)    { try { processor.disconnect(); } catch (_) {} processor    = null; }
   if (audioCtx)     { try { audioCtx.close();       } catch (_) {} audioCtx     = null; }
   if (wsConn)       { try { wsConn.close(1000, 'stop'); } catch (_) {} wsConn   = null; }
   if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+  wsServerUrl = null; wsSecretCode = null; wsUserToken = null;
 }

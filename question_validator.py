@@ -1300,6 +1300,12 @@ YOUTUBE_PATTERNS = [
     r"(python|programming|coding) (tutorial|course|lesson|series|bootcamp)",
     r"(beginner|intermediate|advanced) (guide|tutorial|course)",
     r"(learn|learning|master|mastering) (python|programming|coding|django)",
+    # Non-IT content from YouTube that Sarvam mishears as questions
+    r"\b(arsenic|mercury|sulfur|nitrogen|chlorine)\s+(reaction|compound|element|oxide)\b",
+    r"\b(photosynthesis|osmosis|mitosis|meiosis|chromosome)\b",
+    r"\b(oxidation|combustion|electrolysis|valence|periodic table)\b",
+    r"\bconcept of (pepper|salt|sugar|spice|garlic|onion)\b",
+    r"\b(train|bus|flight)\s+(at\s+\d|station|ticket|schedule)\b",
 ]
 
 COMPILED_YOUTUBE = [re.compile(p, re.IGNORECASE) for p in YOUTUBE_PATTERNS]
@@ -1464,6 +1470,8 @@ TECH_TERMS = {
     "disk io", "block device", "storage",
     # Networking
     "tcp", "udp", "dns", "dhcp", "nat", "vlan", "vxlan",
+    "osi", "osi model", "osi layer", "network layer", "transport layer",
+    "application layer", "data link", "physical layer", "presentation layer",
     "bridge", "veth", "tap interface",
     # NFS/SAN/NAS
     "nfs", "san", "nas", "cifs",
@@ -1711,7 +1719,7 @@ TECH_TERMS = {
     "inner join", "left join", "right join", "full outer join", "cross join", "self join",
     "where", "group by", "having", "order by", "limit", "offset",
     "subquery", "correlated subquery", "cte", "with clause", "common table expression",
-    "window function", "over", "partition by", "row_number", "rank", "dense_rank",
+    "window function", "over clause", "partition by", "row_number", "rank", "dense_rank",
     "lag", "lead", "first_value", "last_value",
     "aggregate function", "count", "sum", "avg", "min", "max",
     "index", "b-tree index", "hash index", "gin index", "gist index", "brin index",
@@ -1726,7 +1734,7 @@ TECH_TERMS = {
     "deadlock", "lock", "row lock", "table lock",
     "mvcc", "multiversion concurrency control",
     "vacuum", "autovacuum", "analyze", "pg_stat",
-    "explain", "explain analyze", "execution plan", "query plan",
+    "explain analyze", "explain plan", "explain query", "execution plan", "query plan",
     "query optimization", "query planner",
     "pg_stat_activity", "pg_locks", "pg_indexes",
     "connection pooling", "pgbouncer",
@@ -1854,6 +1862,25 @@ TECH_TERMS = {
     # Unix performance
     "perf command", "strace", "ltrace",
     "dstat",
+
+    # ── Telecom / IMS / SIP / SS7 / Diameter ─────────────────────────────────
+    "ims", "sip", "ss7", "diameter", "volte", "voip",
+    "isup", "sccp", "tcap", "map", "cap", "mtp",
+    "hss", "pcrf", "p-cscf", "s-cscf", "i-cscf", "mgcf",
+    "sdp", "rtp", "rtcp", "srtp", "sips",
+    "sip proxy", "sip registrar", "sip trunk", "sip ua",
+    "sip invite", "sip ack", "sip bye", "sip register",
+    "sip options", "sip message", "sip protocol", "sip flow",
+    "call flow", "call trace", "signaling", "telecom",
+    "nfv", "vnf", "sdn", "nfvi", "mano",
+    "oam", "bss", "oss", "cdr", "ngn",
+    "kpi", "nms", "ems", "alarms",
+    "packet capture", "pcap", "wireshark",
+    "5g", "4g", "lte", "volte",
+    "sctp", "ipsec", "stun", "turn", "ice",
+    "nat traversal", "codec", "g.711", "g.729", "amr",
+    "registration", "deregistration",
+    "charging", "billing", "mediation",
 }
 
 # Precompute single-word vs multi-word sets for efficient word-boundary matching
@@ -1861,6 +1888,89 @@ TECH_TERMS = {
 # Multi-word terms still use substring search
 TECH_TERMS_SINGLE = frozenset(t for t in TECH_TERMS if ' ' not in t)
 TECH_TERMS_MULTI = [t for t in TECH_TERMS if ' ' in t]
+
+# Words that make a question plausibly interview-relevant (IT or HR context).
+# Used to reject Sarvam STT garbage like "Explain the concept of pebble as a crimson."
+# that has a valid starter but zero recognizable content.
+_IT_ADJACENT = frozenset({
+    # Generic IT nouns
+    'auto', 'service', 'server', 'system', 'network', 'application',
+    'app', 'software', 'hardware', 'protocol', 'request', 'response',
+    'data', 'database', 'storage', 'compute', 'virtual', 'instance',
+    'deploy', 'deployment', 'build', 'release', 'version', 'update',
+    'security', 'access', 'permission', 'role', 'user', 'admin',
+    'log', 'logs', 'error', 'exception', 'debug', 'monitor',
+    'performance', 'latency', 'throughput', 'capacity', 'load',
+    'backup', 'restore', 'recovery', 'failover', 'redundancy',
+    'sync', 'async', 'concurrent', 'parallel', 'distributed',
+    'api', 'endpoint', 'webhook', 'integration', 'interface',
+    'code', 'program', 'programming', 'language', 'framework',
+    'library', 'package', 'dependency', 'module', 'class',
+    'object', 'function', 'method', 'variable', 'parameter',
+    'algorithm', 'structure', 'pattern', 'design',
+    'file', 'directory', 'path', 'command', 'terminal',
+    'port', 'socket', 'connection', 'ip', 'cpu', 'memory',
+    'disk', 'ram', 'cache', 'buffer', 'type', 'types',
+    # Python keywords — must be IT-adjacent so "yield keyword" questions pass
+    'keyword', 'keywords', 'purpose', 'use', 'usage', 'importance',
+    'yield', 'assert', 'nonlocal', 'global', 'raise', 'finally',
+    'del', 'pass', 'break', 'continue', 'with', 'elif', 'lambda',
+    'scope', 'closure',
+    # Bash special variables (word form, before STT correction)
+    'dollar', 'hash', 'bash', 'shell', 'script',
+    'argument', 'arguments', 'parameter', 'exit',
+    'shebang', 'heredoc', 'subshell', 'redirect',
+    'stdin', 'stdout', 'stderr', 'descriptor',
+    # Linux / production
+    'permission', 'daemon', 'kernel', 'signal', 'process',
+    'swap', 'inode', 'mount', 'runlevel', 'boot',
+    'cgroup', 'namespace', 'pid', 'thread', 'scheduling', 'priority',
+    # DevOps / SRE / Kubernetes
+    'pod', 'node', 'cluster', 'replica', 'probe',
+    'secret', 'volume', 'ingress',
+    'pipeline', 'artifact', 'registry', 'chart', 'operator',
+    'budget', 'availability', 'reliability', 'toil',
+    'tracing', 'span', 'metric', 'alert', 'saturation',
+    # Java
+    'heap', 'collector', 'classloader', 'bytecode',
+    'generic', 'annotation', 'reflection', 'serialization',
+    'iterator', 'comparable', 'functional', 'stream',
+    'singleton', 'factory', 'builder', 'observer',
+    # JavaScript / HTML / CSS
+    'dom', 'event', 'callback', 'promise', 'prototype',
+    'hoisting', 'flexbox', 'grid', 'viewport', 'responsive', 'animation',
+    'transition', 'transform', 'media', 'query', 'breakpoint',
+    'selector', 'specificity',
+    # SQL / DB
+    'join', 'index', 'transaction', 'isolation', 'constraint',
+    'normalization', 'replication', 'vacuum', 'partition',
+    'trigger', 'procedure', 'view', 'sequence', 'window',
+    # Django / Flask
+    'queryset', 'migration', 'middleware', 'blueprint',
+    'template', 'serializer', 'throttle',
+    'wsgi', 'gunicorn', 'jinja',
+    # Autosys / job scheduler
+    'autosys', 'jil', 'sendevent', 'autorep', 'hold', 'ice',
+    'scheduler', 'batch', 'job', 'delay', 'cancel', 'force',
+    'killjob', 'autostatd', 'wcc', 'control',
+    # Production / support / ITSM
+    'incident', 'outage', 'downtime', 'escalation', 'production',
+    'support', 'ticket', 'issue', 'resolution', 'impact',
+    'severity', 'triage', 'runbook', 'handover',
+    # HR / behavioral (so "Tell me about your work" still passes)
+    'yourself', 'experience', 'background', 'strengths', 'weaknesses',
+    'responsibility', 'responsibilities', 'challenge', 'achievement',
+    'career', 'work', 'team', 'project', 'company', 'organization',
+    'goal', 'skill', 'skills', 'strength', 'weakness',
+    'interview', 'hiring', 'position', 'candidate',
+    # Comparison / conceptual
+    'difference', 'comparison', 'advantage', 'disadvantage',
+    'benefit', 'drawback', 'tradeoff', 'approach', 'strategy',
+    'principle', 'feature', 'mechanism',
+    # Telecom
+    'call', 'signaling', 'registration', 'session', 'flow', 'trace',
+    'fault', 'alarm', 'monitoring', 'kpi', 'metrics',
+})
 
 
 def _has_tech_term(lower: str) -> bool:
@@ -2040,6 +2150,11 @@ IGNORE_PATTERNS = [
     r"^(i\s+don'?t\s+know|i\s+am\s+not\s+sure|not\s+sure\s+about)[\s\w.!?,]*$",
     # "Sit and suck" / STT garbage short sentences
     r"^[A-Z][a-z]+\s+(and|or)\s+[a-z]+\.$",   # "Sit and suck." — 3-word garbage
+    # ── Time / transport / daily-life sentences (YouTube narration bleed) ──
+    r"^it'?s?\s+time\s+to\s+(get|go|come|return|head|take|leave)\b",  # "It's time to get back..."
+    r"\btrain\s+(at\s+\d|station|ticket|back|seat)\b",   # "train at 2:15 / train station"
+    r"\b(take\s+a\s+seat|have\s+a\s+seat|get\s+back\s+to\s+the)\b",
+    r"^\d{1,2}:\d{2}\s*(am|pm|and|to|on)?\b",  # "2:15 and take..." time stamp noise
     # ── LeetCode / coding platform context narration ───────────────────────
     r"^(given\s+an?\s+(array|list|string|number|integer)|given\s+a\s+sorted)\b",  # BUT only if very short
     r"^(input|output)\s*[:：]\s*([\[\{'\"\d]|true|false|null|none)",  # "Input: [1,2,3]"
@@ -2268,12 +2383,21 @@ def validate_question(text: str) -> Tuple[bool, str, str]:
         'seasoning', 'recipe', 'cooking', 'baking', 'grilling', 'frying',
         'food', 'lunch', 'dinner', 'breakfast', 'meal', 'restaurant',
         'vegetable', 'fruit', 'spice', 'sauce', 'soup', 'salad',
+        'pepper', 'salt', 'sugar', 'butter', 'flour', 'onion', 'garlic',
         'weather', 'rain', 'snow', 'cloud9', 'sunshine', 'temperature',
         'sport', 'football', 'cricket', 'basketball', 'tennis',
         'movie', 'film', 'music', 'song', 'dance', 'fashion',
         'hairstyle', 'makeup', 'clothes', 'travel', 'vacation', 'holiday',
         'marriage', 'wedding', 'birthday', 'anniversary',
         'astrology', 'horoscope', 'meditation', 'yoga',
+        # Chemistry / biology / general science — unambiguous non-IT
+        'arsenic', 'mercury', 'sulfur', 'nitrogen', 'hydrogen', 'chlorine',
+        'photosynthesis', 'osmosis', 'mitosis', 'chromosome', 'anatomy',
+        'ecosystem', 'evolution', 'geology', 'geography', 'physics',
+        'friction', 'oxidation', 'combustion', 'periodic', 'valence',
+        # General non-professional context
+        'election', 'politics', 'church', 'temple', 'mosque',
+        'hospital', 'doctor', 'medicine', 'vaccine', 'disease',
     })
     # Only reject questions whose subject is clearly unrelated to any professional context
     # (pure noise like food recipes, weather, sports scores — never asked in interviews)
@@ -2282,14 +2406,26 @@ def validate_question(text: str) -> Tuple[bool, str, str]:
             'what', 'is', 'are', 'the', 'a', 'an', 'how', 'why', 'does',
             'do', 'explain', 'describe', 'define', 'tell', 'me', 'about',
             'in', 'python', 'linux', 'of', 'for', 'and', 'difference',
-            'between', 'give', 'example'
+            'between', 'give', 'example', 'concept'
         }
         _PURE_NOISE = frozenset({
             'seasoning', 'recipe', 'cooking', 'baking', 'grilling', 'frying',
             'weather', 'rain', 'snow', 'sunshine',
             'hairstyle', 'makeup', 'astrology', 'horoscope',
+            # Chemistry / biology — STT garbles tech audio into these
+            'arsenic', 'mercury', 'sulfur', 'chlorine', 'nitrogen', 'hydrogen',
+            'photosynthesis', 'osmosis', 'mitosis', 'chromosome',
+            'oxidation', 'combustion', 'periodic', 'valence', 'friction',
+            'anatomy', 'ecosystem', 'evolution', 'geology',
+            # Food extras
+            'pepper', 'salt', 'sugar', 'butter', 'flour', 'onion', 'garlic',
+            # General noise
+            'election', 'politics', 'church', 'temple', 'mosque',
         })
         if _subject_words & _PURE_NOISE:
+            return False, "", "non_it_question"
+        # Also reject if ALL subject words are in CLEARLY_NON_IT
+        if _subject_words and _subject_words <= _CLEARLY_NON_IT:
             return False, "", "non_it_question"
 
     if has_starter and has_tech:
@@ -2298,72 +2434,19 @@ def validate_question(text: str) -> Tuple[bool, str, str]:
         # Extra guard: if has ? but NO tech term AND NO IT-adjacent word → reject
         # Prevents "What is auto seasoning?" from passing after STT correction fails
         if not has_tech and not is_coding_question:
-            # Allow only if the question has a word that could plausibly be IT
-            _IT_ADJACENT = frozenset({
-                'auto', 'service', 'server', 'system', 'network', 'application',
-                'app', 'software', 'hardware', 'protocol', 'request', 'response',
-                'data', 'database', 'storage', 'compute', 'virtual', 'instance',
-                'deploy', 'deployment', 'build', 'release', 'version', 'update',
-                'security', 'access', 'permission', 'role', 'user', 'admin',
-                'log', 'logs', 'error', 'exception', 'debug', 'monitor',
-                'performance', 'latency', 'throughput', 'capacity', 'load',
-                'backup', 'restore', 'recovery', 'failover', 'redundancy',
-                'sync', 'async', 'concurrent', 'parallel', 'distributed',
-                'api', 'endpoint', 'webhook', 'integration', 'interface',
-                'code', 'program', 'programming', 'language', 'framework',
-                'library', 'package', 'dependency', 'module', 'class',
-                'object', 'function', 'method', 'variable', 'parameter',
-                'algorithm', 'structure', 'pattern', 'design',
-                'file', 'directory', 'path', 'command', 'terminal',
-                'port', 'socket', 'connection', 'protocol', 'ip',
-                'cpu', 'memory', 'disk', 'ram', 'cache', 'buffer',
-                # Python keywords — must be IT-adjacent so "yield keyword" questions pass
-                'yield', 'assert', 'nonlocal', 'global', 'raise', 'finally',
-                'keyword', 'keywords', 'purpose', 'use', 'usage', 'importance',
-                'del', 'pass', 'break', 'continue', 'with', 'elif', 'lambda',
-                # Bash special variables (word form, before STT correction)
-                'dollar', 'hash', 'bash', 'shell', 'script',
-                'argument', 'arguments', 'parameter', 'exit',
-                'shebang', 'heredoc', 'subshell', 'redirect',
-                'stdin', 'stdout', 'stderr', 'descriptor',
-                # Linux / production
-                'permission', 'daemon', 'kernel', 'signal', 'process',
-                'disk', 'memory', 'cpu', 'swap', 'inode', 'mount',
-                'runlevel', 'boot', 'cgroup', 'namespace', 'socket',
-                'pid', 'thread', 'scheduling', 'priority',
-                # DevOps / SRE / Kubernetes
-                'deployment', 'pod', 'node', 'cluster', 'replica',
-                'probe', 'secret', 'volume', 'ingress', 'namespace',
-                'pipeline', 'artifact', 'registry', 'chart', 'operator',
-                'budget', 'availability', 'reliability', 'toil',
-                'tracing', 'span', 'metric', 'alert', 'saturation',
-                # Java
-                'heap', 'collector', 'classloader', 'bytecode',
-                'generic', 'annotation', 'reflection', 'serialization',
-                'iterator', 'comparable', 'functional', 'stream',
-                'singleton', 'factory', 'builder', 'observer', 'pattern',
-                # JavaScript / HTML / CSS
-                'dom', 'event', 'callback', 'promise', 'prototype',
-                'hoisting', 'closure', 'scope', 'selector', 'specificity',
-                'flexbox', 'grid', 'viewport', 'responsive', 'animation',
-                'transition', 'transform', 'media', 'query', 'breakpoint',
-                # SQL / DB
-                'join', 'index', 'transaction', 'isolation', 'constraint',
-                'normalization', 'replication', 'vacuum', 'partition',
-                'trigger', 'procedure', 'view', 'sequence', 'window',
-                # Django / Flask
-                'queryset', 'migration', 'signal', 'middleware', 'blueprint',
-                'template', 'serializer', 'permission', 'throttle',
-                'wsgi', 'gunicorn', 'jinja',
-                # Autosys / job scheduler
-                'autosys', 'jil', 'sendevent', 'autorep', 'box', 'hold', 'ice',
-                'scheduler', 'batch', 'job', 'delay', 'cancel', 'force',
-                'killjob', 'autostatd', 'wcc', 'control',
-            })
+            # Use module-level _IT_ADJACENT set (defined above TECH_TERMS_SINGLE).
+            _words_set = {w.rstrip("?.,!").lower() for w in words}
+            if not (_words_set & _IT_ADJACENT):
+                return False, "", "non_it_question"
             # All questions with a question mark and 3+ words pass through to LLM.
             # HR/general interview questions (strengths, weaknesses, experience) are valid.
     elif has_starter and len(words) >= 2 and not has_non_interview:
-        pass
+        # Guard: reject Sarvam STT garbage that has a starter but zero IT/HR content.
+        # e.g. "Explain the concept of pebble as a crimson." → no recognizable word.
+        if not has_tech and not is_coding_question:
+            _words_set = {w.rstrip("?.,!").lower() for w in words}
+            if not (_words_set & _IT_ADJACENT):
+                return False, "", "non_it_question"
     elif has_tech and len(words) >= 4:          # lowered from 6 → catch short tech Qs
         pass
     elif has_comparison and len(words) >= 3:    # "Spot vs on-demand vs reserved"

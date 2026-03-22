@@ -116,6 +116,11 @@ _FILLER_PREFIX = re.compile(
     r'^(okay|ok|alright|so|well|um+|uh+|hmm+|ah+|right|now|yeah|yep|sure)\s*,?\s*',
     re.IGNORECASE
 )
+# Other patterns pre-compiled to avoid re.compile() on every normalize call
+_BRACKET_Q  = re.compile(r'^\[(.+)\]$')
+_PAREN_Q    = re.compile(r'^\((.+)\)$')
+_TRAIL_PUNC = re.compile(r'[?.!,;:]+$')
+_MULTI_SPC  = re.compile(r'\s+')
 
 
 def normalize_question(question: str) -> str:
@@ -134,28 +139,29 @@ def normalize_question(question: str) -> str:
         normalized = pattern.sub(replacement, normalized)
 
     # Remove enclosing brackets/parens around the whole question
-    normalized = re.sub(r'^\[(.+)\]$', r'\1', normalized)
-    normalized = re.sub(r'^\((.+)\)$', r'\1', normalized)
+    normalized = _BRACKET_Q.sub(r'\1', normalized)
+    normalized = _PAREN_Q.sub(r'\1', normalized)
 
     # Remove trailing punctuation
-    normalized = re.sub(r'[?.!,;:]+$', '', normalized)
+    normalized = _TRAIL_PUNC.sub('', normalized)
 
     # Remove leading filler words
     normalized = _FILLER_PREFIX.sub('', normalized)
 
     # Collapse multiple spaces
-    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    normalized = _MULTI_SPC.sub(' ', normalized).strip()
 
     return normalized
 
 
-def get_cached_answer(question: str) -> Optional[str]:
-    """Get cached answer for question."""
+def get_cached_answer(question: str, role: str = '') -> Optional[str]:
+    """Get cached answer for question, scoped by role to avoid cross-user cache leakage."""
     global _hits, _misses
 
-    key = normalize_question(question)
-    if not key:
+    norm = normalize_question(question)
+    if not norm:
         return None
+    key = f"{role}:{norm}" if role else norm
 
     with _cache_lock:
         if key in _cache:
@@ -166,12 +172,13 @@ def get_cached_answer(question: str) -> Optional[str]:
         return None
 
 
-def cache_answer(question: str, answer: str) -> None:
+def cache_answer(question: str, answer: str, role: str = '') -> None:
     """Cache answer for question. Disk writes are batched for performance."""
     global _dirty, _last_save_time
-    key = normalize_question(question)
-    if not key or not answer:
+    norm = normalize_question(question)
+    if not norm or not answer:
         return
+    key = f"{role}:{norm}" if role else norm
 
     with _cache_lock:
         _cache[key] = answer
@@ -188,12 +195,12 @@ def cache_answer(question: str, answer: str) -> None:
         _dirty = False
 
 
-def is_duplicate_question(question: str) -> bool:
+def is_duplicate_question(question: str, role: str = '') -> bool:
     """Check if question is already cached (duplicate)."""
-    key = normalize_question(question)
-    if not key:
+    norm = normalize_question(question)
+    if not norm:
         return False
-
+    key = f"{role}:{norm}" if role else norm
     with _cache_lock:
         return key in _cache
 

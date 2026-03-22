@@ -20,6 +20,7 @@ def get_session_info_payload() -> dict:
     info = state.get_session_info()
     db_stats = qa_database.get_stats()
     info["db_count"] = db_stats.get("total", 0)
+    info["session_id"] = answer_storage._session_id
 
     try:
         import answer_cache

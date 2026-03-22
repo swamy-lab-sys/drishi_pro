@@ -200,6 +200,25 @@ def health():
     return jsonify({"status": "ok", "time": time.time()})
 
 
+# ── Token Validation (Public — called by extension on login / session check) ───
+
+@app.route('/api/validate')
+def validate_token():
+    """Validate a user_token and return profile info. No admin auth required."""
+    token = request.args.get('user_token', '').strip()
+    if not token:
+        return jsonify({'valid': False, 'error': 'No token provided'}), 400
+    user = _ext_user_store.get_user(token)
+    if not user:
+        return jsonify({'valid': False, 'error': 'Token not recognised'}), 401
+    return jsonify({
+        'valid': True,
+        'name': user.get('name', ''),
+        'role': user.get('role', ''),
+        'coding_language': user.get('coding_language', 'python'),
+    })
+
+
 # ── Extension User Management (Admin API) ──────────────────────────────────────
 # These endpoints let the admin create / manage per-user tokens for the extension.
 # Auth: same SECRET_CODE as all other protected endpoints.
@@ -844,7 +863,21 @@ _FOLLOWUP_RE = _re_server.compile(
 )
 
 # Per-session last Q+A for follow-up context  {token or 'global': (question, answer)}
+# Capped at 500 entries to prevent unbounded growth with many extension users
 _last_qa_per_session: dict = {}
+_LAST_QA_MAX = 500
+
+def _set_last_qa(key: str, value: tuple) -> None:
+    """Thread-safe bounded insert into _last_qa_per_session."""
+    _last_qa_per_session[key] = value
+    if len(_last_qa_per_session) > _LAST_QA_MAX:
+        # Drop oldest key (dict insertion order preserved in Python 3.7+)
+        try:
+            oldest = next(iter(_last_qa_per_session))
+            if oldest != 'global':
+                del _last_qa_per_session[oldest]
+        except StopIteration:
+            pass
 
 
 def _is_followup_question(text: str) -> bool:
@@ -983,7 +1016,7 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
                                             'answer': _fu_answer, 'source': 'llm-followup', 'is_complete': True}))
                     except Exception:
                         pass
-                    _last_qa_per_session[_session_key] = (cleaned, _fu_answer)
+                    _set_last_qa(_session_key, (cleaned, _fu_answer))
                     if ext_session:
                         _ext_user_store.log_usage(
                             ext_session.get('token', ''), cleaned, 'llm',
@@ -1009,15 +1042,39 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
         src = (metrics or {}).get('source', 'unknown')
         _send_ws(question, answer, src)
         # Store for follow-up context
-        _last_qa_per_session[_session_key] = (question, answer)
+        _set_last_qa(_session_key, (question, answer))
         # Track usage for billing
         if ext_session:
             _ms = int((time.time() - _t0_total) * 1000)
             _src_simple = 'llm' if 'llm' in src else ('cache' if 'cache' in src else 'db')
             _ext_user_store.log_usage(ext_session.get('token', ''), question, _src_simple, _ms)
 
-    # Step 1: Cache
-    cached = _cache.get_cached_answer(cleaned)
+    # Step 0: Introduction question — return stored self_introduction instantly
+    from user_manager import is_introduction_question as _is_intro
+    if _is_intro(cleaned):
+        _intro_text = ""
+        if ext_session:
+            # ext-user: load self_introduction from their linked db_user_id profile
+            try:
+                import qa_database as _qdb2
+                _db_uid = ext_session.get('db_user_id') or ext_session.get('cfg', {}).get('db_user_id', 1)
+                _profile = _qdb2.get_user(_db_uid)
+                _intro_text = (_profile.get('self_introduction') or '').strip() if _profile else ''
+            except Exception:
+                pass
+        else:
+            # global mode: use the selected user profile
+            import state as _state2
+            _sel = _state2.get_selected_user()
+            _intro_text = (_sel.get('self_introduction') or '').strip() if _sel else ''
+        if _intro_text:
+            print(f"[WS/text]{_session_label} Intro question → stored self_introduction")
+            _storage.set_processing_question(cleaned)
+            _finish(cleaned, _intro_text, {'source': 'intro'})
+            return
+
+    # Step 1: Cache (role-scoped to prevent cross-user cache leakage)
+    cached = _cache.get_cached_answer(cleaned, role=_user_role)
     if cached:
         print(f"[WS/text]{_session_label} Cache hit: {repr(cleaned)}")
         _storage.set_processing_question(cleaned)
@@ -1037,7 +1094,7 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
     if db_result:
         db_answer, db_score, db_id = db_result
         print(f"[WS/text]{_session_label} DB hit {_db_ms:.0f}ms score={db_score:.2f} id={db_id}: {repr(cleaned)}")
-        _cache.cache_answer(cleaned, db_answer)
+        _cache.cache_answer(cleaned, db_answer, role=_user_role)
         _finish(cleaned, db_answer, {'source': f'db-{db_id}', 'db_score': round(db_score, 2)})
         return
 
@@ -1062,8 +1119,8 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
                 if _db2:
                     db_answer, db_score, db_id = _db2
                     print(f"[WS/text]{_session_label} DB hit after correction score={db_score:.2f} id={db_id}")
-                    _cache.cache_answer(cleaned, db_answer)
-                    _cache.cache_answer(_corrected, db_answer)
+                    _cache.cache_answer(cleaned, db_answer, role=_user_role)
+                    _cache.cache_answer(_corrected, db_answer, role=_user_role)
                     _finish(_corrected, db_answer, {'source': f'db-{db_id}', 'db_score': round(db_score, 2)})
                     return
                 cleaned = _corrected
@@ -1097,7 +1154,7 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
             answer = get_coding_answer(cleaned, user_context=user_ctx)
             _llm.clear_session()
             if answer:
-                _cache.cache_answer(cleaned, answer)
+                _cache.cache_answer(cleaned, answer, role=_user_role)
                 _finish(cleaned, answer, {'source': 'llm', 'q_type': q_type})
             else:
                 try:
@@ -1119,7 +1176,7 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
             # Humanize final answer (removes bold/formal words/AI leaks) — same as main.py
             answer = _humanize(''.join(chunks))
             if answer:
-                _cache.cache_answer(cleaned, answer)
+                _cache.cache_answer(cleaned, answer, role=_user_role)
                 _finish(cleaned, answer, {'source': 'llm', 'q_type': q_type})
             else:
                 try:
@@ -1234,6 +1291,11 @@ def monitor_websocket(ws):
                             _sid_path.write_text(session_id)
                         except Exception:
                             pass
+                        # Notify any connected agents to switch to this session
+                        _monitor_manager.broadcast_to_all_agents({
+                            'type': 'session_change',
+                            'session_id': session_id,
+                        })
                     else:
                         reg = _monitor_manager.register_viewer(ws, session_id)
                     client_id = reg.get('client_id')

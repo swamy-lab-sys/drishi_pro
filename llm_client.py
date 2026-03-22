@@ -33,8 +33,8 @@ except ImportError:
 
 client = Anthropic(
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
-    max_retries=0,   # 0 = fail fast (was 1 = 2x10s=20s total wait on timeout)
-    timeout=12.0     # single attempt, 12s max
+    max_retries=1,   # 1 retry on transient 5xx — adds at most one extra attempt
+    timeout=10.0     # 10s per attempt; 1 retry = 20s max total (acceptable)
 )
 
 import config as _cfg

@@ -15,7 +15,7 @@ import time
 import os
 import re
 import requests
-from faster_whisper import WhisperModel
+WhisperModel = None  # lazy import — loaded only when local STT is used
 import multiprocessing
 
 try:
@@ -93,6 +93,10 @@ def load_model(model_size=None):
     compute_type = "float16" if device == "cuda" else "int8"
 
     if model is None or model_name != model_size:
+        global WhisperModel
+        if WhisperModel is None:
+            from faster_whisper import WhisperModel as _WhisperModel
+            WhisperModel = _WhisperModel
         cpu_threads = min(multiprocessing.cpu_count(), 6)
         print(f"  [STT] Loading Faster-Whisper '{model_size}' on {device}/{compute_type} threads={cpu_threads}...")
         try:
@@ -154,7 +158,20 @@ TECH_PROMPT = (
     # ── Autosys ──────────────────────────────────────────────────────────────
     "Autosys, JIL, sendevent, autorep, box job, on_hold, on_ice, "
     "force_startjob, killjob, job_type, choke level, CA Workload Automation, "
-    "ITRS, Geneos, Control-M, WCC, job scheduler, batch job."
+    "ITRS, Geneos, Control-M, WCC, job scheduler, batch job, "
+    # ── Telecom / IMS / SIP / SS7 / Diameter ────────────────────────────────
+    "IMS, SIP, SIP protocol, SIP message, INVITE, ACK, BYE, REGISTER, OPTIONS, "
+    "SDP, RTP, RTCP, SIP proxy, SIP registrar, SIP UA, SIP trunk, "
+    "SS7, ISUP, MTP, SCCP, TCAP, MAP, CAP, signaling, signaling point, "
+    "Diameter, Diameter AVP, HSS, PCRF, P-CSCF, S-CSCF, I-CSCF, MGCF, "
+    "IMS core, VoLTE, VoIP, codec, G.711, G.729, AMR, SRTP, SIPS, "
+    "SIP OPTIONS ping, registration, deregistration, re-INVITE, "
+    "Wireshark, pcap, packet capture, call flow, call trace, "
+    "telecom, telecommunications, network element, NE, OAM, "
+    "fault management, performance management, configuration management, "
+    "alarm, KPI, NMS, EMS, BSS, OSS, billing, charging, CDR, "
+    "5G, 4G, LTE, NGN, NFV, VNF, SDN, NFVI, MANO, "
+    "TCP, UDP, SCTP, TLS, IPsec, NAT traversal, STUN, TURN, ICE."
 )
 
 
@@ -547,6 +564,50 @@ _RAW_CORRECTIONS = {
     "sys t e m d":                   "systemd",
     "cron tab":                      "crontab",
     "cron job":                      "CronJob",
+    # ── Telecom / IMS / SIP / SS7 / Diameter ────────────────────────────────
+    "i m s":                         "IMS",
+    "s i p":                         "SIP",
+    "s s 7":                         "SS7",
+    "s s seven":                     "SS7",
+    "s c c p":                       "SCCP",
+    "t c a p":                       "TCAP",
+    "i s u p":                       "ISUP",
+    "m t p":                         "MTP",
+    "h s s":                         "HSS",
+    "p c r f":                       "PCRF",
+    "p c s c f":                     "P-CSCF",
+    "s c s c f":                     "S-CSCF",
+    "i c s c f":                     "I-CSCF",
+    "m g c f":                       "MGCF",
+    "vol t e":                       "VoLTE",
+    "vo lte":                        "VoLTE",
+    "volet":                         "VoLTE",
+    "vo i p":                        "VoIP",
+    "voice over ip":                 "VoIP",
+    "voice over internet protocol":  "VoIP",
+    "s d p":                         "SDP",
+    "r t p":                         "RTP",
+    "r t c p":                       "RTCP",
+    "s r t p":                       "SRTP",
+    "avp":                           "AVP",
+    "diameter avp":                  "Diameter AVP",
+    "n f v":                         "NFV",
+    "v n f":                         "VNF",
+    "s d n":                         "SDN",
+    "o a m":                         "OAM",
+    "b s s":                         "BSS",
+    "o s s":                         "OSS",
+    "c d r":                         "CDR",
+    "n g n":                         "NGN",
+    "k p i":                         "KPI",
+    "n m s":                         "NMS",
+    "e m s":                         "EMS",
+    "n a t":                         "NAT",
+    "s c t p":                       "SCTP",
+    "ipsec":                         "IPsec",
+    "i p sec":                       "IPsec",
+    "s t u n":                       "STUN",
+    "t u r n":                       "TURN",
 }
 # Static compiled corrections (from _RAW_CORRECTIONS above)
 # stt_learner.py prepends learned corrections to this list at runtime.
@@ -735,6 +796,8 @@ _DEEPGRAM_KEYTERMS = [
 ]
 
 # Pre-build Deepgram params dict once at module load (avoids per-call list iteration)
+# NOTE: keyterms removed — 100+ keyterm params exceed URL length limit (400 Bad Request).
+# nova-3 already handles technical terminology accurately without keyterms.
 _DEEPGRAM_PARAMS: dict = {
     "model": "nova-3",
     "language": "en",
@@ -743,7 +806,6 @@ _DEEPGRAM_PARAMS: dict = {
     "filler_words": "false",
     "encoding": "linear16",
     "sample_rate": str(getattr(__import__('config'), 'AUDIO_SAMPLE_RATE', 16000)),
-    "keyterm": _DEEPGRAM_KEYTERMS,   # requests serialises list → repeated params
 }
 
 

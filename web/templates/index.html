@@ -666,6 +666,7 @@
         <span id="user-label"></span>
       </div>
       <button id="admin-toggle" onclick="toggleAdminMode()" title="Admin mode — shows sharing &amp; remote controls">ADMIN</button>
+      <button id="share-remote-btn" onclick="shareRemote()" title="Copy remote viewer link to clipboard" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;" onmouseover="this.style.background='var(--green-light)';this.style.color='var(--green)';this.style.borderColor='var(--green)';" onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)';this.style.borderColor='var(--border)';">&#128279; REMOTE</button>
       <button class="btn btn-secondary btn-sm" onclick="openSt()" title="Settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
@@ -1879,6 +1880,27 @@ if (joinInput) {
     e.target.value = val;
   });
   joinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') joinDrishiSession(); });
+}
+
+async function shareRemote() {
+  // Get session_id — prefer SSE-provided value in sessionStorage, fall back to API
+  let sid = sessionStorage.getItem('drishi_sid');
+  if (!sid) {
+    try {
+      const info = await fetch('/api/session-info').then(r => r.json());
+      sid = info.session_id;
+      if (sid) sessionStorage.setItem('drishi_sid', sid);
+    } catch (_) {}
+  }
+  if (!sid) { toast('Session not ready yet — try again in a moment'); return; }
+  const url = `${location.origin}/v/${sid}/12`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Remote viewer link copied! Share it with your phone or second screen.');
+  } catch (_) {
+    // Fallback: open in new tab
+    window.open(url, '_blank');
+  }
 }
 
 function joinDrishiSession() {

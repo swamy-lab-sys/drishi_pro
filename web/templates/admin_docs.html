@@ -670,6 +670,7 @@ code {
     <a href="#performance"><span class="nav-dot"></span>Performance</a>
 
     <div class="docs-nav-section">Interfaces</div>
+    <a href="#react-ui"><span class="nav-dot"></span>React UI Pages</a>
     <a href="#chrome-ext"><span class="nav-dot"></span>Chrome Extension</a>
     <a href="#user-portal"><span class="nav-dot"></span>User Portal</a>
     <a href="#admin-panel"><span class="nav-dot"></span>Admin Panel</a>
@@ -702,31 +703,33 @@ code {
       <div class="hero-badge">Admin Reference</div>
       <h1>Drishi <span>Enterprise</span><br>Documentation</h1>
       <p>
-        Drishi is a real-time AI-powered interview intelligence platform. It listens to live interview audio,
-        classifies each question, retrieves optimised answers from a curated QA database, and streams
-        Claude-generated responses — all in under 2 seconds — directly to the candidate via Chrome Extension
-        or User Portal.
+        Drishi is a real-time AI interview assistant. It listens to live interview audio via microphone or
+        Chrome Extension, transcribes questions with Whisper / Deepgram / Sarvam, retrieves optimised answers
+        from a curated Q&amp;A database (1,280+ entries), and streams Claude-generated responses — all in
+        under 30ms (DB) or ~2–3s (LLM) — directly to the interviewer's browser via SSE.
+        Covers Python, Java, JavaScript, SQL, Linux, DevOps, Telecom (SIP/IMS/SS7), AutoSys, Django, and
+        production-support roles with per-user isolation and multi-candidate session support.
       </p>
       <div class="hero-stats">
         <div class="hero-stat">
-          <span class="hero-stat-val green">≤ 1.8s</span>
-          <span class="hero-stat-lbl">End-to-end latency</span>
+          <span class="hero-stat-val green">13–30ms</span>
+          <span class="hero-stat-lbl">DB hit latency</span>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-val gold">100%</span>
-          <span class="hero-stat-lbl">Classifier accuracy</span>
+          <span class="hero-stat-val gold">77%</span>
+          <span class="hero-stat-lbl">DB / cache hit rate</span>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-val blue">0.72</span>
-          <span class="hero-stat-lbl">Jaccard DB threshold</span>
+          <span class="hero-stat-val blue">1,280+</span>
+          <span class="hero-stat-lbl">Q&amp;A pairs</span>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-val purple">LRU 1000</span>
+          <span class="hero-stat-val purple">0.72</span>
+          <span class="hero-stat-lbl">Jaccard threshold</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val" style="color:#FCA5A5;">LRU 1000</span>
           <span class="hero-stat-lbl">Runtime answer cache</span>
-        </div>
-        <div class="hero-stat">
-          <span class="hero-stat-val" style="color:#FCA5A5;">12s</span>
-          <span class="hero-stat-lbl">Claude API timeout</span>
         </div>
       </div>
     </section>
@@ -749,7 +752,7 @@ code {
         <div class="arch-node green-node">
           <div class="arch-icon">🔤</div>
           <div class="arch-name">STT Engine</div>
-          <div class="arch-sub">Web Speech API<br>/ Whisper</div>
+          <div class="arch-sub">Whisper local<br>Sarvam / Deepgram</div>
         </div>
         <div class="arch-arrow">›</div>
         <div class="arch-node gold-node">
@@ -761,7 +764,7 @@ code {
         <div class="arch-node blue-node">
           <div class="arch-icon">🗄</div>
           <div class="arch-name">QA Database</div>
-          <div class="arch-sub">SQLite WAL<br>Jaccard ≥ 0.72</div>
+          <div class="arch-sub">SQLite / PostgreSQL<br>Jaccard ≥ 0.72</div>
         </div>
         <div class="arch-arrow">›</div>
         <div class="arch-node purple-node">
@@ -777,7 +780,7 @@ code {
           <ul>
             <li>Runtime LRU cache (1000 entries) for identical questions</li>
             <li>In-memory Jaccard token cache ordered by hit_count DESC</li>
-            <li>SQLite WAL mode — concurrent reads without blocking</li>
+            <li>SQLite WAL mode (default) or PostgreSQL via <code>DATABASE_URL</code></li>
           </ul>
         </div>
         <div class="info-card blue-accent">
@@ -835,6 +838,102 @@ code {
           <li>Classifier target: &lt; 1ms — currently 0.008ms (125× faster)</li>
           <li>Follow-up target: &lt; 0.5ms — currently 0.0006ms (833× faster)</li>
         </ul>
+      </div>
+    </section>
+
+    <!-- ── REACT UI ── -->
+    <div class="section-divider" id="react-ui"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-blue">⚛</div>
+        <h2>React UI Pages</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Production React SPA served at <code>/react/</code>. Built with Vite 5, React 18, React Router v6, CSS Modules.
+        Light theme with green sidebar navigation.
+      </p>
+      <table class="api-table" style="margin-bottom:16px;">
+        <thead>
+          <tr><th>Route</th><th>Page</th><th>Key Features</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/react/</code></td>
+            <td><strong>Interview</strong></td>
+            <td>Live SSE answer feed · Terminal bar (STT / LLM / User / Role chips) · avg latency meter</td>
+          </tr>
+          <tr>
+            <td><code>/monitor</code></td>
+            <td><strong>Monitor</strong></td>
+            <td>Full-screen phone/2nd-screen view · auto-scroll · per-user filtering</td>
+          </tr>
+          <tr>
+            <td><code>/profiles</code></td>
+            <td><strong>Profiles</strong></td>
+            <td>Create / activate / delete users · active session badge · colored avatars</td>
+          </tr>
+          <tr>
+            <td><code>/questions</code></td>
+            <td><strong>Questions</strong></td>
+            <td>Table view of Q&amp;A DB · filter by All/Theory/Coding/SQL/Match · entry stats · hit counts</td>
+          </tr>
+          <tr>
+            <td><code>/lookup</code></td>
+            <td><strong>Keyword Lookup</strong></td>
+            <td>Keyword cards with frequency count · click to see matching Q&amp;A pairs · search filter</td>
+          </tr>
+          <tr>
+            <td><code>/qa-manager</code></td>
+            <td><strong>QA Manager</strong></td>
+            <td>Add/edit Q&amp;A pairs · search · regenerate with LLM · save answer to DB</td>
+          </tr>
+          <tr>
+            <td><code>/settings</code></td>
+            <td><strong>Settings</strong></td>
+            <td>Fast / Balanced / Detailed presets · STT backend · silence threshold · audio source</td>
+          </tr>
+          <tr>
+            <td><code>/api-keys</code></td>
+            <td><strong>API Keys</strong></td>
+            <td>Status cards for Anthropic / Deepgram / Sarvam / AssemblyAI · ACTIVE / NONE badge</td>
+          </tr>
+          <tr>
+            <td><code>/ext-users</code></td>
+            <td><strong>Ext Users</strong></td>
+            <td>Extension user token management · coding language · monitor URL</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card-grid cols-3">
+        <div class="info-card green-accent">
+          <h4>🖥 Sidebar Navigation</h4>
+          <ul>
+            <li><strong>MAIN</strong>: Interview, Monitor</li>
+            <li><strong>LIBRARY</strong>: Profiles, Questions, Keyword Lookup, QA Database</li>
+            <li><strong>ADMIN</strong>: Settings, API Keys, Ext Users</li>
+            <li>Green highlight on active page · connected status dot</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>⚡ Terminal Bar</h4>
+          <ul>
+            <li>STT chips: tiny · small · sarvam · deepgram</li>
+            <li>LLM chips: haiku · sonnet</li>
+            <li>USER dropdown → activates profile</li>
+            <li>ROLE chips: gen · py · java · js · sql · saas</li>
+            <li>avg ___ms — rolling 20-answer latency</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>🏗 Build &amp; Deploy</h4>
+          <ul>
+            <li>Dev: <code>cd react_ui &amp;&amp; npm run dev</code> → :5173</li>
+            <li>Production: <code>npm run build</code> → <code>web/static/react/</code></li>
+            <li>Served by Flask at <code>/react/*</code></li>
+            <li>All API calls proxied to <code>:8000</code></li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -917,7 +1016,7 @@ code {
               <li data-n="2">Enable <strong>Developer Mode</strong> (top-right toggle)</li>
               <li data-n="3">Click <strong>Load unpacked</strong></li>
               <li data-n="4">Select <code>chrome_extension/</code> directory</li>
-              <li data-n="5">Set server URL in popup to <code>http://localhost:5000</code></li>
+              <li data-n="5">Click the Drishi icon → set <strong>Server URL</strong>: <code>http://localhost:8000</code> (local) or your ngrok URL</li>
             </ul>
           </div>
         </div>
@@ -989,16 +1088,32 @@ code {
           </tr>
         </thead>
         <tbody>
-          <tr><td><code>/</code></td><td>Interview</td><td>Main session page — start/stop recording, load user profiles</td></tr>
-          <tr><td><code>/monitor</code></td><td>Monitor</td><td>Real-time answer feed for all users or <code>?user=&lt;token&gt;</code> for one</td></tr>
-          <tr><td><code>/users</code></td><td>Profiles</td><td>Create and manage user profiles with skills and company/role</td></tr>
-          <tr><td><code>/questions</code></td><td>Questions DB</td><td>Browse the Q&amp;A database — view, edit, delete entries</td></tr>
-          <tr><td><code>/lookup</code></td><td>Keyword Lookup</td><td>Type any keyword and instantly see matching Q&amp;A pairs</td></tr>
-          <tr><td><code>/qa-manager</code></td><td>QA Manager</td><td>Add/import/export Q&amp;A pairs, bulk operations</td></tr>
-          <tr><td><code>/settings</code></td><td>Settings</td><td>System configuration, thresholds, STT corrections</td></tr>
-          <tr><td><code>/api-dashboard</code></td><td>API Keys</td><td>Manage Anthropic API key, model selection, usage stats</td></tr>
-          <tr><td><code>/ext-users</code></td><td>Ext Users</td><td>Create extension user tokens, view usage logs</td></tr>
-          <tr><td><code>/voice</code></td><td>Voice</td><td>Push-to-talk voice interface with audio waveform</td></tr>
+          <tr>
+            <td colspan="3" style="background:rgba(0,200,150,0.07);font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--green);padding:8px 12px;text-transform:uppercase;">
+              React UI — served at <code>/react/</code>
+            </td>
+          </tr>
+          <tr><td><code>/react/</code></td><td>Interview</td><td>Live answer feed, terminal bar (STT/LLM/User/Role chips), SSE stream, avg latency</td></tr>
+          <tr><td><code>/react/#/monitor</code></td><td>Monitor</td><td>Full-screen phone/tablet view — real-time answers</td></tr>
+          <tr><td><code>/react/#/profiles</code></td><td>Profiles</td><td>Create/activate/delete user profiles, set active session user</td></tr>
+          <tr><td><code>/react/#/questions</code></td><td>Questions</td><td>Browse Q&amp;A DB — filter by type, search, see hit counts</td></tr>
+          <tr><td><code>/react/#/lookup</code></td><td>Keyword Lookup</td><td>Click any keyword card to see all matching Q&amp;A pairs</td></tr>
+          <tr><td><code>/react/#/qa-manager</code></td><td>QA Manager</td><td>Add/edit/delete Q&amp;A pairs, search, regenerate with LLM</td></tr>
+          <tr><td><code>/react/#/settings</code></td><td>Settings</td><td>Speed presets, STT backend, silence threshold, audio source, LLM model</td></tr>
+          <tr><td><code>/react/#/api-keys</code></td><td>API Keys</td><td>Anthropic, Deepgram, Sarvam, AssemblyAI key status</td></tr>
+          <tr><td><code>/react/#/ext-users</code></td><td>Ext Users</td><td>Chrome extension user tokens, language config, monitor URLs</td></tr>
+          <tr>
+            <td colspan="3" style="background:rgba(92,107,192,0.07);font-size:11px;font-weight:700;letter-spacing:0.08em;color:#5C6BC0;padding:8px 12px;text-transform:uppercase;">
+              Classic Flask UI — Jinja2 templates
+            </td>
+          </tr>
+          <tr><td><code>/</code></td><td>Dashboard</td><td>Classic main interview page (Jinja2)</td></tr>
+          <tr><td><code>/monitor</code></td><td>Monitor</td><td>Classic monitor view</td></tr>
+          <tr><td><code>/qa-manager</code></td><td>QA Manager</td><td>Classic QA editor</td></tr>
+          <tr><td><code>/settings</code></td><td>Settings</td><td>Classic settings page</td></tr>
+          <tr><td><code>/ext-users</code></td><td>Ext Users</td><td>Classic extension user admin</td></tr>
+          <tr><td><code>/users</code></td><td>Profiles</td><td>Classic user profile manager</td></tr>
+          <tr><td><code>/voice</code></td><td>Voice</td><td>Push-to-talk voice test interface</td></tr>
           <tr><td><code>/admin-docs</code></td><td>Admin Docs</td><td>This page — full project documentation</td></tr>
         </tbody>
       </table>
@@ -1021,7 +1136,10 @@ code {
             </div>
           </div>
           <div class="feat-card-body">
-            <p>Browser STT (Web Speech API) transcribes microphone/system audio continuously. Transcript chunks are sent to <code>POST /api/transcript</code> every ~3 seconds.</p>
+            <p>Audio captured by <code>professional_audio.py</code> (sounddevice → pyaudio → parec fallback chain).
+            Local Whisper or cloud STT (Sarvam / Deepgram / AssemblyAI) transcribes the audio.
+            A domain-specific initial_prompt with 200+ IT/telecom terms biases Whisper toward technical vocabulary.
+            Post-transcription corrections fix common STT mishearings (e.g. "s i p" → "SIP").</p>
           </div>
         </div>
         <div class="feat-card">
@@ -1033,7 +1151,8 @@ code {
             </div>
           </div>
           <div class="feat-card-body">
-            <p>Server classifies the question as <strong>behavioral</strong>, <strong>technical</strong>, or <strong>coding</strong>. Follow-up detector checks if it's a clarification (< 9 words + regex patterns).</p>
+            <p><code>question_validator.py</code> rejects noise, filler, and non-IT speech (chemistry, food, garbled STT).
+            Uses <code>_IT_ADJACENT</code> (400+ terms) covering all supported roles. Only valid IT questions reach the answer pipeline.</p>
           </div>
         </div>
         <div class="feat-card">
@@ -1059,46 +1178,46 @@ code {
         <h2>Question Classifier</h2>
       </div>
       <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
-        File: <code>llm_client.py</code> — 100% accuracy on 20/20 test cases. Uses compiled regex, zero ML inference.
+        File: <code>question_validator.py</code> — 100% accuracy on 57/57 test cases. Uses compiled regex + vocabulary sets, zero ML inference.
+        Rejects non-IT noise (chemistry, food, politics), garbled STT output, and filler speech before it reaches the LLM.
       </p>
       <div class="card-grid cols-3" style="margin-bottom:16px;">
         <div class="info-card green-accent">
-          <h4>🤝 Behavioral</h4>
+          <h4>✅ Pass: IT Questions</h4>
           <ul>
-            <li>Tell me about a time, Describe a situation</li>
-            <li>Have you ever, Walk me through</li>
-            <li>How do you handle / deal with / manage</li>
-            <li>Strength, weakness (standalone)</li>
-            <li>HR: salary, notice period, why do you want</li>
+            <li>Starter word (what/how/explain/...) + IT term</li>
+            <li>Python, Java, JS, SQL, Linux, DevOps, K8s</li>
+            <li>Telecom: SIP, IMS, SS7, Diameter, VoLTE</li>
+            <li>AutoSys, production support, ITSM</li>
+            <li>HR/behavioral: "tell me about yourself"</li>
           </ul>
         </div>
         <div class="info-card blue-accent">
-          <h4>⚙ System Design / Technical</h4>
+          <h4>⚙ <code>_IT_ADJACENT</code> Set</h4>
           <ul>
-            <li>Design a system / microservices</li>
-            <li>Scalability, distributed systems</li>
-            <li>CAP theorem, eventual consistency</li>
-            <li>Sharding, message queues, API gateway</li>
-            <li>Trade-offs, service mesh</li>
+            <li>400+ terms across all supported roles</li>
+            <li>Any overlap with question words → pass</li>
+            <li>Covers: Python keywords, Bash, Linux, K8s</li>
+            <li>SQL, Django, Flask, Java, JS, telecom, HR</li>
+            <li>DevOps, SRE, AutoSys, ITSM vocabulary</li>
           </ul>
         </div>
-        <div class="info-card purple-accent">
-          <h4>💻 Coding / Algorithm</h4>
+        <div class="info-card red-accent" style="border-color:rgba(239,68,68,0.4);">
+          <h4>❌ Reject: Non-IT Noise</h4>
           <ul>
-            <li>Write / implement / code a function</li>
-            <li>Solve / find / detect / count in an array</li>
-            <li>Implement a LRU/LFU/Trie/Heap cache</li>
-            <li>Two-sum, fibonacci, palindrome patterns</li>
-            <li>Big-O, time/space complexity</li>
+            <li>Chemistry/science: arsenic, photosynthesis</li>
+            <li>Food/cooking: pepper, salt, butter</li>
+            <li>Politics/religion: election, church, mosque</li>
+            <li>Garbled STT: "pebble as crimson", "pepper reaction"</li>
+            <li>Filler: "uh yeah", "ok", short phrases</li>
           </ul>
         </div>
       </div>
       <div class="code-block">
-<span class="cm"># Priority: behavioral → system_design → coding → technical</span>
-<span class="kw">if</span> _BEHAVIORAL_RE.search(q):  <span class="kw">return</span> <span class="str">"behavioral"</span>
-<span class="kw">if</span> _SYSTEM_DESIGN_RE.search(q): <span class="kw">return</span> <span class="str">"system_design"</span>
-<span class="kw">if</span> is_code_request(q):         <span class="kw">return</span> <span class="str">"coding"</span>
-<span class="kw">return</span> <span class="str">"technical"</span>  <span class="cm"># default</span></div>
+<span class="cm"># Validation pipeline (question_validator.py)</span>
+<span class="kw">if</span> _PURE_NOISE.issuperset(subject_words):  <span class="kw">return</span> <span class="kw">False</span>, <span class="str">"chemistry/non-IT"</span>
+<span class="kw">if</span> not has_tech <span class="kw">and</span> not (_words_set &amp; _IT_ADJACENT): <span class="kw">return</span> <span class="kw">False</span>, <span class="str">"non_it_question"</span>
+<span class="kw">return</span> <span class="kw">True</span>  <span class="cm"># passes to STT / DB / LLM pipeline</span></div>
     </section>
 
     <!-- ── FOLLOW-UP DETECTION ── -->

@@ -42,17 +42,18 @@ async function startScreenCapture(streamId) {
 
   console.log("[MonitorCapture] Starting Simplified Capture for ID:", streamId);
 
-  // Note: On most Linux builds, the token is SINGLE-USE. 
-  // We specify stable 720p / 15fps to reduce strain on unstable GPU/Compositors.
+  // Note: On most Linux builds, the token is SINGLE-USE.
+  // 1080p/30fps for crisp remote desktop quality (TeamViewer-level).
+  // Fall back to 720p if GPU/compositor rejects the higher resolution.
   const constraints = {
     audio: false,
     video: {
       mandatory: {
         chromeMediaSource: 'desktop',
         chromeMediaSourceId: streamId,
-        maxWidth: 1280,
-        maxHeight: 720,
-        maxFrameRate: 15
+        maxWidth: 1920,
+        maxHeight: 1080,
+        maxFrameRate: 30
       }
     }
   };
