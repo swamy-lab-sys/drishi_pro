@@ -1,0 +1,1366 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_name %}Settings{% endblock %}
+
+{% block head_extra %}
+<style>
+/* ── Settings page specific styles ── */
+.settings-section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  text-transform: uppercase; color: var(--text-muted);
+  margin: 28px 0 10px;
+}
+.settings-section-label:first-child { margin-top: 0; }
+
+/* ── Preset cards ── */
+.preset-row {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 600px) { .preset-row { grid-template-columns: 1fr; } }
+
+.preset-card {
+  background: var(--white); border: 2px solid var(--card-border);
+  border-radius: 12px; padding: 16px; cursor: pointer;
+  transition: all 0.15s; text-align: left;
+  box-shadow: var(--card-shadow);
+}
+.preset-card:hover { border-color: var(--green); background: var(--green-light); }
+.preset-card.active {
+  border-color: var(--green); background: var(--green-light);
+  box-shadow: 0 0 0 3px rgba(34,122,74,0.12), var(--card-shadow);
+}
+.preset-emoji { font-size: 22px; margin-bottom: 8px; }
+.preset-name { font-size: 14px; font-weight: 800; color: var(--text-dark); margin-bottom: 4px; }
+.preset-desc { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+
+/* ── Settings tabs ── */
+.settings-card { padding: 0; }
+.settings-tabs-bar {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+  padding: 0 20px; overflow-x: auto; scrollbar-width: none;
+}
+.settings-tabs-bar::-webkit-scrollbar { display: none; }
+.settings-tab-btn {
+  padding: 14px 18px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; background: transparent;
+  color: var(--text-muted); border-bottom: 2px solid transparent;
+  transition: all 0.15s; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: -1px;
+}
+.settings-tab-btn:hover { color: var(--text-dark); }
+.settings-tab-btn.active { color: var(--green); border-bottom-color: var(--green); }
+
+.settings-tab-panel { display: none; padding: 24px; }
+.settings-tab-panel.active { display: block; }
+
+/* ── Two-column grid inside tab ── */
+.settings-inner-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+}
+@media (max-width: 700px) { .settings-inner-grid { grid-template-columns: 1fr; } }
+.settings-inner-grid-full { grid-column: 1 / -1; }
+
+/* ── Inner card ── */
+.inner-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px;
+}
+.inner-card-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.inner-card-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--green-light); display: flex; align-items: center;
+  justify-content: center; font-size: 15px; flex-shrink: 0;
+}
+.inner-card-title { font-size: 13px; font-weight: 700; color: var(--text-dark); }
+.inner-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* ── Fields ── */
+.field { margin-bottom: 18px; }
+.field:last-child { margin-bottom: 0; }
+.field-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-medium); margin-bottom: 4px;
+}
+.field-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+
+/* ── Chip buttons ── */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.chip {
+  padding: 6px 14px; border-radius: 100px;
+  border: 1.5px solid var(--border); background: var(--white);
+  color: var(--text-medium); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  user-select: none;
+}
+.chip:hover { border-color: var(--green); color: var(--green); background: var(--green-light); }
+.chip.sel {
+  background: var(--green); border-color: var(--green);
+  color: #FFFFFF; box-shadow: 0 2px 6px rgba(34,122,74,0.25);
+}
+.chip-sub { display: block; font-size: 10px; opacity: 0.75; margin-top: 1px; font-weight: 500; }
+.chip-desc {
+  font-size: 12px; color: var(--text-muted); background: var(--white);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin-top: 6px; line-height: 1.5;
+}
+.chip-desc strong { color: var(--text-dark); }
+
+/* ── Warning box ── */
+.warn-box {
+  display: none; background: #FEF3C7;
+  border: 1px solid rgba(245,158,11,0.4);
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 12px; color: #92400E; margin-top: 8px;
+}
+.warn-box a { color: #92400E; text-decoration: underline; font-weight: 600; }
+
+/* ── Slider ── */
+.slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.slider-row input[type=range] {
+  flex: 1; accent-color: var(--green); height: 4px; cursor: pointer;
+}
+.slider-val {
+  font-size: 13px; font-weight: 700; color: var(--green);
+  min-width: 36px; text-align: right;
+}
+.slider-labs {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--text-muted);
+}
+
+/* ── Option rows (models) ── */
+.opt-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 12px 14px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--white);
+  cursor: pointer; margin-bottom: 10px; transition: all 0.15s; gap: 10px;
+}
+.opt-row:hover { border-color: var(--green); background: var(--green-light); }
+.opt-row.sel {
+  border-color: var(--green); background: var(--green-light);
+  box-shadow: 0 0 0 3px rgba(34,122,74,0.08);
+}
+.opt-row:last-of-type { margin-bottom: 0; }
+.opt-info strong { display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 2px; }
+.opt-info span { font-size: 11px; color: var(--text-muted); }
+.opt-chk { color: var(--green); font-size: 16px; font-weight: 800; flex-shrink: 0; margin-top: 2px; }
+
+/* ── Toggle ── */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.toggle-row:last-child { border-bottom: none; padding-bottom: 0; }
+.toggle-label { font-size: 13px; font-weight: 600; color: var(--text-dark); }
+.toggle-hint { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.toggle-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; border-radius: 22px;
+  background: var(--border); cursor: pointer; transition: background 0.2s;
+}
+.toggle-slider:before {
+  content: ''; position: absolute; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff;
+  left: 3px; top: 3px; transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--green); }
+.toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+
+/* ── Font size controls ── */
+.fs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.fs-btn {
+  flex: 1; padding: 8px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--white);
+  color: var(--text-dark); font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+}
+.fs-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-light); }
+.fs-current { font-size: 17px; font-weight: 800; color: var(--green); min-width: 36px; text-align: center; }
+.fs-presets { display: flex; gap: 5px; flex-wrap: wrap; }
+.fs-preset {
+  padding: 4px 11px; border-radius: 6px;
+  border: 1.5px solid var(--border); background: var(--white);
+  color: var(--text-medium); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.fs-preset:hover { border-color: var(--green); color: var(--green); }
+
+/* ── Info / tip box ── */
+.info-box {
+  background: var(--blue-bg); border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 8px; padding: 10px 13px;
+  font-size: 12px; color: #1D4ED8; line-height: 1.55;
+  margin-bottom: 16px;
+}
+.tip-box {
+  background: rgba(34,122,74,0.05); border: 1px solid rgba(34,122,74,0.2);
+  border-radius: 8px; padding: 10px 13px;
+  font-size: 12px; color: var(--text-muted); margin-top: 12px; line-height: 1.55;
+}
+.tip-box strong { color: var(--green); }
+.tip-box a { color: var(--green); font-weight: 700; }
+
+/* ── Stats grid ── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.stat-cell {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px;
+}
+.stat-k { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+.stat-v { font-size: 19px; font-weight: 800; color: var(--text-dark); }
+
+/* ── Quick links ── */
+.link-list { display: flex; flex-direction: column; gap: 6px; }
+.site-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--white);
+  color: var(--text-medium); font-size: 12px; font-weight: 500;
+  transition: all 0.15s; text-decoration: none;
+}
+.site-link:hover { background: var(--green-light); border-color: var(--green); color: var(--green); }
+.site-link-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+.site-link-text strong { display: block; font-size: 12px; font-weight: 600; }
+.site-link-text small { font-size: 10px; color: var(--text-muted); }
+
+/* ── Saved flash banner ── */
+#saved-flash {
+  display: none; position: fixed; top: 52px; left: var(--sb-w); right: 0; z-index: 200;
+  background: rgba(34,122,74,0.1); border-bottom: 1px solid rgba(34,122,74,0.3);
+  color: var(--green); font-size: 12px; font-weight: 600;
+  text-align: center; padding: 7px;
+  transition: left 0.2s ease;
+}
+body.sb-collapsed #saved-flash { left: var(--sb-w-col); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-content">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap">
+    <div>
+      <h1 style="font-size:22px;font-weight:800;color:var(--text-dark)">Settings</h1>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Customize how Drishi listens, transcribes, and answers. Changes take effect immediately.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="display:inline-flex;align-items:center;gap:6px;background:var(--green-light);border:1px solid rgba(34,122,74,0.25);color:var(--green-dark);padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Changes save automatically
+      </span>
+      <span id="apply-restart-btn" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-light);border:1px solid rgba(245,161,47,0.3);color:#92590A;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:700;cursor:pointer" onclick="applyAndRestart()">
+        Apply &amp; Restart
+      </span>
+    </div>
+  </div>
+
+  <!-- ── Saved flash ── -->
+  <div id="saved-flash">✓ Changes saved — applied immediately</div>
+
+  <!-- ── Preset cards ── -->
+  <div class="preset-row">
+    <button class="preset-card" id="preset-fast" onclick="applyPreset('fast')">
+      <div class="preset-emoji">⚡</div>
+      <div class="preset-name">Fast</div>
+      <div class="preset-desc">Haiku · 0.6s silence · Tiny model — instant answers, lowest latency</div>
+    </button>
+    <button class="preset-card active" id="preset-balanced" onclick="applyPreset('balanced')">
+      <div class="preset-emoji">⚖️</div>
+      <div class="preset-name">Balanced</div>
+      <div class="preset-desc">Haiku · 1.2s silence · Distil-S — best for most interviews</div>
+    </button>
+    <button class="preset-card" id="preset-detailed" onclick="applyPreset('detailed')">
+      <div class="preset-emoji">🔬</div>
+      <div class="preset-name">Detailed</div>
+      <div class="preset-desc">Sonnet · 2.0s silence · Small model — richer, more thorough answers</div>
+    </button>
+  </div>
+
+  <!-- ── Settings card with tabs ── -->
+  <div class="card settings-card">
+
+    <div class="settings-tabs-bar" id="settingsTabsBar">
+      <button class="settings-tab-btn active" id="t-launch"     onclick="showTab('launch')">🚀 Launch Config</button>
+      <button class="settings-tab-btn"        id="t-audio"      onclick="showTab('audio')">🎙 Audio &amp; STT</button>
+      <button class="settings-tab-btn"        id="t-coding"     onclick="showTab('coding')">💻 Coding Language</button>
+      <button class="settings-tab-btn"        id="t-ai"         onclick="showTab('ai')">🤖 AI / Model</button>
+      <button class="settings-tab-btn"        id="t-advanced"   onclick="showTab('advanced')">⚙ Advanced</button>
+      <button class="settings-tab-btn"        id="t-sttlearn"   onclick="showTab('sttlearn');loadSttCorrections()">🧠 STT Learning</button>
+    </div>
+
+    <!-- ── Tab: Launch Config ── -->
+    <div class="settings-tab-panel active" id="panel-launch">
+      <div class="info-box" style="background:var(--green-bg);border-color:rgba(34,122,74,0.2);color:var(--green-dark)">
+        Configure how Drishi starts. All settings are saved automatically and applied on next run — no terminal prompts needed.
+      </div>
+
+      <div class="settings-inner-grid">
+
+        <!-- Audio Mode -->
+        <div class="inner-card settings-inner-grid-full">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">📡</div>
+            <div>
+              <div class="inner-card-title">Audio Mode</div>
+              <div class="inner-card-sub">How Drishi captures the interview audio</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px" id="mode-cards">
+            <div class="opt-row sel" id="mode-local" onclick="setMode('system',false)" style="flex-direction:column;align-items:flex-start;gap:6px">
+              <div style="font-size:20px">🖥</div>
+              <div class="opt-info" style="width:100%">
+                <strong>Same Laptop — Local</strong>
+                <span>Interview audio plays on your speakers. Works with Meet, Zoom, Teams, YouTube.</span>
+              </div>
+              <span class="opt-chk" id="chk-mode-local" style="align-self:flex-end">✓</span>
+            </div>
+            <div class="opt-row" id="mode-ext" onclick="setMode('extension',false)" style="flex-direction:column;align-items:flex-start;gap:6px">
+              <div style="font-size:20px">🔌</div>
+              <div class="opt-info" style="width:100%">
+                <strong>Chrome Extension</strong>
+                <span>Interviewer is on a different machine. Extension streams audio to this server.</span>
+              </div>
+              <span class="opt-chk" id="chk-mode-ext" style="display:none;align-self:flex-end">✓</span>
+            </div>
+            <div class="opt-row" id="mode-ngrok" onclick="setMode('system',true)" style="flex-direction:column;align-items:flex-start;gap:6px">
+              <div style="font-size:20px">🌍</div>
+              <div class="opt-info" style="width:100%">
+                <strong>Share with Team — ngrok</strong>
+                <span>Local audio + public URL. Team can monitor from anywhere on the internet.</span>
+              </div>
+              <span class="opt-chk" id="chk-mode-ngrok" style="display:none;align-self:flex-end">✓</span>
+            </div>
+            <div class="opt-row" id="mode-ext-ngrok" onclick="setMode('extension',true)" style="flex-direction:column;align-items:flex-start;gap:6px">
+              <div style="font-size:20px">🔌🌍</div>
+              <div class="opt-info" style="width:100%">
+                <strong>Extension + Global</strong>
+                <span>Extension sends audio AND public URL via ngrok. Best for fully remote setups.</span>
+              </div>
+              <span class="opt-chk" id="chk-mode-ext-ngrok" style="display:none;align-self:flex-end">✓</span>
+            </div>
+          </div>
+          <div class="tip-box" id="mode-tip" style="margin-top:12px">
+            💡 <strong>Tip:</strong> For screen sharing on Meet/Zoom/Teams, use <em>Same Laptop</em> and share only the browser tab — not the full screen.
+          </div>
+        </div>
+
+        <!-- LLM Model (also shown in AI tab — synced) -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🤖</div>
+            <div>
+              <div class="inner-card-title">Answer Model</div>
+              <div class="inner-card-sub">AI model used for generating answers</div>
+            </div>
+          </div>
+          <div class="opt-row sel" id="lm-haiku" onclick="setLaunchModel('haiku')">
+            <div class="opt-info">
+              <strong>Claude Haiku 4.5 <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;background:#dcfce7;color:#166534;vertical-align:middle">⚡ fast</span></strong>
+              <span>~0.8–2s · Best for live interviews · Fastest answers</span>
+            </div>
+            <span class="opt-chk" id="lchk-haiku">✓</span>
+          </div>
+          <div class="opt-row" id="lm-sonnet" onclick="setLaunchModel('sonnet')">
+            <div class="opt-info">
+              <strong>Claude Sonnet 4.6 <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;background:#fef3c7;color:#92400e;vertical-align:middle">balanced</span></strong>
+              <span>~1.5–4s · More detailed · Better for complex questions</span>
+            </div>
+            <span class="opt-chk" id="lchk-sonnet" style="display:none">✓</span>
+          </div>
+        </div>
+
+        <!-- Active User -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">👤</div>
+            <div>
+              <div class="inner-card-title">Active User Profile</div>
+              <div class="inner-card-sub">Resume and role loaded at startup</div>
+            </div>
+          </div>
+          <div id="user-list-launch" style="display:flex;flex-direction:column;gap:8px">
+            <div style="color:var(--text-muted);font-size:12px">Loading profiles…</div>
+          </div>
+          <div style="margin-top:10px">
+            <a href="/users" style="font-size:12px;color:var(--green);font-weight:700;text-decoration:none">+ Manage Profiles →</a>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="margin-top:20px;display:flex;align-items:center;gap:12px;padding:16px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:var(--text-dark)">Ready to start?</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">All settings are saved. Just run <code style="background:var(--white);padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border)">./run.sh</code> — no prompts.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;background:var(--green-light);border:1px solid rgba(34,122,74,0.25);color:var(--green-dark);padding:8px 16px;border-radius:100px;font-size:12px;font-weight:700">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Config saved to .env
+        </div>
+      </div>
+
+    </div><!-- /panel-launch -->
+
+    <!-- ── Tab: Audio & STT ── -->
+    <div class="settings-tab-panel" id="panel-audio">
+      <div class="settings-inner-grid">
+
+        <!-- Audio Capture -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🎙</div>
+            <div>
+              <div class="inner-card-title">Audio Capture</div>
+              <div class="inner-card-sub">Controls when Drishi stops listening</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Interviewer speaking speed</div>
+            <div class="field-hint">Quick preset — sets the silence timing below automatically.</div>
+            <div class="chips" id="speed-chips">
+              <div class="chip" id="spd-slow"   onclick="setSpeakerSpeed('slow')">🐢 Slow</div>
+              <div class="chip sel" id="spd-normal" onclick="setSpeakerSpeed('normal')">🚶 Normal</div>
+              <div class="chip" id="spd-fast"   onclick="setSpeakerSpeed('fast')">⚡ Fast</div>
+            </div>
+            <div class="chip-desc" id="speed-desc">🚶 <strong>Normal</strong> — waits 1.2s of silence. Works for most interviewers.</div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Silence wait time <span style="font-weight:400;color:var(--text-muted);font-size:11px">— after interviewer stops talking</span></div>
+            <div class="field-hint">↑ Increase if Drishi cuts off early. ↓ Decrease if answers feel slow.</div>
+            <div class="slider-row">
+              <input type="range" id="sil-slider" min="0.4" max="3.0" step="0.1" value="1.2"
+                     oninput="onSilenceSlide(this.value)" onchange="saveSilence(this.value)">
+              <span class="slider-val" id="sil-val">1.2s</span>
+            </div>
+            <div class="slider-labs"><span>0.4s — very quick</span><span>3.0s — very slow</span></div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Max question length <span style="font-weight:400;color:var(--text-muted);font-size:11px">— hard stop</span></div>
+            <div class="field-hint">If the interviewer talks longer than this, Drishi processes what it heard.</div>
+            <div class="slider-row">
+              <input type="range" id="dur-slider" min="5" max="30" step="1" value="15"
+                     oninput="onDurSlide(this.value)" onchange="saveDuration(this.value)">
+              <span class="slider-val" id="dur-val">15s</span>
+            </div>
+            <div class="slider-labs"><span>5s short</span><span>30s very long</span></div>
+          </div>
+        </div>
+
+        <!-- Speech-to-Text -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🗣</div>
+            <div>
+              <div class="inner-card-title">Speech-to-Text</div>
+              <div class="inner-card-sub">How audio is converted to text</div>
+            </div>
+          </div>
+
+          <!-- Live latency meter -->
+          <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0" id="lat-dot"></div>
+            <div style="font-size:11px;color:var(--text-muted);flex:1">Live answer latency</div>
+            <div style="font-size:14px;font-weight:800;color:var(--text-dark)" id="s-avg-lat">—</div>
+            <div style="font-size:10px;color:var(--text-muted)">ms avg</div>
+            <div id="lat-grade" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;background:#dcfce7;color:#166534">fast</div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Transcription service</div>
+            <div class="field-hint">Better accuracy = better answers. Local is free and works offline.</div>
+            <div class="chips" id="stt-backend-chips">
+              <div class="chip sel" id="sttb-local"   onclick="setSttBackend('local')">💻 Local <span class="chip-sub" style="display:inline">⚡ fastest</span></div>
+              <div class="chip"    id="sttb-deepgram" onclick="setSttBackend('deepgram')">☁ Deepgram <span class="chip-sub" style="display:inline">~0.6s</span></div>
+              <div class="chip"    id="sttb-sarvam"   onclick="setSttBackend('sarvam')">🌐 Sarvam <span class="chip-sub" style="display:inline">~1s · Indian EN</span></div>
+            </div>
+            <div class="chip-desc" id="sttb-desc">💻 <strong>Local</strong> — free, runs on your PC, works offline. Uses Whisper AI.</div>
+            <div class="warn-box" id="stt-cloud-hint">
+              ⚠ Requires an API key — <a href="/api-dashboard">set it here →</a>
+            </div>
+          </div>
+
+          <div id="stt-model-section">
+            <div class="field">
+              <div class="field-label">Whisper model <span style="font-size:10px;color:var(--text-muted);font-weight:400">— local only</span></div>
+              <div class="field-hint"><strong style="color:var(--text-dark)">Distil-S</strong> is the best balance of speed and accuracy for live interviews.</div>
+              <div class="chips" id="whisper-chips">
+                <div class="chip"     id="wm-tiny"   onclick="setWhisperModel('tiny.en')">Tiny<span class="chip-sub">⚡ ~200ms</span></div>
+                <div class="chip"     id="wm-base"   onclick="setWhisperModel('base.en')">Base<span class="chip-sub">~400ms</span></div>
+                <div class="chip sel" id="wm-distil" onclick="setWhisperModel('Systran/faster-distil-whisper-small.en')">Distil-S ✓<span class="chip-sub">best</span></div>
+                <div class="chip"     id="wm-small"  onclick="setWhisperModel('small.en')">Small<span class="chip-sub">~800ms</span></div>
+                <div class="chip"     id="wm-medium" onclick="setWhisperModel('medium.en')">Medium<span class="chip-sub">2s+</span></div>
+              </div>
+              <div class="chip-desc" id="wm-desc">✓ <strong>Distil-S</strong> — fast and accurate. Recommended for live interviews.</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /inner-grid -->
+    </div><!-- /panel-audio -->
+
+    <!-- ── Tab: Coding Language ── -->
+    <div class="settings-tab-panel" id="panel-coding">
+      <div class="info-box">
+        When you ask a question that could be answered in multiple languages (e.g. "how to sort a list"), Drishi uses this language by default. You can always specify the language in your question.
+      </div>
+      <div class="field-label" style="margin-bottom:8px">Default coding language</div>
+      <div class="chips" id="lang-chips">
+        <div class="chip sel" id="lc-python"     onclick="setCodingLang('python')">🐍 Python</div>
+        <div class="chip"    id="lc-java"        onclick="setCodingLang('java')">☕ Java</div>
+        <div class="chip"    id="lc-javascript"  onclick="setCodingLang('javascript')">🟨 JavaScript</div>
+        <div class="chip"    id="lc-typescript"  onclick="setCodingLang('typescript')">🔷 TypeScript</div>
+        <div class="chip"    id="lc-cpp"         onclick="setCodingLang('cpp')">⚙ C++</div>
+        <div class="chip"    id="lc-go"          onclick="setCodingLang('go')">🐹 Go</div>
+        <div class="chip"    id="lc-sql"         onclick="setCodingLang('sql')">🗃 SQL</div>
+        <div class="chip"    id="lc-bash"        onclick="setCodingLang('bash')">🖥 Bash/Shell</div>
+      </div>
+      <div class="chip-desc" id="lc-desc">🐍 <strong>Python</strong> — default language for coding questions.</div>
+    </div><!-- /panel-coding -->
+
+    <!-- ── Tab: AI / Model ── -->
+    <div class="settings-tab-panel" id="panel-ai">
+      <div class="settings-inner-grid">
+
+        <!-- Answer Model -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🤖</div>
+            <div>
+              <div class="inner-card-title">Answer Model</div>
+              <div class="inner-card-sub">Which AI generates answers for new questions</div>
+            </div>
+          </div>
+
+          <div class="opt-row sel" id="m-haiku" onclick="setModel('haiku')">
+            <div class="opt-info">
+              <strong>Claude Haiku 4.5 <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;background:#dcfce7;color:#166534;vertical-align:middle">⚡ fast</span></strong>
+              <span>~0.8–2s TTFT · Best for live interviews · Instant feel</span>
+            </div>
+            <span class="opt-chk" id="chk-haiku">✓</span>
+          </div>
+          <div class="opt-row" id="m-sonnet" onclick="setModel('sonnet')">
+            <div class="opt-info">
+              <strong>Claude Sonnet 4.6 <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;background:#fef3c7;color:#92400e;vertical-align:middle">balanced</span></strong>
+              <span>~1.5–4s TTFT · Richer, more detailed · Better for complex questions</span>
+            </div>
+            <span class="opt-chk" id="chk-sonnet" style="display:none">✓</span>
+          </div>
+
+          <div class="tip-box">
+            💡 <strong>Note:</strong> DB answers are always instant regardless of model. The model only affects brand-new questions.
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🎨</div>
+            <div>
+              <div class="inner-card-title">Appearance</div>
+              <div class="inner-card-sub">Theme and text size for the interview screen</div>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Dark mode</div>
+              <div class="toggle-hint">Switch main screen to dark background</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="tog-dark" onchange="setTheme(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div style="height:16px"></div>
+
+          <div class="field-label" style="margin-bottom:4px">Answer text size</div>
+          <div class="field-hint">Bigger text helps when glancing at answers quickly.</div>
+          <div class="fs-row">
+            <button class="fs-btn" onclick="adjustFs(-1)">A−</button>
+            <span class="fs-current" id="s-fs-label">16</span>
+            <button class="fs-btn" onclick="adjustFs(+1)">A+</button>
+          </div>
+          <div class="fs-presets">
+            <button class="fs-preset" onclick="applyFs(0)">12</button>
+            <button class="fs-preset" onclick="applyFs(2)">16</button>
+            <button class="fs-preset" onclick="applyFs(4)">20</button>
+            <button class="fs-preset" onclick="applyFs(6)">24</button>
+            <button class="fs-preset" onclick="applyFs(9)">30</button>
+          </div>
+        </div>
+
+      </div><!-- /inner-grid -->
+    </div><!-- /panel-ai -->
+
+    <!-- ── Tab: Advanced ── -->
+    <div class="settings-tab-panel" id="panel-advanced">
+
+      <!-- Active Profile -->
+      <div class="inner-card" style="margin-bottom:20px">
+        <div class="inner-card-head">
+          <div class="inner-card-icon">👤</div>
+          <div style="flex:1">
+            <div class="inner-card-title" id="prof-card-title">Loading…</div>
+            <div class="inner-card-sub" id="prof-card-sub">Resume, AI settings, intro &amp; JD managed per profile</div>
+          </div>
+          <a href="/users" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;background:var(--green-light);border:1px solid rgba(34,122,74,0.3);color:var(--green);font-size:12px;font-weight:700;text-decoration:none;flex-shrink:0">✏ Manage Profiles →</a>
+        </div>
+        <div class="tip-box" style="margin-top:0">
+          💡 <strong>Resume, skills, domain, AI instructions and intro</strong> are managed per-profile in <a href="/users">User Profiles</a>. Each candidate keeps their own settings.
+        </div>
+      </div>
+
+      <div class="settings-inner-grid">
+
+        <!-- Session Stats -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">📊</div>
+            <div>
+              <div class="inner-card-title">Session Stats</div>
+              <div class="inner-card-sub">Live performance — auto-refreshes every 15s</div>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-cell"><div class="stat-k">DB Entries</div><div class="stat-v" id="s-db">—</div></div>
+            <div class="stat-cell"><div class="stat-k">Cache Hit Rate</div><div class="stat-v" id="s-cache">—</div></div>
+            <div class="stat-cell"><div class="stat-k">Questions Asked</div><div class="stat-v" id="s-qa">0</div></div>
+            <div class="stat-cell"><div class="stat-k">Auto-Learned</div><div class="stat-v" id="s-learned">0</div></div>
+            <div class="stat-cell"><div class="stat-k">CPU</div><div class="stat-v" id="s-cpu">—</div></div>
+            <div class="stat-cell"><div class="stat-k">RAM</div><div class="stat-v" id="s-ram">—</div></div>
+          </div>
+          <button class="btn btn-danger btn-sm" style="width:100%" onclick="clearSession()">🗑 Clear Session Q&amp;A</button>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="inner-card">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🔗</div>
+            <div>
+              <div class="inner-card-title">Quick Links</div>
+              <div class="inner-card-sub">Navigate to other Drishi pages</div>
+            </div>
+          </div>
+          <div class="link-list">
+            <a href="/" class="site-link"><span class="site-link-icon">🏠</span><div class="site-link-text"><strong>Interview Dashboard</strong><small>Main screen — live Q&amp;A feed</small></div></a>
+            <a href="/lookup" class="site-link" target="_blank"><span class="site-link-icon">🔍</span><div class="site-link-text"><strong>Keyword Lookup</strong><small>Search your answer database</small></div></a>
+            <a href="/monitor" class="site-link" target="_blank"><span class="site-link-icon">📡</span><div class="site-link-text"><strong>Remote Monitor</strong><small>Watch live answers on your phone</small></div></a>
+            <a href="/questions" class="site-link"><span class="site-link-icon">🗄</span><div class="site-link-text"><strong>Q&amp;A Database</strong><small>View and edit all saved answers</small></div></a>
+            <a href="/api-dashboard" class="site-link"><span class="site-link-icon">🔑</span><div class="site-link-text"><strong>API Keys</strong><small>Set Deepgram / Sarvam keys</small></div></a>
+          </div>
+        </div>
+
+        <!-- Reset Settings -->
+        <div class="inner-card settings-inner-grid-full" style="border:1.5px solid rgba(239,68,68,0.25)">
+          <div class="inner-card-head">
+            <div class="inner-card-icon" style="background:var(--red-bg)">⚠️</div>
+            <div>
+              <div class="inner-card-title">Reset Settings</div>
+              <div class="inner-card-sub">Restore all settings to factory defaults</div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
+            This will reset: speaker speed (Normal), silence wait (1.2s), max duration (15s), transcription (Local / Distil-S), answer model (Haiku), appearance (dark mode off, font size 16).
+          </p>
+          <button class="btn btn-danger" style="width:100%" onclick="resetAllSettings()">↺ Reset All Settings to Defaults</button>
+        </div>
+
+      </div><!-- /inner-grid advanced -->
+    </div><!-- /panel-advanced -->
+
+    <!-- ── Tab: STT Learning ── -->
+    <div class="settings-tab-panel" id="panel-sttlearn">
+      <div class="settings-inner-grid">
+
+        <!-- Stats + manual add -->
+        <div class="inner-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text-dark)">Auto-Learned STT Corrections</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Every time the LLM fixes a garbled question, the correction is saved here and applied automatically next time — no manual work needed.
+              </div>
+            </div>
+            <span id="stt-count-badge" style="background:var(--green-light);color:var(--green-dark);padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700">0</span>
+          </div>
+
+          <!-- How it works banner -->
+          <div style="background:var(--green-bg);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text-medium);line-height:1.7;margin-bottom:16px">
+            <strong style="color:var(--green)">How auto-learning works:</strong><br>
+            1. STT transcribes interviewer audio (may mishear tech terms)<br>
+            2. If the question misses the DB, LLM corrects the phrasing (e.g. "gill" → "GIL")<br>
+            3. The correction is saved here and applied to every future STT output — silently, instantly<br>
+            4. Corrections hot-reload every 5 min without restarting the server
+          </div>
+
+          <!-- Manual add form -->
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+            <input type="text" id="stt-wrong-input" placeholder="Wrong (e.g. gill)" style="flex:1;min-width:120px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+            <span style="align-self:center;color:var(--text-muted);font-size:18px">→</span>
+            <input type="text" id="stt-right-input" placeholder="Correct (e.g. GIL)" style="flex:1;min-width:120px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+            <button class="btn btn-primary" style="padding:8px 16px;white-space:nowrap" onclick="addSttCorrection()">+ Add</button>
+          </div>
+
+          <!-- Corrections table -->
+          <div id="stt-corrections-container">
+            <div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px">Loading…</div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /panel-sttlearn -->
+
+  </div><!-- /settings-card -->
+
+  <!-- ── Per-User Settings ── -->
+  <div class="card" style="margin-top:16px;padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark)">Per-User Settings</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Maintain separate settings for each user token</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="tog-per-user" onchange="setPerUserSettings(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.55">
+      When enabled, each user token can have independent silence timing, STT model, and language preferences. Useful when multiple candidates share the same Drishi instance.
+    </p>
+  </div>
+
+  <!-- ── Restore Defaults ── -->
+  <div style="margin-top:20px;text-align:center">
+    <button class="btn btn-danger" onclick="restoreDefaults()">Restore Defaults</button>
+  </div>
+
+</div><!-- /page-content -->
+
+<script>
+'use strict';
+
+/* ── Saved flash ─────────────────────────────────────────── */
+let _savedTimer = null;
+function showSaved() {
+  const bar = document.getElementById('saved-flash');
+  bar.style.display = 'block';
+  clearTimeout(_savedTimer);
+  _savedTimer = setTimeout(() => { bar.style.display = 'none'; }, 2600);
+}
+
+/* ── Tab navigation ──────────────────────────────────────── */
+const _TABS = ['launch', 'audio', 'coding', 'ai', 'advanced', 'sttlearn'];
+let _activeTab = localStorage.getItem('drishi_settings_tab') || 'launch';
+
+function showTab(tab) {
+  _activeTab = tab;
+  localStorage.setItem('drishi_settings_tab', tab);
+  _TABS.forEach(t => {
+    const panel = document.getElementById('panel-' + t);
+    const btn   = document.getElementById('t-' + t);
+    if (panel) panel.classList.toggle('active', t === tab);
+    if (btn)   btn.classList.toggle('active', t === tab);
+  });
+}
+showTab(_activeTab);
+
+/* ── Speaker speed ───────────────────────────────────────── */
+const _SPEED_DESCS = {
+  slow:   '🐢 <strong>Slow</strong> — waits 2.0s of silence. Use if interviewer pauses mid-sentence often.',
+  normal: '🚶 <strong>Normal</strong> — waits 1.2s of silence. Works for most interviewers.',
+  fast:   '⚡ <strong>Fast</strong> — waits 0.6s of silence. Use if interviewer speaks quickly without long pauses.',
+};
+const _SPEED_VALS = { slow: 2.0, normal: 1.2, fast: 0.6 };
+
+function setSpeakerSpeed(s) {
+  document.querySelectorAll('#speed-chips .chip').forEach(c => c.classList.remove('sel'));
+  document.getElementById('spd-' + s).classList.add('sel');
+  document.getElementById('speed-desc').innerHTML = _SPEED_DESCS[s];
+  const val = _SPEED_VALS[s];
+  document.getElementById('sil-slider').value = val;
+  document.getElementById('sil-val').textContent = val.toFixed(1) + 's';
+  saveSilence(val);
+}
+
+/* ── Sliders ─────────────────────────────────────────────── */
+function onSilenceSlide(v) { document.getElementById('sil-val').textContent = parseFloat(v).toFixed(1) + 's'; }
+function saveSilence(val) {
+  fetch('/api/audio_settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ silence_duration: parseFloat(val) }) }).catch(() => {});
+  showSaved();
+}
+
+function onDurSlide(v) { document.getElementById('dur-val').textContent = parseInt(v) + 's'; }
+function saveDuration(val) {
+  fetch('/api/audio_settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ max_duration: parseFloat(val) }) }).catch(() => {});
+  showSaved();
+}
+
+/* ── STT backend ─────────────────────────────────────────── */
+const _STTB_DESCS = {
+  local:    '💻 <strong>Local</strong> — free, runs on your PC, works offline. Uses Whisper AI model below.',
+  deepgram: '☁ <strong>Deepgram</strong> — cloud-based, very fast. Needs Deepgram API key.',
+  sarvam:   '🌐 <strong>Sarvam</strong> — best accuracy for Indian English accents. Needs Sarvam API key.',
+};
+
+function setSttBackend(b) {
+  document.querySelectorAll('#stt-backend-chips .chip').forEach(c => c.classList.remove('sel'));
+  document.getElementById('sttb-' + b).classList.add('sel');
+  document.getElementById('sttb-desc').innerHTML = _STTB_DESCS[b];
+  const isCloud = b !== 'local';
+  document.getElementById('stt-cloud-hint').style.display = isCloud ? 'block' : 'none';
+  document.getElementById('stt-model-section').style.display = b === 'local' ? 'block' : 'none';
+  fetch('/api/audio_settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stt_backend: b }) }).catch(() => {});
+  showSaved();
+}
+
+/* ── Whisper model ───────────────────────────────────────── */
+const _WM_DESCS = {
+  'tiny.en':  '⚡ <strong>Tiny</strong> — fastest (0.2s), least accurate. Only use if your CPU is very slow.',
+  'base.en':  '🏃 <strong>Base</strong> — fast (0.4s), decent accuracy. Good fallback option.',
+  'Systran/faster-distil-whisper-small.en': '✓ <strong>Distil-S</strong> — fast and accurate. Best for live interviews.',
+  'small.en': '📈 <strong>Small</strong> — more accurate (0.8s), slightly slower.',
+  'medium.en': '🎯 <strong>Medium</strong> — most accurate (2s+), slowest. For pre-recorded audio only.',
+};
+const _WM_IDS = {
+  'tiny.en': 'wm-tiny', 'base.en': 'wm-base',
+  'Systran/faster-distil-whisper-small.en': 'wm-distil',
+  'small.en': 'wm-small', 'medium.en': 'wm-medium',
+};
+
+function setWhisperModel(m) {
+  document.querySelectorAll('#whisper-chips .chip').forEach(c => c.classList.remove('sel'));
+  const id = _WM_IDS[m];
+  if (id) document.getElementById(id).classList.add('sel');
+  document.getElementById('wm-desc').innerHTML = _WM_DESCS[m] || m;
+  fetch('/api/audio_settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stt_model: m }) }).catch(() => {});
+  showSaved();
+}
+
+/* ── Answer model ────────────────────────────────────────── */
+let _model = 'haiku';
+function setModel(m) {
+  _model = m;
+  ['haiku', 'sonnet'].forEach(x => {
+    document.getElementById('m-' + x).classList.toggle('sel', x === m);
+    document.getElementById('chk-' + x).style.display = x === m ? 'inline' : 'none';
+  });
+  // Sync launch tab
+  ['haiku', 'sonnet'].forEach(x => {
+    const el = document.getElementById('lm-' + x);
+    const chk = document.getElementById('lchk-' + x);
+    if (el) el.classList.toggle('sel', x === m);
+    if (chk) chk.style.display = x === m ? 'inline' : 'none';
+  });
+  fetch('/api/set_llm_model', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: m }) }).catch(() => {});
+  // Persist to .env via launch config
+  fetch('/api/launch_config', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llm_model: m }) }).catch(() => {});
+  showSaved();
+}
+
+/* ── Theme ───────────────────────────────────────────────── */
+function setTheme(dark) {
+  localStorage.setItem('drishi_theme', dark ? 'dark' : 'light');
+  showSaved();
+}
+
+/* ── Font size ───────────────────────────────────────────── */
+const FS_SIZES = [12, 13, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
+let _fsIdx = 4; // default index = 16
+function _applyFs(idx) {
+  _fsIdx = Math.max(0, Math.min(FS_SIZES.length - 1, idx));
+  localStorage.setItem('drishi_fs', _fsIdx);
+  document.getElementById('s-fs-label').textContent = FS_SIZES[_fsIdx];
+  showSaved();
+}
+function adjustFs(d) { _applyFs(_fsIdx + d); }
+function applyFs(idx) { _applyFs(idx); }
+
+/* ── Coding language ─────────────────────────────────────── */
+let _codingLang = 'python';
+const _LC_DESCS = {
+  python:     '🐍 <strong>Python</strong> — default language for coding questions.',
+  java:       '☕ <strong>Java</strong> — answers use Java syntax and idioms.',
+  javascript: '🟨 <strong>JavaScript</strong> — answers use JS/Node.js syntax.',
+  typescript: '🔷 <strong>TypeScript</strong> — answers use TypeScript syntax.',
+  cpp:        '⚙ <strong>C++</strong> — answers use C++ syntax.',
+  go:         '🐹 <strong>Go</strong> — answers use Go syntax.',
+  sql:        '🗃 <strong>SQL</strong> — answers use SQL queries and syntax.',
+  bash:       '🖥 <strong>Bash/Shell</strong> — answers use shell scripting.',
+};
+
+function setCodingLang(lang) {
+  _codingLang = lang;
+  document.querySelectorAll('#lang-chips .chip').forEach(c => c.classList.remove('sel'));
+  const el = document.getElementById('lc-' + lang);
+  if (el) el.classList.add('sel');
+  document.getElementById('lc-desc').innerHTML = _LC_DESCS[lang] || lang;
+  localStorage.setItem('drishi_coding_lang', lang);
+  fetch('/api/coding_language', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: lang }) }).catch(() => {});
+  showSaved();
+}
+
+/* ── Per-user settings toggle ────────────────────────────── */
+function setPerUserSettings(enabled) {
+  localStorage.setItem('drishi_per_user_settings', enabled ? '1' : '0');
+  showSaved();
+}
+
+/* ── Stats ───────────────────────────────────────────────── */
+async function refreshStats() {
+  try {
+    const [info, health] = await Promise.all([
+      fetch('/api/session-info').then(r => r.json()),
+      fetch('/api/system/health').then(r => r.json()).catch(() => ({})),
+    ]);
+    document.getElementById('s-db').textContent      = info.db_count ?? '—';
+    document.getElementById('s-cache').textContent   = info.cache_hits != null ? info.cache_hits + '%' : '—';
+    document.getElementById('s-qa').textContent      = info.qa_count ?? info.total_questions ?? 0;
+    document.getElementById('s-learned').textContent = info.auto_learned ?? info.learned ?? '—';
+    document.getElementById('s-cpu').textContent     = health.cpu != null ? health.cpu + '%' : '—';
+    document.getElementById('s-ram').textContent     = health.ram != null ? health.ram + '%' : '—';
+    // Update live latency meter
+    const avgMs = info.avg_latency_ms ?? info.avg_answer_ms ?? null;
+    if (avgMs != null) {
+      const el = document.getElementById('s-avg-lat');
+      if (el) el.textContent = Math.round(avgMs);
+      const dot  = document.getElementById('lat-dot');
+      const grade = document.getElementById('lat-grade');
+      if (dot && grade) {
+        if (avgMs < 500)       { dot.style.background='#22c55e'; grade.textContent='fast';     grade.style.cssText='font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;background:#dcfce7;color:#166534'; }
+        else if (avgMs < 2000) { dot.style.background='#f59e0b'; grade.textContent='balanced'; grade.style.cssText='font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;background:#fef3c7;color:#92400e'; }
+        else                   { dot.style.background='#ef4444'; grade.textContent='slow';     grade.style.cssText='font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;background:#fee2e2;color:#991b1b'; }
+      }
+    }
+  } catch {}
+}
+
+/* ── Clear session ───────────────────────────────────────── */
+async function clearSession() {
+  if (!confirm('Clear all Q&A cards for this session?')) return;
+  await fetch('/api/clear_session', { method: 'POST' }).catch(() => {});
+  showSaved();
+}
+
+/* ── Launch Config ───────────────────────────────────────── */
+const _MODE_TIPS = {
+  local:     '💡 <strong>Tip:</strong> For screen sharing on Meet/Zoom/Teams, share only the browser tab — not the full screen.',
+  extension: '💡 <strong>Extension setup:</strong> Install Drishi Chrome Extension on the interviewer\'s laptop, set the Server URL to this machine\'s IP, then click Connect.',
+  ngrok:     '💡 <strong>ngrok:</strong> A public URL will be created at startup. Share it with your team so they can watch the monitor from anywhere.',
+  'ext-ngrok': '💡 <strong>Extension + ngrok:</strong> Install the extension on the interviewer\'s laptop and set the Server URL to the ngrok URL shown at startup.',
+};
+
+let _launchMode = 'local'; // local | extension | ngrok | ext-ngrok
+let _launchLlm  = 'haiku';
+
+function _modeKey(audioSource, useNgrok) {
+  if (audioSource === 'extension' && useNgrok) return 'ext-ngrok';
+  if (audioSource === 'extension')             return 'extension';
+  if (useNgrok)                                return 'ngrok';
+  return 'local';
+}
+
+function setMode(audioSource, useNgrok) {
+  _launchMode = _modeKey(audioSource, useNgrok);
+  const modeIds = ['local', 'ext', 'ngrok', 'ext-ngrok'];
+  const modeMap  = { local: 'local', ext: 'extension', ngrok: 'ngrok', 'ext-ngrok': 'ext-ngrok' };
+  modeIds.forEach(id => {
+    document.getElementById('mode-' + id).classList.toggle('sel', modeMap[id] === _launchMode);
+    document.getElementById('chk-mode-' + id).style.display = modeMap[id] === _launchMode ? 'inline' : 'none';
+  });
+  const tipEl = document.getElementById('mode-tip');
+  if (tipEl) tipEl.innerHTML = _MODE_TIPS[_launchMode] || '';
+  fetch('/api/launch_config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audio_source: audioSource, use_ngrok: useNgrok }),
+  }).catch(() => {});
+  showSaved();
+}
+
+function setLaunchModel(m) {
+  _launchLlm = m;
+  ['haiku', 'sonnet'].forEach(x => {
+    document.getElementById('lm-' + x).classList.toggle('sel', x === m);
+    document.getElementById('lchk-' + x).style.display = x === m ? 'inline' : 'none';
+  });
+  // Also sync with main AI tab
+  ['haiku', 'sonnet'].forEach(x => {
+    const el = document.getElementById('m-' + x);
+    const chk = document.getElementById('chk-' + x);
+    if (el) el.classList.toggle('sel', x === m);
+    if (chk) chk.style.display = x === m ? 'inline' : 'none';
+  });
+  fetch('/api/launch_config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llm_model: m }),
+  }).catch(() => {});
+  showSaved();
+}
+
+function setLaunchUser(userId) {
+  document.querySelectorAll('.launch-user-opt').forEach(el => {
+    el.classList.toggle('sel', el.dataset.uid === String(userId));
+    const chk = el.querySelector('.opt-chk');
+    if (chk) chk.style.display = el.dataset.uid === String(userId) ? 'inline' : 'none';
+  });
+  fetch('/api/launch_config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id_override: userId }),
+  }).catch(() => {});
+  // Also activate user immediately
+  if (userId) {
+    fetch('/api/users/activate/' + userId, { method: 'POST' }).catch(() => {});
+  }
+  showSaved();
+}
+
+async function loadLaunchConfig() {
+  try {
+    const [cfg, users] = await Promise.all([
+      fetch('/api/launch_config').then(r => r.json()),
+      fetch('/api/users').then(r => r.json()).catch(() => []),
+    ]);
+
+    // Set mode
+    const modeKey = _modeKey(cfg.audio_source || 'system', cfg.use_ngrok);
+    _launchMode = modeKey;
+    const modeMap = { local: 'local', extension: 'ext', ngrok: 'ngrok', 'ext-ngrok': 'ext-ngrok' };
+    Object.entries(modeMap).forEach(([mk, id]) => {
+      const card = document.getElementById('mode-' + id);
+      const chk  = document.getElementById('chk-mode-' + id);
+      if (card) card.classList.toggle('sel', mk === modeKey);
+      if (chk)  chk.style.display = mk === modeKey ? 'inline' : 'none';
+    });
+    const tipEl = document.getElementById('mode-tip');
+    if (tipEl) tipEl.innerHTML = _MODE_TIPS[modeKey] || '';
+
+    // Set LLM
+    const llmId = (cfg.llm_model || '').includes('sonnet') ? 'sonnet' : 'haiku';
+    _launchLlm = llmId;
+    ['haiku', 'sonnet'].forEach(x => {
+      const el = document.getElementById('lm-' + x);
+      const chk = document.getElementById('lchk-' + x);
+      if (el) el.classList.toggle('sel', x === llmId);
+      if (chk) chk.style.display = x === llmId ? 'inline' : 'none';
+    });
+
+    // Render user list
+    const container = document.getElementById('user-list-launch');
+    if (container) {
+      const activeId = String(cfg.user_id_override || '');
+      const userArr  = Array.isArray(users) ? users : [];
+      if (!userArr.length) {
+        container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">No profiles yet — <a href="/users" style="color:var(--green);font-weight:700">add one</a></div>';
+      } else {
+        // "None" option
+        const noneHtml = `<div class="opt-row launch-user-opt ${activeId === '' ? 'sel' : ''}" data-uid="" onclick="setLaunchUser('')" style="margin-bottom:0;padding:10px 14px">
+          <div class="opt-info"><strong>No profile</strong><span>Start without loading a user</span></div>
+          <span class="opt-chk" style="display:${activeId === '' ? 'inline' : 'none'}">✓</span>
+        </div>`;
+        const usersHtml = userArr.map(u => {
+          const sel = String(u.id) === activeId;
+          return `<div class="opt-row launch-user-opt ${sel ? 'sel' : ''}" data-uid="${u.id}" onclick="setLaunchUser(${u.id})" style="margin-bottom:0;padding:10px 14px">
+            <div class="opt-info"><strong>${escHtml(u.name)}</strong><span>${escHtml(u.role || 'No role')}</span></div>
+            <span class="opt-chk" style="display:${sel ? 'inline' : 'none'}">✓</span>
+          </div>`;
+        }).join('');
+        container.innerHTML = noneHtml + usersHtml;
+      }
+    }
+  } catch(e) {
+    console.warn('loadLaunchConfig error', e);
+  }
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Load settings from server ───────────────────────────── */
+async function loadSettings() {
+  try {
+    const d = await fetch('/api/audio_settings').then(r => r.json());
+
+    const sil = parseFloat(d.silence_duration) || 1.2;
+    document.getElementById('sil-slider').value = sil;
+    document.getElementById('sil-val').textContent = sil.toFixed(1) + 's';
+
+    const dur = parseFloat(d.max_duration) || 15;
+    document.getElementById('dur-slider').value = dur;
+    document.getElementById('dur-val').textContent = parseInt(dur) + 's';
+
+    // Derive speaker speed from silence value
+    const speedMap = { slow: 2.0, normal: 1.2, fast: 0.6 };
+    let bestSpeed = 'normal', bestDiff = Infinity;
+    for (const [s, v] of Object.entries(speedMap)) {
+      const diff = Math.abs(sil - v);
+      if (diff < bestDiff) { bestDiff = diff; bestSpeed = s; }
+    }
+    document.querySelectorAll('#speed-chips .chip').forEach(c => c.classList.remove('sel'));
+    document.getElementById('spd-' + bestSpeed).classList.add('sel');
+    document.getElementById('speed-desc').innerHTML = _SPEED_DESCS[bestSpeed];
+
+    const backend = d.stt_backend || 'local';
+    document.querySelectorAll('#stt-backend-chips .chip').forEach(c => c.classList.remove('sel'));
+    const sttEl = document.getElementById('sttb-' + backend);
+    if (sttEl) sttEl.classList.add('sel');
+    document.getElementById('sttb-desc').innerHTML = _STTB_DESCS[backend] || '';
+    document.getElementById('stt-cloud-hint').style.display = backend !== 'local' ? 'block' : 'none';
+    document.getElementById('stt-model-section').style.display = backend === 'local' ? 'block' : 'none';
+
+    const wm = d.stt_model || 'Systran/faster-distil-whisper-small.en';
+    document.querySelectorAll('#whisper-chips .chip').forEach(c => c.classList.remove('sel'));
+    const wmId = _WM_IDS[wm];
+    if (wmId) document.getElementById(wmId).classList.add('sel');
+    document.getElementById('wm-desc').innerHTML = _WM_DESCS[wm] || wm;
+  } catch {}
+
+  // Load coding language
+  try {
+    const langData = await fetch('/api/coding_language').then(r => r.json());
+    const lang = langData.language || localStorage.getItem('drishi_coding_lang') || 'python';
+    _codingLang = lang;
+    document.querySelectorAll('#lang-chips .chip').forEach(c => c.classList.remove('sel'));
+    const lcEl = document.getElementById('lc-' + lang);
+    if (lcEl) lcEl.classList.add('sel');
+    document.getElementById('lc-desc').innerHTML = _LC_DESCS[lang] || lang;
+  } catch {}
+
+  const storedFs = parseInt(localStorage.getItem('drishi_fs'));
+  if (!isNaN(storedFs)) _applyFs(storedFs);
+
+  const theme = localStorage.getItem('drishi_theme');
+  document.getElementById('tog-dark').checked = theme === 'dark';
+
+  const perUser = localStorage.getItem('drishi_per_user_settings') === '1';
+  document.getElementById('tog-per-user').checked = perUser;
+}
+
+/* ── Reset all settings (restoreDefaults alias) ──────────── */
+async function resetAllSettings() {
+  if (!confirm('Reset all settings to defaults?')) return;
+
+  await fetch('/api/audio_settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ silence_duration: 1.2, max_duration: 15, stt_backend: 'local', stt_model: 'Systran/faster-distil-whisper-small.en' }),
+  }).catch(() => {});
+
+  await fetch('/api/set_llm_model', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'haiku' }),
+  }).catch(() => {});
+
+  await fetch('/api/coding_language', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: 'python' }),
+  }).catch(() => {});
+
+  localStorage.removeItem('drishi_fs');
+  localStorage.removeItem('drishi_theme');
+  localStorage.removeItem('drishi_model');
+  localStorage.removeItem('drishi_coding_lang');
+  localStorage.removeItem('drishi_focus');
+  localStorage.removeItem('drishi_per_user_settings');
+
+  showSaved();
+  setTimeout(() => location.reload(), 800);
+}
+
+/* restoreDefaults is the same as resetAllSettings */
+function restoreDefaults() { resetAllSettings(); }
+
+/* ── STT Auto-Learning ───────────────────────────────────── */
+async function loadSttCorrections() {
+  const container = document.getElementById('stt-corrections-container');
+  const badge = document.getElementById('stt-count-badge');
+  if (!container) return;
+  try {
+    const rows = await fetch('/api/admin/stt_corrections').then(r => r.json());
+    if (!Array.isArray(rows) || rows.length === 0) {
+      badge.textContent = '0';
+      container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px">
+        No learned corrections yet.<br>They appear automatically as the LLM corrects STT mishears during interviews.
+      </div>`;
+      return;
+    }
+    badge.textContent = rows.length;
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">Wrong (STT output)</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">Corrected</th>
+            <th style="text-align:center;padding:6px 10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">Hits</th>
+            <th style="text-align:center;padding:6px 10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">Source</th>
+            <th style="padding:6px 4px;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr id="sttrow-${r.id}">
+              <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace;color:var(--text-dark)">${_esc(r.wrong)}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace;color:var(--green-dark);font-weight:700">${_esc(r.right_text)}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;color:var(--text-muted)">${r.hit_count}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:center">
+                <span style="background:${r.source==='auto'?'var(--green-light)':'var(--gold-light, #FEF3DD)'};color:${r.source==='auto'?'var(--green-dark)':'#9B5A00'};padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700">${r.source==='auto'?'AI':'manual'}</span>
+              </td>
+              <td style="padding:8px 4px;border-bottom:1px solid var(--border);text-align:center">
+                <button onclick="deleteSttCorrection(${r.id})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:15px" title="Delete">✕</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div style="color:var(--red);font-size:13px;padding:12px">Error loading corrections: ${e.message}</div>`;
+  }
+}
+
+function _esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function deleteSttCorrection(id) {
+  try {
+    const r = await fetch(`/api/admin/stt_corrections/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      const row = document.getElementById('sttrow-' + id);
+      if (row) row.remove();
+      const badge = document.getElementById('stt-count-badge');
+      if (badge) badge.textContent = Math.max(0, (parseInt(badge.textContent) || 1) - 1);
+    }
+  } catch (_) {}
+}
+
+async function addSttCorrection() {
+  const wrong = (document.getElementById('stt-wrong-input').value || '').trim();
+  const right  = (document.getElementById('stt-right-input').value || '').trim();
+  if (!wrong || !right) { alert('Both fields required'); return; }
+  try {
+    const r = await fetch('/api/admin/stt_corrections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wrong, right }),
+    });
+    if (r.ok) {
+      document.getElementById('stt-wrong-input').value = '';
+      document.getElementById('stt-right-input').value = '';
+      loadSttCorrections();
+      showSaved();
+    } else {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+    }
+  } catch (e) { alert(e.message); }
+}
+
+/* ── Active profile card ─────────────────────────────────── */
+async function loadActiveProfileCard() {
+  try {
+    const [si, usersData] = await Promise.all([
+      fetch('/api/session-info').then(r => r.json()).catch(() => ({})),
+      fetch('/api/users').then(r => r.json()).catch(() => []),
+    ]);
+    const users = Array.isArray(usersData) ? usersData : [];
+    if (!users.length) {
+      document.getElementById('prof-card-title').textContent = 'No profiles — add one in User Profiles';
+      return;
+    }
+    let user = users[0];
+    if (si.user_name && si.user_name !== 'None') {
+      const m = users.find(u => u.name === si.user_name);
+      if (m) user = m;
+    }
+    document.getElementById('prof-card-title').textContent =
+      `${user.name} · ${user.role} · ${user.experience_years || 0}y exp`;
+    document.getElementById('prof-card-sub').textContent =
+      user.resume_file ? `Resume: ${user.resume_file}` : 'No resume · Click Manage Profiles to edit';
+  } catch {}
+}
+
+/* ── Presets ─────────────────────────────────────────────── */
+const _PRESETS = {
+  fast: {
+    silence: 0.6, duration: 10, model: 'haiku',
+    sttBackend: 'local', whisperModel: 'tiny.en',
+  },
+  balanced: {
+    silence: 1.2, duration: 15, model: 'haiku',
+    sttBackend: 'local', whisperModel: 'Systran/faster-distil-whisper-small.en',
+  },
+  detailed: {
+    silence: 2.0, duration: 20, model: 'sonnet',
+    sttBackend: 'local', whisperModel: 'small.en',
+  },
+};
+
+async function applyPreset(name) {
+  const p = _PRESETS[name];
+  if (!p) return;
+
+  document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+  const btn = document.getElementById('preset-' + name);
+  if (btn) btn.classList.add('active');
+
+  await fetch('/api/audio_settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      silence_duration: p.silence,
+      max_duration: p.duration,
+      stt_backend: p.sttBackend,
+      stt_model: p.whisperModel,
+    }),
+  }).catch(() => {});
+
+  await fetch('/api/set_llm_model', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: p.model }),
+  }).catch(() => {});
+
+  showSaved();
+  await loadSettings();
+}
+
+/* ── applySettings (banner button) ──────────────────────── */
+function applySettings() { showSaved(); }
+
+/* ── applyAndRestart ─────────────────────────────────────── */
+async function applyAndRestart() {
+  const btn = document.getElementById('apply-restart-btn');
+  if (btn) { btn.textContent = '⏳ Restarting…'; btn.style.pointerEvents = 'none'; }
+  try {
+    await fetch('/api/restart', { method: 'POST' }).catch(() => {});
+    await new Promise(r => setTimeout(r, 2000));
+    showSaved();
+  } finally {
+    if (btn) { btn.innerHTML = 'Apply &amp; Restart'; btn.style.pointerEvents = ''; }
+  }
+}
+
+/* ── Boot ────────────────────────────────────────────────── */
+loadLaunchConfig();
+loadSettings();
+loadActiveProfileCard();
+refreshStats();
+setInterval(refreshStats, 15000);
+</script>
+{% endblock %}

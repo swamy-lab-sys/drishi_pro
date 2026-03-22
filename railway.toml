@@ -1,8 +1,0 @@
-[build]
-builder = "NIXPACKS"
-
-[deploy]
-startCommand = "gunicorn --bind 0.0.0.0:$PORT -c gunicorn.conf.py wsgi:app"
-healthcheckPath = "/health"
-healthcheckTimeout = 30
-restartPolicyType = "ON_FAILURE"

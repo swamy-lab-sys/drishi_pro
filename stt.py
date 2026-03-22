@@ -111,12 +111,51 @@ def load_model(model_size=None):
 
 
 # Technical vocabulary for Whisper initial_prompt (helps bias toward correct spellings)
-TECH_PROMPT = ("Python, Django, Docker, Kubernetes, AWS, CI/CD, REST, SQL, Redis, async, "
-               "decorator, generator, tuple, list, *args, **kwargs, JWT, CORS, ORM, GIL, "
-               "SRE, DevOps, Terraform, Ansible, kubectl, ConfigMap, Ingress, Linux, UNIX, "
-               "Bash, systemd, systemctl, journalctl, cron, crontab, inode, filesystem, "
-               "SLI, SLO, SLA, error budget, incident response, postmortem, runbook, "
-               "ImagePullBackOff, CrashLoopBackOff, OOMKilled, HPA, pod lifecycle, Autosys.")
+TECH_PROMPT = (
+    # ── Python core ─────────────────────────────────────────────────────────
+    "Python, decorator, generator, iterator, closure, lambda, GIL, asyncio, "
+    "tuple, list, dict, set, *args, **kwargs, comprehension, f-string, "
+    "dunder, classmethod, staticmethod, metaclass, dataclass, namedtuple, "
+    "defaultdict, OrderedDict, Counter, lru_cache, functools, itertools, "
+    "pickle, unpickle, deepcopy, shallow copy, context manager, walrus operator, "
+    "type hints, Pydantic, pytest, unittest, virtualenv, pipenv, poetry, "
+    "async, await, coroutine, event loop, thread, process, GIL, multiprocessing, "
+    # ── Django ───────────────────────────────────────────────────────────────
+    "Django, ORM, QuerySet, serializer, makemigrations, migrate, "
+    "select_related, prefetch_related, ModelForm, ModelAdmin, "
+    "class-based view, function-based view, middleware, signal, "
+    "custom user model, CSRF, session, context processor, template tag, "
+    "Celery, Redis, Channels, WebSocket, gunicorn, uWSGI, WSGI, "
+    # ── Django REST Framework ────────────────────────────────────────────────
+    "DRF, APIView, ViewSet, ModelViewSet, GenericAPIView, Router, "
+    "HyperlinkedModelSerializer, permission class, throttle, pagination, "
+    "filter backend, SimpleJWT, token auth, JWT, CORS, "
+    # ── DevOps ───────────────────────────────────────────────────────────────
+    "Docker, Kubernetes, kubectl, ConfigMap, Ingress, Deployment, "
+    "Dockerfile, docker-compose, Helm, ArgoCD, Jenkins, CI/CD, pipeline, "
+    "Ansible, playbook, Terraform, Prometheus, Grafana, Nginx, "
+    "AWS, EC2, S3, IAM, EKS, ECS, Route 53, CloudWatch, VPC, "
+    "ImagePullBackOff, CrashLoopBackOff, OOMKilled, HPA, pod lifecycle, "
+    # ── SRE ─────────────────────────────────────────────────────────────────
+    "SRE, SLI, SLO, SLA, error budget, burn rate, toil, golden signals, "
+    "incident response, postmortem, runbook, on-call, escalation, "
+    "MTTD, MTTR, MTTF, RCA, observability, OpenTelemetry, Jaeger, "
+    "Alertmanager, PagerDuty, OpsGenie, Loki, ELK stack, Splunk, "
+    # ── Production Support / ITIL ────────────────────────────────────────────
+    "ITIL, P1, P2, P3, war room, bridge call, root cause analysis, "
+    "change management, CMDB, ServiceNow, Jira, incident, problem, "
+    "deadlock, zombie process, swap space, log rotation, "
+    # ── Linux / Unix ─────────────────────────────────────────────────────────
+    "Linux, UNIX, Bash, systemd, systemctl, journalctl, cron, crontab, "
+    "inode, filesystem, chmod, chown, grep, awk, sed, top, htop, "
+    "ps, lsof, netstat, ss, iostat, vmstat, strace, tcpdump, "
+    "symlink, hard link, POSIX, shebang, heredoc, pipefail, "
+    "load average, iowait, context switch, swap, OOM killer, "
+    # ── Autosys ──────────────────────────────────────────────────────────────
+    "Autosys, JIL, sendevent, autorep, box job, on_hold, on_ice, "
+    "force_startjob, killjob, job_type, choke level, CA Workload Automation, "
+    "ITRS, Geneos, Control-M, WCC, job scheduler, batch job."
+)
 
 
 # Pre-compiled corrections (compiled once at module load, not per transcription)
@@ -346,6 +385,116 @@ _RAW_CORRECTIONS = {
     "what a signal": "what is Django signal",
     # async misheard as "essence"
     "what is essence": "what is async",
+    # GIL mishears (Indian accent: "gill" or "jil")
+    "what is gill": "what is GIL",
+    "what is the gill": "what is the GIL",
+    "explain gill": "explain GIL",
+    "tell me about gill": "tell me about GIL",
+    "gill in python": "GIL in Python",
+    "jil in python": "GIL in Python",
+    "what is jil": "what is GIL",
+    # asyncio mishears
+    "what is assync io": "what is asyncio",
+    "how does assync io": "how does asyncio",
+    "what is a sync io": "what is asyncio",
+    "a sync i o": "asyncio",
+    "async io": "asyncio",
+    # threading mishears
+    "multi threading": "multithreading",
+    "what is multi threading": "what is multithreading",
+    "difference between multi threading": "difference between multithreading",
+    # microservice mishears
+    "micro service": "microservice",
+    "micro services": "microservices",
+    # CI/CD mishears
+    "cacd": "CI/CD",
+    "ci cd": "CI/CD",
+    "c i c d": "CI/CD",
+    "sea ice d": "CI/CD",
+    # Kubernetes mishears
+    "cube nettis": "Kubernetes",
+    "cube nettles": "Kubernetes",
+    "cube net ease": "Kubernetes",
+    # Django ORM
+    "d jango": "Django",
+    "d-jango": "Django",
+    # REST API
+    "rust api": "REST API",
+    "rest a p i": "REST API",
+    # API Gateway
+    "api gateway": "API Gateway",
+    # Deep copy / shallow copy
+    "deep coffee": "deep copy",
+    "deep coffey": "deep copy",
+    "shallow coffee": "shallow copy",
+    # Garbage collector
+    "garbage collector": "garbage collector",
+    "garbase collector": "garbage collector",
+    # Connection pooling
+    "connection pooling": "connection pooling",
+    "connection pulling": "connection pooling",
+    # Load balancer
+    "load balancer": "load balancer",
+    "load balancing": "load balancing",
+    # WebSocket
+    "web socket": "WebSocket",
+    "websockets": "WebSockets",
+    # Terraform
+    "terra form": "Terraform",
+    "terra forms": "Terraform",
+    # Prometheus
+    "promi thesis": "Prometheus",
+    "prom etheus": "Prometheus",
+    # Grafana
+    "grafana": "Grafana",
+    # PostgreSQL mishears
+    "postgres ql": "PostgreSQL",
+    "post gre sql": "PostgreSQL",
+    "post grey sql": "PostgreSQL",
+    # Redis
+    "read is": "Redis",
+    "reeds": "Redis",
+    # Celery (task queue)
+    "salary": "Celery",
+    "sellers": "Celery",
+    # gunicorn mishears
+    "guni corn": "gunicorn",
+    "guni corn": "gunicorn",
+    "uni corn": "gunicorn",
+    # WSGI
+    "wizzy": "WSGI",
+    "w s g i": "WSGI",
+    # Docker
+    "doc car": "Docker",
+    "docket": "Docker",
+    # Helm
+    "helm charts": "Helm charts",
+    # ArgoCD
+    "argo cd": "ArgoCD",
+    "argo c d": "ArgoCD",
+    # Concurrency
+    "currency": "concurrency",  # "what is currency" → concurrency (interview context)
+    # Deadlock
+    "dead lock": "deadlock",
+    "dead walk": "deadlock",
+    # Race condition
+    "race condition": "race condition",
+    "raise condition": "race condition",
+    # Virtual environment
+    "virtual environment": "virtual environment",
+    "venv": "venv",
+    # Lambda function
+    "lambda function": "lambda function",
+    "lamba": "lambda",
+    # Serialization
+    "serializaton": "serialization",
+    "serialization": "serialization",
+    # OOP
+    "o o p": "OOP",
+    "object oriented programming": "OOP",
+    # Inheritance
+    "in heritage": "inheritance",
+    "inheridence": "inheritance",
 
     # ── Kubernetes / DevOps mis-transcriptions (Sarvam) ──────────────────────
     # ImagePullBackOff
@@ -399,10 +548,32 @@ _RAW_CORRECTIONS = {
     "cron tab":                      "crontab",
     "cron job":                      "CronJob",
 }
-_COMPILED_CORRECTIONS = [
+# Static compiled corrections (from _RAW_CORRECTIONS above)
+# stt_learner.py prepends learned corrections to this list at runtime.
+_STATIC_COMPILED_CORRECTIONS = [
     (re.compile(re.escape(wrong), re.IGNORECASE), right)
     for wrong, right in _RAW_CORRECTIONS.items()
 ]
+
+# Runtime list — stt_learner hot-reloads learned corrections into this.
+# Starts as a copy of static; learned corrections are prepended on reload.
+_COMPILED_CORRECTIONS = list(_STATIC_COMPILED_CORRECTIONS)
+
+
+def _init_learned_corrections():
+    """Load learned corrections from DB at startup (background, non-blocking)."""
+    try:
+        import stt_learner as _learner
+        _learner.reload_into_stt(force=True)
+        _learner._start_reload_thread()
+        print(f"  [STT] Learned corrections loaded ({len(_COMPILED_CORRECTIONS)} total)")
+    except Exception as e:
+        print(f"  [STT] Learned corrections load skipped: {e}")
+
+
+# Load learned corrections in a daemon thread so import doesn't block
+import threading as _threading
+_threading.Thread(target=_init_learned_corrections, daemon=True, name="stt-init-learned").start()
 
 
 # Cached Deepgram client — created once, reused on every call
@@ -443,50 +614,137 @@ def _get_deepgram_session():
 def _get_sarvam_session():
     global _sarvam_session
     if _sarvam_session is None:
+        from requests.adapters import HTTPAdapter
         _sarvam_session = requests.Session()
         _sarvam_session.headers.update({
             "api-subscription-key": config.SARVAM_API_KEY,
+            "Connection": "keep-alive",   # reuse TCP connection between questions
         })
-        # Warm up TLS
+        # Mount adapter with pool_connections=2 so concurrent greenlets share TLS sessions
+        adapter = HTTPAdapter(pool_connections=2, pool_maxsize=4)
+        _sarvam_session.mount("https://", adapter)
+        # Warm up TLS by hitting the root — establishes TCP+TLS before first real STT call
         try:
             _sarvam_session.get("https://api.sarvam.ai/", timeout=5)
         except Exception:
             pass
-        print("  [STT] Sarvam session ready")
+        print("  [STT] Sarvam session ready (keep-alive)")
     return _sarvam_session
 
-# Technical keyterms to boost recognition accuracy in Deepgram Nova-2
+# Technical keyterms to boost recognition accuracy in Deepgram Nova-3
+# Focused on: Python · Django · DRF · DevOps · SRE · Linux · Autosys · Production Support
 _DEEPGRAM_KEYTERMS = [
-    # Python
-    "Python", "decorator", "generator", "iterator", "encapsulation",
-    "polymorphism", "inheritance", "abstraction", "GIL", "Global Interpreter Lock",
-    "tuple", "list comprehension", "lambda", "async", "await", "coroutine",
-    "pickle", "unpickle", "metaclass", "dunder", "classmethod", "staticmethod",
-    "Django", "Flask", "FastAPI", "SQLAlchemy", "Celery", "Redis",
-    "makemigrations", "migrate", "ORM", "QuerySet", "serializer",
-    "*args", "**kwargs", "LEGB", "closure", "monkey patching",
-    # DevOps / Cloud
-    "Kubernetes", "kubectl", "ConfigMap", "Ingress", "Deployment", "Pod",
-    "Dockerfile", "Docker", "docker-compose", "Docker Swarm",
-    "Ansible", "playbook", "Terraform", "Helm", "ArgoCD", "Jenkins",
-    "CI/CD", "pipeline", "nginx", "etcd", "RBAC", "Prometheus", "Grafana",
-    "AWS", "EC2", "S3", "IAM", "EKS", "ECS", "Route 53", "CloudWatch",
-    "SRE", "SLI", "SLO", "SLA", "load balancer", "reverse proxy",
-    "Linux", "UNIX", "Bash", "shell", "systemd", "systemctl", "journalctl",
-    "cron", "crontab", "top", "ps", "grep", "awk", "sed", "chmod", "chown",
-    "incident response", "postmortem", "error budget", "runbook", "observability",
-    "ImagePullBackOff", "CrashLoopBackOff", "OOMKilled", "HPA", "pod lifecycle",
-    "Autosys", "JIL", "sendevent", "ITRS", "Geneos", "ServiceNow", "PuTTY",
-    # Production support / ITIL
-    "ITIL", "incident", "runbook", "RCA", "root cause analysis",
-    "production support", "on-call", "escalation", "postmortem",
+    # ── Python core ──────────────────────────────────────────────────────────
+    "Python", "decorator", "generator", "iterator", "GIL", "Global Interpreter Lock",
+    "tuple", "list", "dict", "set", "list comprehension", "dict comprehension",
+    "lambda", "closure", "async", "await", "asyncio", "coroutine", "event loop",
+    "*args", "**kwargs", "LEGB", "scope", "monkey patching",
+    "pickle", "unpickle", "deepcopy", "shallow copy",
+    "metaclass", "dunder", "classmethod", "staticmethod",
+    "dataclass", "namedtuple", "defaultdict", "OrderedDict", "Counter",
+    "lru_cache", "functools", "itertools", "contextlib",
+    "f-string", "walrus operator", "type hints", "Pydantic", "mypy",
+    "pytest", "unittest", "mock", "patch", "fixture",
+    "virtualenv", "venv", "pipenv", "poetry", "pip",
+    "threading", "multiprocessing", "concurrent.futures", "subprocess",
+    "encapsulation", "polymorphism", "inheritance", "abstraction",
+    "SOLID", "OOP", "mutable", "immutable",
+    # ── Django ───────────────────────────────────────────────────────────────
+    "Django", "ORM", "QuerySet", "manager", "makemigrations", "migrate",
+    "select_related", "prefetch_related", "N+1", "raw SQL",
+    "ModelForm", "ModelAdmin", "inline admin",
+    "class-based view", "function-based view", "generic view",
+    "ListView", "DetailView", "CreateView", "UpdateView", "DeleteView",
+    "middleware", "signal", "post_save", "pre_save",
+    "custom user model", "AbstractUser", "CSRF", "session", "cookie",
+    "context processor", "template tag", "template filter",
+    "Celery", "beat", "task", "periodic task", "Redis", "RabbitMQ",
+    "Django Channels", "WebSocket", "ASGI", "WSGI",
+    "gunicorn", "uWSGI", "Whitenoise", "static files",
+    "manage.py", "settings", "INSTALLED_APPS", "SECRET_KEY",
+    "SQLAlchemy", "Flask", "FastAPI",
+    # ── Django REST Framework ────────────────────────────────────────────────
+    "DRF", "APIView", "ViewSet", "ModelViewSet", "ReadOnlyModelViewSet",
+    "GenericAPIView", "ListAPIView", "RetrieveAPIView", "CreateAPIView",
+    "Router", "DefaultRouter", "SimpleRouter",
+    "Serializer", "ModelSerializer", "HyperlinkedModelSerializer",
+    "serializer fields", "validated_data", "to_representation",
+    "permission class", "IsAuthenticated", "IsAdminUser", "AllowAny",
+    "authentication class", "TokenAuthentication", "SessionAuthentication",
+    "SimpleJWT", "JWT", "refresh token", "access token",
+    "throttle", "ScopedRateThrottle", "AnonRateThrottle", "UserRateThrottle",
+    "pagination", "PageNumberPagination", "CursorPagination", "LimitOffsetPagination",
+    "filter backend", "DjangoFilterBackend", "SearchFilter", "OrderingFilter",
+    "CORS", "django-cors-headers",
+    # ── DevOps ───────────────────────────────────────────────────────────────
+    "Docker", "Dockerfile", "docker-compose", "Docker Swarm",
+    "Kubernetes", "kubectl", "ConfigMap", "Secret", "Ingress",
+    "Deployment", "Pod", "Service", "Namespace", "ReplicaSet",
+    "StatefulSet", "DaemonSet", "CronJob", "HPA", "VPA",
+    "Helm", "ArgoCD", "FluxCD", "GitOps",
+    "Ansible", "playbook", "role", "inventory", "ad-hoc",
+    "Terraform", "provider", "module", "state", "plan", "apply",
+    "Jenkins", "pipeline", "Jenkinsfile", "CI/CD",
+    "GitHub Actions", "workflow", "GitLab CI",
+    "Nginx", "reverse proxy", "load balancer", "upstream",
+    "AWS", "EC2", "S3", "IAM", "EKS", "ECS", "Lambda", "Route 53",
+    "CloudWatch", "VPC", "Security Group", "ALB", "NLB",
+    "Prometheus", "Grafana", "Alertmanager", "PromQL",
+    "ImagePullBackOff", "CrashLoopBackOff", "OOMKilled",
+    "etcd", "RBAC", "pod lifecycle", "liveness probe", "readiness probe",
+    # ── SRE ──────────────────────────────────────────────────────────────────
+    "SRE", "SLI", "SLO", "SLA", "error budget", "burn rate", "toil",
+    "golden signals", "latency", "traffic", "errors", "saturation",
+    "incident response", "postmortem", "runbook", "on-call",
+    "MTTD", "MTTR", "MTTF", "RCA", "root cause analysis",
+    "observability", "OpenTelemetry", "Jaeger", "Zipkin", "tracing",
+    "ELK", "Elasticsearch", "Logstash", "Kibana", "Loki",
+    "Splunk", "Datadog", "PagerDuty", "OpsGenie",
+    "alert fatigue", "change window", "blast radius",
+    # ── Production Support / ITIL ────────────────────────────────────────────
+    "ITIL", "P1", "P2", "P3", "war room", "bridge call",
+    "change management", "CMDB", "ServiceNow", "Jira",
+    "incident", "problem", "change", "release",
+    "escalation", "escalation matrix", "SOP",
     "deadlock", "zombie process", "swap space", "log rotation",
-    # General tech
+    "memory leak", "CPU spike", "disk full", "OOM killer",
+    # ── Linux / Unix ─────────────────────────────────────────────────────────
+    "Linux", "UNIX", "Bash", "shell", "systemd", "systemctl", "journalctl",
+    "cron", "crontab", "inode", "filesystem", "mount", "umount",
+    "chmod", "chown", "chgrp", "sticky bit", "setuid",
+    "grep", "awk", "sed", "find", "xargs", "cut", "sort", "uniq",
+    "top", "htop", "ps", "kill", "killall", "lsof", "netstat", "ss",
+    "iostat", "vmstat", "sar", "strace", "tcpdump", "nmap",
+    "df", "du", "lsblk", "fdisk", "fstab", "fsck",
+    "load average", "iowait", "context switch", "swap", "OOM",
+    "symlink", "hard link", "POSIX", "shebang", "heredoc", "pipefail",
+    "ssh", "scp", "rsync", "screen", "tmux", "nohup",
+    "rpm", "yum", "dnf", "apt", "dpkg",
+    # ── Autosys / Job Scheduling ─────────────────────────────────────────────
+    "Autosys", "JIL", "sendevent", "autorep", "autostatd", "autoping",
+    "box job", "command job", "file watcher", "FW job",
+    "on_hold", "on_ice", "force_startjob", "killjob", "job_type",
+    "choke level", "CA Workload Automation", "WCC",
+    "ITRS", "Geneos", "Control-M", "job scheduler", "batch job",
+    "job flow", "box", "machine", "run calendar",
+    # ── General tech ─────────────────────────────────────────────────────────
     "JWT", "CORS", "REST", "GraphQL", "microservices", "monolith",
-    "CAP theorem", "ACID", "SQL", "NoSQL", "Redis", "Kafka",
-    "Git", "merge", "rebase", "pull request", "GitHub Actions",
-    "deadlock", "multithreading", "concurrency", "mutex", "semaphore",
+    "CAP theorem", "ACID", "SQL", "NoSQL", "PostgreSQL", "Redis", "Kafka",
+    "Git", "merge", "rebase", "pull request", "cherry-pick",
+    "multithreading", "concurrency", "mutex", "semaphore",
 ]
+
+# Pre-build Deepgram params dict once at module load (avoids per-call list iteration)
+_DEEPGRAM_PARAMS: dict = {
+    "model": "nova-3",
+    "language": "en",
+    "smart_format": "true",
+    "punctuate": "true",
+    "filler_words": "false",
+    "encoding": "linear16",
+    "sample_rate": str(getattr(__import__('config'), 'AUDIO_SAMPLE_RATE', 16000)),
+    "keyterm": _DEEPGRAM_KEYTERMS,   # requests serialises list → repeated params
+}
 
 
 def _get_deepgram_client():
@@ -515,25 +773,11 @@ def _transcribe_deepgram(audio_array: np.ndarray):
     sf.write(buf, audio_array, config.AUDIO_SAMPLE_RATE, format='WAV', subtype='PCM_16')
     audio_bytes = buf.getvalue()
 
-    params = {
-        "model": "nova-3",
-        "language": "en",       # "en" covers Indian English, not just en-US
-        "smart_format": "true",
-        "punctuate": "true",
-        "filler_words": "false",
-        "encoding": "linear16",
-        "sample_rate": str(config.AUDIO_SAMPLE_RATE),
-    }
-    for term in _DEEPGRAM_KEYTERMS:
-        params.setdefault("keyterm", [])
-        if isinstance(params["keyterm"], list):
-            params["keyterm"].append(term)
-
     try:
         session = _get_deepgram_session()
         resp = session.post(
             "https://api.deepgram.com/v1/listen",
-            params=params,
+            params=_DEEPGRAM_PARAMS,
             data=audio_bytes,
             timeout=8,
         )
@@ -653,7 +897,9 @@ def _transcribe_local(audio_array: np.ndarray, model_override: str = None):
     if max_val > 0:
         audio_array = audio_array / max_val * 0.95
 
-    max_seconds = max(1.5, float(getattr(config, 'STT_LOCAL_MAX_AUDIO_SECONDS', 5)))
+    # 10s cap — enough for any normal interview question including slow speakers.
+    # Whisper's internal encoder handles up to 30s; 10s keeps latency bounded.
+    max_seconds = max(1.5, float(getattr(config, 'STT_LOCAL_MAX_AUDIO_SECONDS', 10)))
     MAX_SAMPLES = int(max_seconds * config.AUDIO_SAMPLE_RATE)
     if len(audio_array) > MAX_SAMPLES:
         audio_array = audio_array[-MAX_SAMPLES:]
@@ -668,9 +914,12 @@ def _transcribe_local(audio_array: np.ndarray, model_override: str = None):
         word_timestamps=False,
         vad_filter=True,
         vad_parameters=dict(
-            min_silence_duration_ms=200,
-            threshold=0.30,
-            speech_pad_ms=150,
+            # Lower threshold = more sensitive to soft/slow speech
+            threshold=0.25,
+            # Allow longer silences inside the utterance before splitting
+            min_silence_duration_ms=600,
+            # Wider padding ensures slow word starts are not clipped
+            speech_pad_ms=250,
         ),
         initial_prompt=TECH_PROMPT,
         language="en",
@@ -776,8 +1025,9 @@ def _transcribe_sarvam(audio_array: np.ndarray):
                 "model": "saarika:v2.5",
                 "language_code": requested_lang,
                 "with_timestamps": "false",
+                "with_disfluencies": "false",
             },
-            timeout=10,
+            timeout=6,
         )
         response.raise_for_status()
         result = response.json()
@@ -795,7 +1045,9 @@ def _transcribe_sarvam(audio_array: np.ndarray):
 
         return text, 0.92
     except Exception as e:
-        print(f"  [STT] Sarvam error: {e} — falling back to local Whisper")
+        print(f"\n  ⚠⚠ SARVAM FALLBACK: {e}")
+        print("  ⚠⚠ Using local Whisper tiny.en — accuracy will be lower!")
+        print("  ⚠⚠ Check SARVAM_API_KEY and internet connection.\n")
         return _transcribe_local(audio_array)
 
 
@@ -821,6 +1073,22 @@ _TECH_TOPICS = frozenset({
     "production","outage","p1","p2","runbook","oncall","postmortem",
     "imagepullbackoff","crashloopbackoff","oomkilled","hpa","lifecycle",
     "namespace","daemonset","replicaset","statefulset","probe",
+    # Java / Spring (Indian interview essentials)
+    "java","spring","hibernate","maven","gradle","junit","mockito",
+    "autowired","transactional","controller","repository","entity","bean",
+    "ioc","injection","singleton","factory","observer","builder","strategy",
+    "interface","abstract","inheritance","polymorphism","encapsulation",
+    "generics","lambda","stream","optional","collector","comparator",
+    "hashmap","arraylist","linkedlist","concurrenthashmap","executorservice",
+    "completablefuture","synchronized","volatile","threadlocal","runnable",
+    "callable","futuretask","semaphore","latch","barrier","mutex",
+    "garbage","jvm","jit","classloader","bytecode","heap","stacktrace",
+    "checked","unchecked","nullpointer","stackoverflow","outofmemory",
+    "kafka","zookeeper","consumer","producer","topic","partition","offset",
+    "circuit","gateway","saga","cqrs","eureka","feign","ribbon","zipkin",
+    "solid","design","pattern","creational","structural","behavioral",
+    "lazy","eager","session","criteria","mapping","cache","n+1",
+    "pom","gradle","artifact","dependency","scope","lifecycle",
 })
 
 _FILLER_EXACT = frozenset({

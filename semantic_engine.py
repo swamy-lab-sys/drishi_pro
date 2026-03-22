@@ -30,22 +30,67 @@ class SemanticEngineV7:
             "AWS":        {"node": "Cloud Infrastructure",  "strength": 0.75, "highlights": ["EC2", "S3", "IAM"]},
             "KUBERNETES": {"node": "Orchestration",         "strength": 0.70, "highlights": ["Pods", "Services", "Helm"]},
             "DJANGO":     {"node": "Web Framework",         "strength": 0.85, "highlights": ["ORM", "DRF", "Migrations"]},
+            "FLASK":      {"node": "Web Framework",         "strength": 0.82, "highlights": ["Blueprint", "WSGI", "SQLAlchemy"]},
             "AUTOSYS":    {"node": "Job Scheduling",        "strength": 0.88, "highlights": ["JIL", "sendevent", "job dependencies"]},
             "SQL":        {"node": "Database Engineering",  "strength": 0.85, "highlights": ["Indexing", "Execution plans", "Transactions"]},
+            "POSTGRESQL": {"node": "Database Engineering",  "strength": 0.85, "highlights": ["MVCC", "VACUUM", "pg_stat"]},
             "MONITORING": {"node": "Observability",         "strength": 0.80, "highlights": ["Grafana", "Prometheus", "alerting"]},
+            "PROMETHEUS": {"node": "Observability",         "strength": 0.80, "highlights": ["PromQL", "alertmanager", "scrape config"]},
+            "GRAFANA":    {"node": "Observability",         "strength": 0.78, "highlights": ["Dashboards", "Datasources", "Alerting"]},
             "INCIDENT":   {"node": "Incident Management",   "strength": 0.85, "highlights": ["P1 triage", "RCA", "runbooks"]},
             "PRODUCTION": {"node": "Production Support",    "strength": 0.88, "highlights": ["On-call", "rollback", "post-mortem"]},
             "PODMAN":     {"node": "Containerization",      "strength": 0.75, "highlights": ["Rootless containers", "pod creation", "Compose"]},
+            "JAVA":       {"node": "Java Development",      "strength": 0.88, "highlights": ["JVM tuning", "GC", "Spring Boot", "Concurrency"]},
+            "SPRING":     {"node": "Java Development",      "strength": 0.85, "highlights": ["Dependency injection", "JPA", "REST controllers"]},
+            "JENKINS":    {"node": "CI/CD",                 "strength": 0.82, "highlights": ["Jenkinsfile", "agents", "shared libraries"]},
+            "ANSIBLE":    {"node": "Configuration Management", "strength": 0.85, "highlights": ["Playbooks", "roles", "inventory", "handlers"]},
+            "TERRAFORM":  {"node": "Infrastructure as Code", "strength": 0.83, "highlights": ["Modules", "state", "workspaces", "plan/apply"]},
+            "BASH":       {"node": "Shell Scripting",       "strength": 0.87, "highlights": ["Special variables", "trap", "pipefail", "process substitution"]},
+            "SRE":        {"node": "Site Reliability",      "strength": 0.85, "highlights": ["SLO", "error budget", "golden signals", "toil"]},
+        }
+
+        # Role → primary skill nodes (used for topic prediction initialization)
+        self.role_skill_map = {
+            "python developer":    ["PYTHON", "DJANGO", "FLASK", "SQL"],
+            "python engineer":     ["PYTHON", "DJANGO", "FLASK", "SQL"],
+            "backend developer":   ["PYTHON", "SQL", "DJANGO", "FLASK"],
+            "software engineer":   ["PYTHON", "SQL", "JAVA"],
+            "java developer":      ["JAVA", "SPRING", "SQL"],
+            "java engineer":       ["JAVA", "SPRING", "SQL"],
+            "devops engineer":     ["DOCKER", "KUBERNETES", "JENKINS", "ANSIBLE", "TERRAFORM"],
+            "devops":              ["DOCKER", "KUBERNETES", "JENKINS", "ANSIBLE"],
+            "sre":                 ["MONITORING", "SRE", "KUBERNETES", "INCIDENT", "LINUX"],
+            "site reliability":    ["MONITORING", "SRE", "KUBERNETES", "INCIDENT", "LINUX"],
+            "production support":  ["LINUX", "PRODUCTION", "INCIDENT", "MONITORING", "AUTOSYS", "BASH"],
+            "support engineer":    ["LINUX", "PRODUCTION", "INCIDENT", "MONITORING", "BASH"],
+            "linux admin":         ["LINUX", "BASH", "MONITORING", "INCIDENT"],
+            "system administrator":["LINUX", "BASH", "MONITORING", "ANSIBLE"],
+            "openstack":           ["LINUX", "DOCKER", "MONITORING", "INCIDENT"],
+            "data engineer":       ["SQL", "PYTHON", "MONITORING"],
+            "cloud engineer":      ["AWS", "TERRAFORM", "DOCKER", "KUBERNETES"],
         }
 
         # Topic Graph for next-question prediction (Feature 5)
         self.topic_map = {
-            "LINUX":      ["LOGS", "SYSTEMD", "CRON", "PERFORMANCE"],
-            "PYTHON":     ["FLASK", "ASYNC", "MEMORY", "GIL"],
-            "DOCKER":     ["NETWORKING", "VOLUMES", "IMAGES"],
-            "AWS":        ["EC2", "S3", "IAM", "VPC"],
-            "KUBERNETES": ["PODS", "SERVICES", "DEPLOYMENTS", "INGRESS"],
-            "DJANGO":     ["ORM", "MIGRATIONS", "SIGNALS", "MIDDLEWARE"],
+            "LINUX":      ["BASH", "LOGS", "SYSTEMD", "CRON", "PERFORMANCE", "INCIDENT"],
+            "PYTHON":     ["FLASK", "DJANGO", "ASYNC", "MEMORY", "GIL", "OOP"],
+            "DOCKER":     ["KUBERNETES", "NETWORKING", "VOLUMES", "IMAGES", "COMPOSE"],
+            "AWS":        ["EC2", "S3", "IAM", "VPC", "EKS"],
+            "KUBERNETES": ["PODS", "SERVICES", "DEPLOYMENTS", "INGRESS", "RBAC"],
+            "DJANGO":     ["ORM", "MIGRATIONS", "SIGNALS", "MIDDLEWARE", "DRF"],
+            "FLASK":      ["BLUEPRINT", "WSGI", "SQLALCHEMY", "JINJA2"],
+            "AUTOSYS":    ["JIL", "SENDEVENT", "BOXES", "DEPENDENCIES", "SCHEDULING"],
+            "PRODUCTION": ["INCIDENT", "MONITORING", "LINUX", "BASH", "RCA"],
+            "INCIDENT":   ["RCA", "MONITORING", "LINUX", "RUNBOOK", "ESCALATION"],
+            "MONITORING": ["PROMETHEUS", "GRAFANA", "ALERTING", "SLO", "LOGS"],
+            "JAVA":       ["SPRING", "JVM", "CONCURRENCY", "GC", "PATTERNS"],
+            "SPRING":     ["DEPENDENCY_INJECTION", "JPA", "REST", "SECURITY"],
+            "SQL":        ["INDEXES", "JOINS", "ACID", "OPTIMIZATION", "POSTGRES"],
+            "BASH":       ["LINUX", "CRON", "AWK", "SED", "GREP", "TRAP"],
+            "ANSIBLE":    ["PLAYBOOKS", "ROLES", "INVENTORY", "HANDLERS"],
+            "TERRAFORM":  ["MODULES", "STATE", "PROVIDERS", "WORKSPACES"],
+            "JENKINS":    ["PIPELINE", "GROOVY", "AGENTS", "PLUGINS"],
+            "SRE":        ["SLO", "ERROR_BUDGET", "GOLDEN_SIGNALS", "TOIL"],
         }
 
         self.current_topic = "GENERAL"
@@ -132,17 +177,33 @@ class SemanticEngineV7:
 
     # ── Feature 2: Skill-steered context ──────────────────────────────────────
 
-    def get_steered_context(self, query: str) -> str:
+    def get_steered_context(self, query: str, user_role: str = "") -> str:
         """Guide LLM toward strongest matching skill node.
+        When user_role is provided, role-specific skills are also considered.
         Returns generic context when best match strength < 0.5.
         """
         q = query.upper()
         best_node    = None
         max_strength = 0.0
+
+        # Query-keyword match
         for skill, data in self.skill_graph.items():
             if skill in q and data['strength'] > max_strength:
                 best_node    = data
                 max_strength = data['strength']
+
+        # Role-based boost: if no strong keyword match, use role's primary skills
+        if max_strength < 0.5 and user_role:
+            role_lower = user_role.lower()
+            for role_key, skills in self.role_skill_map.items():
+                if role_key in role_lower:
+                    for skill in skills:
+                        if skill in self.skill_graph:
+                            data = self.skill_graph[skill]
+                            if data['strength'] > max_strength:
+                                best_node = data
+                                max_strength = data['strength']
+                    break
 
         if best_node and max_strength >= 0.5:
             return (f"Steer toward: {best_node['node']}. "
@@ -150,6 +211,17 @@ class SemanticEngineV7:
         if best_node:
             return GENERIC_SKILL_CONTEXT
         return ""
+
+    def set_role_topics(self, user_role: str) -> None:
+        """Prime topic prediction based on user role at session start."""
+        if not user_role:
+            return
+        role_lower = user_role.lower()
+        for role_key, skills in self.role_skill_map.items():
+            if role_key in role_lower:
+                if skills:
+                    self.current_topic = skills[0]
+                break
 
     # ── Feature 5: Topic detection + prediction ───────────────────────────────
 

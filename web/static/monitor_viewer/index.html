@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interview Monitor — Remote Viewer</title>
+  <meta name="description"
+    content="Live remote viewer for interview monitoring with remote control and real-time session insights." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/monitor_viewer/style.css" />
+  <!-- Bypass ngrok browser-warning interstitial when accessed via tunnel -->
+  <meta name="ngrok-skip-browser-warning" content="true" />
+  <script>
+    // Patch fetch to always send ngrok bypass header for any API calls from this page
+    (function () {
+      const _fetch = window.fetch;
+      window.fetch = function (url, opts = {}) {
+        return _fetch(url, {
+          ...opts,
+          headers: { 'ngrok-skip-browser-warning': 'true', ...(opts.headers || {}) }
+        });
+      };
+    })();
+  </script>
+
+</head>
+
+<body>
+  <div class="app-shell stealth-active">
+
+    <!-- ── CLEAN VIEWPORT: UI Elements Hidden as requested ── -->
+    <div id="control-hub" class="control-hub" style="display:none">
+      <div class="hub-drag-handle" id="hub-drag-handle">
+        <div class="hub-dots">⠿</div>
+        <div class="hub-status">
+          <span class="status-dot disconnected" id="hub-dot"></span>
+          <span id="hub-status-text">Disconnected</span>
+        </div>
+      </div>
+
+      <div class="hub-divider"></div>
+
+      <div class="hub-info">
+        <div class="hub-info-item" title="Session ID">
+          <span class="hub-icon">🆔</span>
+          <span id="session-label">default</span>
+        </div>
+        <div class="hub-info-item" title="Viewers">
+          <span class="hub-icon">👥</span>
+          <span id="viewer-count">0</span>
+        </div>
+        <div class="hub-info-item" title="Elapsed Time">
+          <span class="hub-icon">⏱️</span>
+          <span id="session-timer">00:00</span>
+        </div>
+      </div>
+
+      <div class="hub-divider"></div>
+
+      <div class="hub-actions">
+        <button class="hub-btn" id="control-btn" title="Request Remote Control" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.07 4.93A10 10 0 0 0 4.93 19.07" />
+            <path d="M4.93 4.93A10 10 0 0 0 19.07 19.07" />
+          </svg>
+        </button>
+        <button class="hub-btn" id="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+        <button class="hub-btn" id="note-toggle-btn" title="Toggle Notes">📝</button>
+        <button class="hub-btn danger" id="disconnect-btn" title="Disconnect" style="display:none">✕</button>
+      </div>
+
+      <div class="hub-expand-toggle" id="hub-expand-toggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── KEYBOARD SHORTCUT PANEL (for OS/browser-intercepted keys) ── -->
+    <div id="shortcut-panel" style="display:none;position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#1a1a2e;border:1px solid #333;border-radius:10px;padding:8px 12px;display:none;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+      <span style="color:#666;font-size:10px;font-family:monospace;margin-right:4px;">SHORTCUTS</span>
+      <button class="sk-btn" data-keys="win" title="Super / Activities">⊞ Super</button>
+      <button class="sk-btn" data-keys="alt+Tab" title="Alt+Tab">Alt+Tab</button>
+      <button class="sk-btn" data-keys="alt+F4" title="Alt+F4 Close Window">Alt+F4</button>
+      <button class="sk-btn" data-keys="ctrl+n" title="Ctrl+N">Ctrl+N</button>
+      <button class="sk-btn" data-keys="ctrl+w" title="Ctrl+W">Ctrl+W</button>
+      <button class="sk-btn" data-keys="ctrl+p" title="Ctrl+P">Ctrl+P</button>
+      <button class="sk-btn" data-keys="ctrl+shift+p" title="Ctrl+Shift+P (VSCode palette)">Ctrl+⇧+P</button>
+      <button class="sk-btn" data-keys="ctrl+z" title="Ctrl+Z Undo">Ctrl+Z</button>
+      <button class="sk-btn" data-keys="ctrl+shift+z" title="Ctrl+Shift+Z Redo">Ctrl+⇧+Z</button>
+      <button class="sk-btn" data-keys="ctrl+c" title="Ctrl+C Copy">Ctrl+C</button>
+      <button class="sk-btn" data-keys="ctrl+v" title="Ctrl+V Paste">Ctrl+V</button>
+      <button class="sk-btn" data-keys="ctrl+a" title="Ctrl+A Select All">Ctrl+A</button>
+      <button class="sk-btn" data-keys="f5" title="F5 Refresh">F5</button>
+      <button class="sk-btn" data-keys="escape" title="Escape">Esc</button>
+    </div>
+    <style>
+      .sk-btn{background:#252540;color:#ccc;border:1px solid #444;border-radius:5px;padding:4px 9px;font-size:11px;font-family:monospace;cursor:pointer;transition:background .15s,transform .1s;}
+      .sk-btn:hover{background:#3a3a5c;color:#fff;}
+      .sk-btn:active{transform:scale(.93);background:#5050a0;}
+    </style>
+
+    <!-- ── FLOATING URL INDICATOR ── -->
+    <div id="floating-url" class="floating-url" style="display:none">
+      <span class="url-label">LIVE:</span>
+      <span id="current-url" class="url-text">—</span>
+    </div>
+
+    <!-- ── MAIN SCREEN AREA ── -->
+    <main class="main-content">
+      <div class="screen-stage" id="screen-stage">
+        <video id="screen-preview" autoplay playsinline muted></video>
+        <div id="remote-cursor" class="remote-cursor"></div>
+
+        <!-- Professional Empty State -->
+        <div id="empty-screen" class="empty-state">
+          <div class="empty-glass">
+            <div class="empty-icon">📡</div>
+            <div class="empty-title">Ready for Connection</div>
+            <div class="empty-sub">Monitoring will begin as soon as the candidate shares their screen.</div>
+            <div class="empty-steps">
+              <div class="step">1. Extension active on Laptop 1</div>
+              <div class="step">2. Monitoring started with WebRTC</div>
+              <div class="step">3. Stream will appear here securely</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Remote Control Overlay Hidden for Clean View -->
+        <div class="control-active-overlay" id="control-active-overlay" style="display:none">
+          <span class="control-active-pill">
+            <span class="pulse-dot"></span>
+            Remote Control Active
+          </span>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── FLOATING ACTIVITY FEED ── -->
+    <div id="activity-hub" class="activity-hub" style="display:none">
+      <div class="activity-header">
+        <span>Activity Log</span>
+        <button id="activity-clear" class="activity-clear">Clear</button>
+      </div>
+      <div class="activity-feed" id="activity-feed">
+        <div class="activity-empty">No events detected...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Note panel (Floating Bottom-Right) -->
+  <div class="note-panel" id="note-panel" style="display:none">
+    <div class="note-panel-header">
+      <span>📝 Session Notes</span>
+      <button class="note-toggle" id="note-toggle">−</button>
+    </div>
+    <div class="note-body" id="note-body">
+      <textarea id="session-notes" placeholder="Candidate notes..."></textarea>
+      <div class="note-actions">
+        <button class="btn btn-sm btn-primary" id="copy-notes-btn">Copy Notes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden standard elements to prevent script breaking -->
+  <div style="display:none">
+    <span id="connection-status-sidebar"></span>
+    <span id="connection-status"></span>
+    <span id="topbar-session"></span>
+    <span id="last-click"></span>
+    <span id="last-key"></span>
+    <span id="control-status-text"></span>
+    <div id="sidebar"></div>
+  </div>
+
+  <script src="/static/monitor_viewer/webrtc_receiver.js"></script>
+  <script src="/static/monitor_viewer/remote_control.js"></script>
+  <script src="/static/monitor_viewer/dashboard.js"></script>
+</body>
+
+</html>

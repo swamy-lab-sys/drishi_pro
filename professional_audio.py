@@ -161,27 +161,39 @@ class SharedAudioStream:
                 if target_device is None:
                     pulse_source = os.environ.get("PULSE_SOURCE", "").strip()
                     if pulse_source:
-                        # Try passing the PulseAudio source name directly (works on Linux/PA)
+                        # PULSE_SOURCE is a PulseAudio/PipeWire source name (e.g. "...sink.monitor").
+                        # sounddevice lists ALSA device names, not PulseAudio names, so a direct
+                        # name search always fails and silently falls back to the microphone.
+                        # Fix: prefer the "pulse" ALSA device — it routes through PulseAudio and
+                        # correctly honours PULSE_SOURCE, capturing the speaker monitor.
                         devices = sd.query_devices()
                         matched = None
-                        # 1. Exact name match
+                        # 1. Exact name match (unlikely but safe to try)
                         for i, d in enumerate(devices):
                             if d.get('max_input_channels', 0) > 0 and d.get('name', '') == pulse_source:
                                 matched = i
                                 break
-                        # 2. Partial name match (pulse_source is substring of device name)
+                        # 2. Partial name match
                         if matched is None:
                             for i, d in enumerate(devices):
                                 dname = d.get('name', '')
                                 if d.get('max_input_channels', 0) > 0 and pulse_source in dname:
                                     matched = i
                                     break
-                        # 3. Any monitor/loopback device
+                        # 3. Any monitor/loopback device name
                         if matched is None:
                             for i, d in enumerate(devices):
                                 dname = d.get('name', '').lower()
                                 if d.get('max_input_channels', 0) > 0 and ('monitor' in dname or 'loopback' in dname):
                                     matched = i
+                                    break
+                        # 4. Fall back to "pulse" ALSA device — routes via PulseAudio and
+                        #    honours PULSE_SOURCE so the monitor source is captured correctly.
+                        if matched is None:
+                            for i, d in enumerate(devices):
+                                if d.get('max_input_channels', 0) > 0 and d.get('name', '') == 'pulse':
+                                    matched = i
+                                    print(f"  [Audio] Using 'pulse' ALSA device to honour PULSE_SOURCE={pulse_source}")
                                     break
                         if matched is not None:
                             target_device = matched
@@ -261,49 +273,91 @@ _stream = SharedAudioStream()
 
 
 class SmartVAD:
-    """Ultra-sensitive adaptive Speech Detection."""
+    """
+    Adaptive speech/silence detector.
+
+    Design goals:
+    - Detect slow/soft speakers reliably (interviewers often speak calmly).
+    - Reject keyboard clicks, mouse noise, brief notifications.
+    - Use hysteresis: require speech to be sustained for ≥2 consecutive chunks
+      before declaring speech_start, so single-chunk transients are ignored.
+    """
     def __init__(self):
         self.noise_floor = 0.0001
         self.speech_threshold = 0.0005
-        self.history = deque(maxlen=100)
+        self.history = deque(maxlen=150)   # ~4.5s window for noise floor estimate
+        # Hysteresis: track consecutive speech/non-speech chunks
+        self._consec_speech = 0
+        self._consec_silence = 0
+        self._SPEECH_CONFIRM = 2    # need 2 consecutive speech chunks to start
+        self._SILENCE_CONFIRM = 1   # 1 silent chunk is enough inside a segment
 
-    def update(self, chunk):
-        rms = np.sqrt(np.mean(chunk**2))
+    def update(self, rms: float):
         self.history.append(rms)
         if len(self.history) >= 10:
             self.noise_floor = max(np.percentile(list(self.history), 10), 0.0001)
-            self.speech_threshold = max(self.noise_floor * 2.5, 0.001)
+            # Threshold = 3× noise floor but at least 0.002 (avoids over-sensitivity)
+            self.speech_threshold = max(self.noise_floor * 3.0, 0.002)
 
-    def is_speech(self, chunk):
-        chunk_boosted = chunk * 20.0
-        rms = np.sqrt(np.mean(chunk_boosted**2))
-        self.update(chunk_boosted)
-        return rms > max(self.speech_threshold, 0.005)
+    def is_speech(self, chunk: np.ndarray) -> bool:
+        # Moderate boost (6×) — enough to detect quiet speakers without false positives
+        boosted = chunk * 6.0
+        rms = float(np.sqrt(np.mean(boosted ** 2)))
+        self.update(rms)
+        above = rms > self.speech_threshold
+        if above:
+            self._consec_speech  += 1
+            self._consec_silence  = 0
+        else:
+            self._consec_silence += 1
+            self._consec_speech   = 0
+        return above
 
 
-def capture_question(max_duration=6.0, silence_duration=1.2, verbose=False, on_speech_start=None):
-    """Capture a single question segment using the persistent global stream."""
+def capture_question(max_duration=15.0, silence_duration=1.2, verbose=False,
+                     on_speech_start=None, flush_stream=False):
+    """
+    Capture a single spoken question using the persistent global stream.
+
+    Args:
+        max_duration:     Hard cap on recording length (seconds).
+        silence_duration: How many seconds of continuous silence ends capture.
+                          Default 1.2s handles slow/deliberate speakers.
+        flush_stream:     If True, discard buffered audio before starting.
+                          Only set when coming out of a long cooldown where
+                          stale audio has accumulated.
+        on_speech_start:  Optional callback fired when first speech detected.
+    """
     if _BACKEND is None:
         if verbose:
             print("[ERROR] No audio backend available")
         return None
 
     _stream.start()
-    _stream.flush()
+    if flush_stream:
+        _stream.flush()
 
     vad = SmartVAD()
     audio_chunks = []
-    lead_buffer = deque(maxlen=int(500 / 30))
+
+    # 800ms pre-roll buffer so we never miss the start of a question
+    lead_buffer = deque(maxlen=int(800 / 30))
+
     speech_detected = False
     silence_chunks = 0
     max_silence_chunks = int(silence_duration * 1000 / 30)
     max_chunks = int(max_duration * 1000 / 30)
 
+    # Adaptive silence: after significant speech (>2s) relax the silence gate
+    # slightly to tolerate mid-sentence pauses from slow speakers.
+    speech_chunk_count = 0
+    _LONG_SPEECH_THRESHOLD = int(2.0 * 1000 / 30)   # 2s of speech
+
     start_time = time.time()
 
     try:
         while (time.time() - start_time) < (max_duration + 2.0):
-            chunk = _stream.get_chunk(timeout=0.1)
+            chunk = _stream.get_chunk(timeout=0.05)   # 50ms poll — tighter than 100ms
             if chunk is None:
                 continue
 
@@ -311,6 +365,7 @@ def capture_question(max_duration=6.0, silence_duration=1.2, verbose=False, on_s
                 if not speech_detected:
                     if verbose:
                         print("\n[SPEECH] Detected!")
+                    # Prepend pre-roll so question start isn't clipped
                     audio_chunks.extend(list(lead_buffer))
                     lead_buffer.clear()
                     speech_detected = True
@@ -320,14 +375,23 @@ def capture_question(max_duration=6.0, silence_duration=1.2, verbose=False, on_s
                         except Exception:
                             pass
                 silence_chunks = 0
+                speech_chunk_count += 1
                 audio_chunks.append(chunk)
             else:
                 if speech_detected:
                     silence_chunks += 1
                     audio_chunks.append(chunk)
-                    if silence_chunks > max_silence_chunks:
+
+                    # After significant speech, allow longer silence before cutting
+                    # so slow interviewers can pause mid-thought without triggering end.
+                    adaptive_limit = max_silence_chunks
+                    if speech_chunk_count >= _LONG_SPEECH_THRESHOLD:
+                        adaptive_limit = max(max_silence_chunks,
+                                             int(1.8 * 1000 / 30))  # min 1.8s
+
+                    if silence_chunks > adaptive_limit:
                         if verbose:
-                            print(f"[SILENCE] {silence_duration}s detected.")
+                            print(f"[SILENCE] End of speech detected ({silence_duration}s).")
                         break
                 else:
                     lead_buffer.append(chunk)
@@ -340,7 +404,7 @@ def capture_question(max_duration=6.0, silence_duration=1.2, verbose=False, on_s
 
         full_audio = np.concatenate(audio_chunks)
 
-        # Normalize for Whisper/Sarvam
+        # Normalize amplitude for Whisper/STT — avoids both clipping and near-silence
         max_val = np.abs(full_audio).max()
         if max_val > 0.001:
             full_audio = full_audio / max_val * 0.9

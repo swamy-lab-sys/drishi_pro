@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Mirror</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        #screen {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: monospace;
+            font-size: 10px;
+            pointer-events: none;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+
+        .hidden {
+            opacity: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">INIT...</div>
+    <video id="screen" autoplay playsinline muted></video>
+
+    <script src="./webrtc_receiver.js"></script>
+    <script src="./remote_control.js"></script>
+    <script>
+        const el = {
+            screen: document.getElementById("screen"),
+            status: document.getElementById("status")
+        };
+
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get("session_id") || "default";
+        const secret = params.get("key") || "";
+
+        let socket = null;
+        let receiver = null;
+
+        function log(msg) {
+            el.status.textContent = msg;
+            console.log(msg);
+            // Auto-hide status after 3s of same message
+            setTimeout(() => { if (el.status.textContent === msg) el.status.classList.add("hidden"); }, 3000);
+            el.status.classList.remove("hidden");
+        }
+
+        const remoteControl = window.RemoteControlManager.init({
+            video: el.screen,
+            button: null,
+            status: null
+        });
+
+        function connect() {
+            const proto = location.protocol === "https:" ? "wss:" : "ws:";
+            socket = new WebSocket(`${proto}//${location.host}/ws`);
+
+            socket.onopen = () => {
+                log("CONNECTED");
+                socket.send(JSON.stringify({ type: "register", role: "viewer", session_id: sessionId }));
+
+                // Auto request control if secret provided
+                if (secret) {
+                    log("REQUESTING ACCESS...");
+                    socket.send(JSON.stringify({
+                        type: "control_request",
+                        session_id: sessionId,
+                        secret: secret
+                    }));
+                }
+            };
+
+            socket.onmessage = (ev) => {
+                const payload = JSON.parse(ev.data);
+
+                if (payload.type === "session_snapshot") {
+                    const viewerId = payload.client_id;
+                    remoteControl.setViewerId(viewerId);
+                    remoteControl.bindSocket((p) => socket.send(JSON.stringify(p)));
+
+                    receiver = new WebRTCReceiver({
+                        sessionId, viewerId,
+                        sendSignal: (st, p) => socket.send(JSON.stringify({ type: "signal", signal_type: st, ...p })),
+                        onRemoteStream: (s) => { el.screen.srcObject = s; log("STREAMING"); },
+                        onStateChange: (s) => log(s.toUpperCase())
+                    });
+                }
+
+                if (payload.type === "signal") {
+                    if (payload.signal_type === "offer") receiver?.handleOffer(payload.data);
+                    if (payload.signal_type === "ice_candidate") receiver?.handleIceCandidate(payload.data);
+                }
+
+                if (payload.type === "control_status") {
+                    remoteControl.handleStatus(payload);
+                    if (payload.status === "granted") log("CONTROL ACTIVE");
+                }
+            };
+
+            socket.onclose = () => { log("RETRYING..."); setTimeout(connect, 2000); };
+        }
+
+        connect();
+    </script>
+</body>
+
+</html>

@@ -9,6 +9,7 @@ Optimized for:
 """
 
 import os
+import re
 import time
 from anthropic import Anthropic
 
@@ -39,10 +40,70 @@ client = Anthropic(
 import config as _cfg
 MODEL = os.environ.get("LLM_MODEL_OVERRIDE", _cfg.LLM_MODEL)
 
-MAX_TOKENS_INTERVIEW = 90     # 3 bullets × ~15 words — slight bump for longer domain examples
+MAX_TOKENS_INTERVIEW = 90     # 3 bullets × ~15 words — baseline
+MAX_TOKENS_INTERVIEW_SIMPLE = 65  # Short factual questions: definition only, no code example needed
+MAX_TOKENS_INTERVIEW_COMMANDS = 120  # Production support / Linux roles: commands need more space
+MAX_TOKENS_INTERVIEW_EXPLAIN = 180   # Concept questions: definition + code example + personal use
+MAX_TOKENS_INTERVIEW_COMPLEX = 220   # System design / architecture questions
 MAX_TOKENS_CODING = 700       # Python/Java/JS code — bumped for multi-method Java answers
 MAX_TOKENS_CODING_INFRA = 950 # Ansible/Terraform/Dockerfile/Jenkinsfile/K8s manifests
 MAX_TOKENS_PLATFORM = 1200
+
+# Roles that typically answer with commands/code in bullets — need slightly more tokens
+_COMMAND_HEAVY_ROLES = {
+    'production support', 'prod support', 'support engineer', 'linux admin', 'sysadmin',
+    'system administrator', 'unix admin', 'infrastructure support', 'openstack',
+    'devops', 'sre', 'site reliability', 'platform engineer',
+    'autosys', 'batch', 'etl', 'java developer', 'java engineer',
+}
+# Pre-compiled regex — replaces O(n) loop over role keys per question
+_COMMAND_HEAVY_RE = re.compile(
+    '|'.join(re.escape(r) for r in _COMMAND_HEAVY_ROLES), re.IGNORECASE
+)
+
+# Question prefixes that indicate "explain this concept" — need definition + code example
+_EXPLAIN_PREFIXES = (
+    'what is ', 'what are ', 'explain ', 'describe ', 'how does ', 'how do ',
+    'what does ', 'define ', 'tell me about ', 'can you explain ',
+)
+
+# Keywords that signal a complex, multi-part answer is needed
+_COMPLEX_KEYWORDS_RE = re.compile(
+    r'\b(design|architect|system design|scalab|distributed|microservice|'
+    r'difference between|compare|vs\b|trade.?off|pros.{0,5}cons|'
+    r'when would you|how would you implement|walk me through)\b',
+    re.IGNORECASE
+)
+
+def _is_explain_question(question: str) -> bool:
+    """True if the question is asking for an explanation/definition rather than a task."""
+    q = question.lower().strip()
+    return any(q.startswith(p) for p in _EXPLAIN_PREFIXES)
+
+def _get_interview_token_budget(active_user_context: str = "", question: str = "") -> int:
+    """Return the right token budget for interview answers based on role and question type."""
+    if not question:
+        return MAX_TOKENS_INTERVIEW
+
+    q = question.strip()
+    word_count = len(q.split())
+
+    # Complex/design questions need longer answers
+    if _COMPLEX_KEYWORDS_RE.search(q):
+        return MAX_TOKENS_INTERVIEW_COMPLEX
+
+    # Concept/explain questions get more tokens for code examples
+    if _is_explain_question(q):
+        return MAX_TOKENS_INTERVIEW_EXPLAIN
+
+    # Short direct questions (≤6 words, e.g. "What is a decorator?") — 3 tight bullets
+    if word_count <= 6:
+        return MAX_TOKENS_INTERVIEW_SIMPLE
+
+    if active_user_context and _COMMAND_HEAVY_RE.search(active_user_context):
+        return MAX_TOKENS_INTERVIEW_COMMANDS
+
+    return MAX_TOKENS_INTERVIEW
 
 # Keywords that identify infra/script requests needing higher token budget
 _INFRA_KEYWORDS = {
@@ -75,13 +136,35 @@ TEMP_CODING = 0.1
 
 INTERVIEW_PROMPT = """You are a senior engineer answering live in a job interview. Speak as the person from the RESUME.
 
-FORMAT: Exactly 3 bullet points. Each bullet = one direct sentence, max 14 words. Total under 60 words.
+FORMAT: Exactly 3 bullet points. Each bullet = one direct sentence, max 16 words. Total under 75 words.
 At least one bullet must start with "I" — your real personal usage or experience.
 
-TONE: Sound like a real person speaking, not writing. Use contractions (it's, I've, you'd, don't, that's).
-Short words beat long words. Conversational beats formal.
+CONCEPT QUESTIONS (what is / explain / how does):
+  Bullet 1: What it IS — one clear sentence definition
+  Bullet 2: Code example inline in backticks (short, real, practical)
+  Bullet 3: When/why YOU use it — personal experience
 
-━━━ PYTHON ━━━
+TONE: Sound like a real person speaking, not writing. Use contractions (it's, I've, you'd, don't, that's).
+
+━━━ LINUX / SHELL COMMAND RULE ━━━
+For any Linux command question, put the actual command in backticks in the FIRST bullet.
+
+━━━ RULES ━━━
+- EXACTLY 3 bullets. NO sub-bullets. NO numbered lists.
+- NO colons inside bullets. Say it directly.
+- NO markdown bold. NO code blocks. Inline backticks only for shell commands.
+- BANNED WORDS: essentially, fundamentally, primarily, utilize, moreover, furthermore,
+  additionally, consequently, thus, therefore, leverages, facilitates, notwithstanding.
+- USE INSTEAD: basically, mainly, use, also, so, but, to, lets you, helps.
+- Only claim hands-on experience with tech in YOUR RESUME. For other tech say "I've read about it".
+- If the question is HR/general (strengths, weaknesses, salary, notice period), answer naturally from the resume.
+- NEVER reveal you are an AI."""
+
+# NOTE: All Q&A style examples have been moved to the qa_database (tagged by role/domain).
+# The DB is checked BEFORE the LLM — common questions get instant DB answers (< 5ms).
+# The LLM is only called for novel questions not in the DB.
+
+_INTERVIEW_PROMPT_REMOVED_SECTIONS = """━━━ PYTHON ━━━
 Q: What is a decorator in Python?
 - A decorator wraps a function to add behavior without touching its code
 - It uses the @ syntax and works great for logging, auth, or caching
@@ -101,6 +184,36 @@ Q: What does yield do in Python?
 - yield pauses a function and returns a value without ending it
 - The next call to next() resumes from where it left off
 - I use generators in Django to stream large querysets without loading all rows
+
+Q: What is a lambda in Python?
+- A lambda is an anonymous one-line function — no def, no name, just inline logic
+- `sorted(users, key=lambda u: u['age'])` or `double = lambda x: x * 2`
+- I use lambdas in map/filter/sorted when writing a full function would be overkill
+
+Q: What is a list comprehension in Python?
+- A list comprehension builds a new list in one line using a for-expression inside brackets
+- `evens = [x for x in range(20) if x % 2 == 0]` vs a 4-line for loop
+- I use them daily for transforming querysets, filtering lists, and building dicts fast
+
+Q: What is a generator in Python?
+- A generator is a function that yields values one at a time instead of building a full list
+- `def rows(): yield from db.execute('SELECT ...')` — reads one row per iteration
+- I use generators for large file processing and streaming DB results without memory blowup
+
+Q: What is a decorator in Python?
+- A decorator is a function that wraps another function to add behavior without changing its code
+- `@login_required` or `@cache_page(60)` — Django uses decorators extensively
+- I've written retry decorators for flaky API calls and timing decorators for profiling
+
+Q: What is *args and **kwargs in Python?
+- `*args` collects extra positional arguments as a tuple; `**kwargs` collects keyword args as a dict
+- `def log(*args, **kwargs): print(args, kwargs)` — accepts anything without breaking
+- I use them in wrapper functions and middleware to pass-through arguments transparently
+
+Q: What is the difference between is and == in Python?
+- `==` checks if two objects have equal values; `is` checks if they are the same object in memory
+- `[] == []` is True but `[] is []` is False — they're different objects
+- I use `is` only for None checks (`if x is None`) and `==` for value comparisons
 
 ━━━ LINUX / PRODUCTION SUPPORT ━━━
 Q: How do you check disk usage?
@@ -265,6 +378,68 @@ Q: What are semantic HTML elements?
 - They help screen readers, SEO bots, and other developers understand the page structure
 - I use them in every project because they improve accessibility without extra effort
 
+━━━ DJANGO / DRF (DEEP) ━━━
+Q: What is select_related vs prefetch_related in Django?
+- select_related does a SQL JOIN for ForeignKey and OneToOne relations in one query
+- prefetch_related does a separate query and joins in Python — needed for ManyToMany
+- I always profile with Django Debug Toolbar to catch N+1 before it hits production
+
+Q: How do you create a custom DRF permission class?
+- Subclass BasePermission and override has_permission or has_object_permission
+- Return True to allow, False to deny — DRF raises 403 automatically
+- I use custom permissions to enforce object-level ownership checks on every ViewSet
+
+Q: How does DRF JWT authentication work?
+- The client POSTs credentials to /api/token/ and gets access and refresh tokens
+- The access token is short-lived; the client uses the refresh token to get a new one
+- I configure SimpleJWT with ROTATE_REFRESH_TOKENS and blacklist the old tokens on logout
+
+Q: What is the difference between APIView and ViewSet in DRF?
+- APIView maps HTTP methods directly — get(), post(), put() methods on the class
+- ViewSet maps to CRUD actions — list(), create(), retrieve(), update() — wired via Router
+- I use ViewSet + DefaultRouter for standard CRUD and APIView for custom logic endpoints
+
+Q: How does Celery work with Django?
+- Celery is a distributed task queue — Django sends tasks to a broker like Redis
+- Workers pull tasks from the queue and execute them outside the HTTP request cycle
+- I use it for sending emails, generating reports, and any task over 200ms
+
+Q: How do you handle database migrations in Django?
+- `makemigrations` generates migration files from model changes; `migrate` applies them
+- I never delete migration files in production — I squash them if history gets too long
+- For team conflicts I always run `showmigrations` and resolve merge migrations before deploy
+
+Q: What is Django caching and how do you use it?
+- Django's cache framework supports Redis, Memcached, or file-based backends
+- `cache.set('key', value, timeout=300)` stores data; `cache.get('key')` retrieves it
+- I cache expensive QuerySets with `cache_page` on views and manual cache.set for DB aggregates
+
+━━━ PRODUCTION SUPPORT (DEEP) ━━━
+Q: How do you handle a P1 production incident?
+- First I check monitoring dashboards and recent deployments to correlate the timeline
+- I isolate blast radius — is it one service, one region, or all users — then apply the fastest fix
+- After resolution I write an RCA with timeline, root cause, impact, and preventive action
+
+Q: How do you troubleshoot high memory usage on a Linux server?
+- `free -h` gives overall memory; `ps aux --sort=-%mem | head` shows top memory consumers
+- `cat /proc/<pid>/status` shows VmRSS for the exact process RSS and swap usage
+- I've caught memory leaks by graphing RSS over time in Grafana and killing the process before OOM fires
+
+Q: How do you investigate a process that's consuming 100% CPU?
+- `top -H -p <pid>` shows per-thread CPU so I can pinpoint the exact thread
+- `strace -p <pid> -c` samples syscalls to see if it's stuck in a tight loop or IO wait
+- I've found infinite loops in Python workers by dumping a traceback with `kill -USR1`
+
+Q: How do you analyze production logs quickly?
+- `grep -i "error\|exception" app.log | tail -200` gets the most recent errors fast
+- `awk '{print $1}' access.log | sort | uniq -c | sort -rn | head` shows top IPs or endpoints
+- I pipe to `less -S` for wide logs and use `zgrep` on rotated `.gz` files without unpacking
+
+Q: What is log rotation and how do you configure it?
+- Log rotation prevents disk fill-up by archiving old logs and creating fresh ones
+- `/etc/logrotate.d/myapp` defines rotate frequency, compress, and postrotate to reload the service
+- I always set `missingok` and `notifempty` so rotation doesn't fail if the log is missing
+
 ━━━ SQL / POSTGRESQL ━━━
 Q: What is the difference between INNER JOIN and LEFT JOIN?
 - INNER JOIN returns only rows where both tables have a matching key
@@ -389,6 +564,88 @@ Q: What is process substitution in bash?
 - `diff <(sort file1) <(sort file2)` compares two files after sorting without temp files
 - I use it to avoid creating intermediary temp files in complex shell pipelines
 
+━━━ HR / GENERAL INTERVIEW ━━━
+Q: What are your strengths?
+- I'm strong at debugging production issues quickly under pressure
+- I communicate clearly in incidents — updates go out before people ask
+- I own problems end-to-end and don't drop things once I've picked them up
+
+Q: What are your weaknesses?
+- I sometimes over-document things when a quick verbal update would be faster
+- I'm working on delegating more instead of fixing things myself every time
+- I've gotten better at this by consciously asking teammates before diving in
+
+Q: Where do you see yourself in five years?
+- I want to be leading a production support or SRE team, not just an individual contributor
+- I want to have built systems that catch incidents before users feel them
+- I'm also working toward cloud certifications to move into architecture over time
+
+Q: Why do you want to leave your current job?
+- I'm looking for a role with more scale and more complex systems to learn from
+- My current team is good but the growth path has plateaued for me
+- I want to work on infrastructure that handles real production load at volume
+
+Q: Tell me about a challenging incident you handled.
+- We had a production database connection pool exhaustion that took down the app during peak hours
+- I isolated it to a long-running query holding locks, killed it, and the pool cleared in 90 seconds
+- I then added a query timeout and a runbook so the on-call team could handle it without escalation
+
+Q: Why should we hire you?
+- I know production support and I've solved the kinds of incidents your team deals with daily
+- I pick up new tools fast and I don't need hand-holding on standard Linux and cloud environments
+- I take ownership — if I commit to something, it gets done
+
+━━━ AUTOSYS / CA WORKLOAD AUTOMATION ━━━
+Q: What is Autosys?
+- Autosys (CA Workload Automation) is an enterprise job scheduler that automates batch jobs across servers
+- Jobs are defined in JIL (Job Information Language) and can be chained into boxes (job groups)
+- I've used it to schedule file transfers, report generation, and ETL jobs in production
+
+Q: What is JIL in Autosys?
+- JIL (Job Information Language) is the scripting language used to define Autosys jobs and boxes
+- You write JIL files with attributes like machine, command, start_times, and dependencies
+- I load JIL into Autosys using `jil < myjob.jil` to create or update job definitions
+
+Q: What are the various job states in Autosys?
+- Key states are RUNNING, SUCCESS, FAILURE, TERMINATED, ON_HOLD, ON_ICE, INACTIVE, and ACTIVATED
+- ON_HOLD pauses a job but keeps it in the schedule; ON_ICE completely deactivates it until manually released
+- I use `autorep -j jobname -s` to check current status and `sendevent` to change states
+
+Q: What is the difference between ON_HOLD and ON_ICE in Autosys?
+- ON_HOLD pauses the job so it won't run at its next scheduled time but stays in the queue
+- ON_ICE completely deactivates the job — it won't run at all until you explicitly take it off ice
+- I put jobs ON_HOLD during maintenance windows and ON_ICE when permanently suspending a job
+
+Q: What is a Box job in Autosys?
+- A Box is a container job that groups related jobs together and controls their execution flow
+- Jobs inside a box inherit the box's start conditions and run according to their own dependencies
+- I use boxes to group ETL steps so the whole pipeline starts together and fails together
+
+Q: What are basic Autosys commands?
+- `autorep -j jobname` shows job definition; `autorep -j jobname -s` shows current run status
+- `sendevent -E FORCE_STARTJOB -j jobname` manually triggers a job; `sendevent -E CHANGE_STATUS -s ON_HOLD -j jobname` holds it
+- I use `autostatd` to check the event daemon and `autoping` to verify server connectivity
+
+Q: How do you monitor Autosys jobs?
+- `autorep -J ALL -s` lists all jobs and their current status across the scheduler
+- `grep -i "error\|failed" /var/log/autosys/*.log | grep "$(date +%Y-%m-%d)"` finds today's failures
+- I also use the Autosys GUI (WCC) to view job flows and drill into failed job output files
+
+Q: How do you run a failed or ON_HOLD Autosys job?
+- `sendevent -E CHANGE_STATUS -s ON_HOLD -j jobname` to put it on hold first if needed
+- `sendevent -E FORCE_STARTJOB -j jobname` to force start a job regardless of its schedule
+- I always check job dependencies with `autorep -j boxname -d` before force-starting to avoid cascade failures
+
+Q: How do you cancel or kill a running Autosys job?
+- `sendevent -E KILLJOB -j jobname` sends a kill signal to the running job process
+- `sendevent -E CHANGE_STATUS -s TERMINATED -j jobname` marks it terminated in the scheduler
+- I use KILLJOB only as a last resort and always check if the underlying process actually stopped
+
+Q: What is sendevent in Autosys?
+- `sendevent` is the CLI command to send events to the Autosys event server to change job states
+- Common events are FORCE_STARTJOB, KILLJOB, CHANGE_STATUS, JOB_ON_HOLD, and JOB_OFF_HOLD
+- I use it in shell scripts to automate job control based on file arrival or upstream job status
+
 ━━━ LINUX / SHELL COMMAND RULE ━━━
 For any question asking about a Linux command or shell tool, always put the actual command in backticks in the FIRST bullet.
 
@@ -402,9 +659,8 @@ For any question asking about a Linux command or shell tool, always put the actu
   "provides the ability", "one of the key".
 - USE INSTEAD: basically, mainly, use, also, so, but, to, lets you, helps.
 - Only claim hands-on experience with tech in YOUR RESUME. For other tech say "I've read about it" or "I know how it works".
-- If you do NOT recognize the term as real IT, reply with exactly:
-  "- Question unclear — please repeat clearly"  (single bullet only)
-- NEVER invent meanings for unknown terms. NEVER reveal you are an AI."""
+- If the question is a general interview/HR question (strengths, weaknesses, experience, salary, notice period), answer it naturally from the resume context.
+- NEVER reveal you are an AI."""
 
 
 CODING_PROMPT = """You are a human software engineer writing code naturally during an interview.
@@ -755,8 +1011,9 @@ def humanize_response(text: str) -> str:
         return text
     # Remove entire code blocks first (```...```)
     text = _CODE_BLOCK_RE.sub('', text)
-    # Remove inline backticks but keep the text inside
-    text = _INLINE_CODE_RE.sub(r'\1', text)
+    # Keep inline backticks intact — the web frontend's renderInline() converts
+    # `cmd` → <code class="ic">cmd</code>.  Stripping them here loses code styling
+    # in the final completed card (the stream shows styled code, complete shows plain text).
     # Strip AI openers
     for pattern in _OPENER_PATTERNS:
         text = pattern.sub('', text)
@@ -837,6 +1094,140 @@ def clear_session():
     HISTORY.clear()
 
 
+# ── Question Type Classifier ───────────────────────────────────────────────────
+
+import re as _re
+
+_BEHAVIORAL_RE = _re.compile(
+    r'\b('
+    # Classic behavioral openers
+    r'tell me about (a time|yourself|your experience|a challenge|a situation)|'
+    r'describe (a time|a situation|a challenge|a moment|an instance|a project|a scenario|your)|'
+    r'give (me )?an example of|share an example|walk me through|'
+    # How did/do/have/would you patterns
+    r'how (did|do|have|would) you (handle|deal with|manage|approach|navigate|overcome|resolve|work with)|'
+    r'have you (ever|previously|handled|dealt|worked with|managed|led|resolved|overcome)|'
+    r'when (did|have|were) you|when you (had to|faced|dealt|worked|disagreed)|'
+    # What would you do
+    r'what would you do (if|when)|what (do|did|would) you do when|'
+    # Soft-skill / HR keywords standing alone
+    r'(strength|weakness|challenge|conflict|failure|mistake|achievement|'
+    r'accomplishment|leadership|initiative|adaptab|teamwork|collaboration|'
+    r'disagree|under pressure|handle stress|prioriti|influence|persuad|motivat|'
+    r'difficult (coworker|colleague|manager|situation|client|team|person)|'
+    r'constructive criticism|missed deadline|change your mind|'
+    r'short.term goal|long.term goal)|'
+    # Career / HR
+    r'(salary|notice period|'
+    r'why (do you want|should we hire|this (company|role|job|position)|are you leaving|did you leave)|'
+    r'where do you see yourself|'
+    r'biggest (mistake|regret|learning|challenge|achievement|failure)|'
+    r'proud of|what drives you|passion|'
+    r'greatest (strength|weakness|achievement|failure)|'
+    r'work (style|ethic|environment|culture)|'
+    r'team player|work (well|alone|independently|collaboratively))'
+    r')\b',
+    _re.IGNORECASE,
+)
+
+_SYSTEM_DESIGN_RE = _re.compile(
+    r'\b('
+    r'design (a|an|the)|architect(ure)?|'
+    r'how would you (build|design|scale|architect|implement) (a|an|the)|'
+    r'scalab(le|ility)|distributed (systems?|services?|databases?|caches?|queues?)|'
+    r'high.availab(ility)?|load balanc|'
+    r'(design|build|implement|create).{0,20}(systems?|services?|platforms?|databases?|api|pipeline|microservices?)|'
+    r'how (would|do) you (approach|architect|scale|handle) .{0,30}(traffic|scale|load|million|billion)|'
+    r'trade.?offs?|cap theorem|eventual consistency|sharding|replication|'
+    r'message queues?|event.driven|caching strategy|cdn|rate limit(er|ing)|'
+    r'microservices?|monolith|service mesh|api gateway'
+    r')\b',
+    _re.IGNORECASE,
+)
+
+
+def classify_question_type(question: str) -> str:
+    """Classify question as: behavioral | system_design | coding | technical.
+    Used to select the right answer prompt strategy.
+    """
+    q = (question or '').strip()
+    if _BEHAVIORAL_RE.search(q):
+        return 'behavioral'
+    if _SYSTEM_DESIGN_RE.search(q):
+        return 'system_design'
+    try:
+        from question_validator import is_code_request
+        if is_code_request(q):
+            return 'coding'
+    except Exception:
+        pass
+    return 'technical'
+
+
+# ── Extra Prompts for Behavioral / System-Design Questions ────────────────────
+
+BEHAVIORAL_PROMPT = """You are answering a behavioral interview question using the STAR method. Speak as the person from the RESUME.
+
+STRUCTURE: Situation → Action → Result in 2-4 conversational sentences. Under 80 words total.
+- Use "I" throughout. Be specific — mention actual tools, teams, or outcomes from your resume.
+- Sound human and direct. No bullet points. Just flowing speech.
+- Start directly with the situation. Do NOT say "Sure", "Great question", or "Certainly".
+- NEVER reveal you are an AI."""
+
+SYSTEM_DESIGN_PROMPT = """You are answering a system design question in a job interview. Speak as the senior engineer from the RESUME.
+
+FORMAT: Exactly 3 bullet points:
+  Bullet 1: High-level components / architecture choice (which services/DBs/queues)
+  Bullet 2: Key technical decision with brief reason (why that DB, why that queue, trade-off)
+  Bullet 3: How you'd scale it or the main trade-off you'd accept in production
+
+Keep each bullet under 20 words. Use "I'd" and "I've" — personal and direct.
+NO colons inside bullets. NO bold. NO markdown headers.
+NEVER reveal you are an AI."""
+
+
+# ── Vision: Solve Coding Problem from Screenshot ──────────────────────────────
+
+def solve_coding_from_image(image_b64: str, media_type: str = "image/png") -> str:
+    """Extract and solve a coding problem from a screenshot using Claude's vision.
+    Returns formatted solution with code + brief explanation bullets.
+    """
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",   # vision-capable model
+            max_tokens=1800,
+            temperature=TEMP_CODING,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_b64,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "This is a screenshot of a coding/technical problem from an interview or online judge. "
+                            "Extract the problem statement, then write a clean working solution.\n\n"
+                            "Format your response as:\n"
+                            "1. A brief one-line problem summary\n"
+                            "2. The complete solution code (Python preferred unless the screenshot specifies another language)\n"
+                            "3. 2-3 bullet points explaining the approach and time/space complexity\n\n"
+                            "Write code like a real human would in an interview — short variable names, no over-engineering."
+                        ),
+                    },
+                ],
+            }],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        dlog.log_error("[LLM] solve_coding_from_image failed", e)
+        return ""
+
 
 # Global conversation history (keep only last 1 — enough for follow-up context,
 # avoids growing token count that slows each successive question)
@@ -844,9 +1235,15 @@ from collections import deque
 HISTORY = deque(maxlen=1)
 
 def get_interview_answer(question: str, resume_text: str = "", job_description: str = "",
-                         include_code: bool = False, active_user_context: str = "") -> str:
+                         include_code: bool = False, active_user_context: str = "",
+                         question_type: str = "technical") -> str:
     """Single-shot interview answer with history context."""
-    system_prompt = INTERVIEW_PROMPT
+    if question_type == 'behavioral':
+        system_prompt = BEHAVIORAL_PROMPT
+    elif question_type == 'system_design':
+        system_prompt = SYSTEM_DESIGN_PROMPT
+    else:
+        system_prompt = INTERVIEW_PROMPT
 
     if active_user_context:
         # Rich context from user_manager (role + style hint + resume summary + JD + exp filter)
@@ -857,25 +1254,34 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
         if job_description:
             system_prompt += f"\n\nJOB DESCRIPTION (tailor answers to this):\n{job_description}"
 
+    question = (question or '').strip()
+    if not question:
+        return ""
+
     dlog.log(f"[LLM] Single-shot: {question[:60]}", "DEBUG")
 
-    # Build messages with history
+    # Build messages with history — skip any entry where q or a is empty
     messages = []
     for q, a in HISTORY:
-        messages.append({"role": "user", "content": q})
-        messages.append({"role": "assistant", "content": a})
+        if q and a:
+            messages.append({"role": "user", "content": q})
+            messages.append({"role": "assistant", "content": a})
     messages.append({"role": "user", "content": question})
     # Prefill to force bullet format (prevents preamble)
     messages.append({"role": "assistant", "content": "-"})
 
     try:
         api_start = time.time()
+        # Cache the system prompt for repeated questions (saves ~300-500ms on cache hit)
+        system_block = [{"type": "text", "text": system_prompt,
+                         "cache_control": {"type": "ephemeral"}}]
         response = client.messages.create(
             model=MODEL,
-            max_tokens=MAX_TOKENS_INTERVIEW,
+            max_tokens=_get_interview_token_budget(active_user_context, question),
             temperature=TEMP_INTERVIEW,
-            system=system_prompt,
-            messages=messages
+            system=system_block,
+            messages=messages,
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
         api_time = time.time() - api_start
         answer = humanize_response("-" + response.content[0].text.strip())
@@ -891,10 +1297,37 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
         return ""
 
 
+_ROLE_CONTEXT = {
+    "python": "INTERVIEW ROLE: Python Developer. Use Python for ALL code examples. Focus on Python idioms, Django/FastAPI, async, testing, packaging.",
+    "java": "INTERVIEW ROLE: Java Developer. Use Java for ALL code examples. Focus on Spring Boot, JVM, multithreading, Maven/Gradle, design patterns.",
+    "javascript": "INTERVIEW ROLE: JavaScript/Node.js Developer. Use JavaScript/TypeScript for ALL code examples. Focus on React, Node.js, async/await, REST APIs.",
+    "sql": "INTERVIEW ROLE: Data/SQL Engineer. Always include SQL examples. Focus on query optimization, indexes, joins, window functions, stored procedures.",
+    "saas": "INTERVIEW ROLE: SaaS Product/Backend Engineer. Focus on multi-tenancy, subscriptions, billing, REST APIs, webhooks, scalability, and B2B product concepts.",
+    "system_design": "INTERVIEW ROLE: System Design / Senior Engineer. Focus on scalability, distributed systems, CAP theorem, load balancing, caching, microservices.",
+}
+
+
 def get_streaming_interview_answer(question: str, resume_text: str = "", job_description: str = "",
-                                   active_user_context: str = ""):
+                                   active_user_context: str = "", model: str = None,
+                                   question_type: str = "technical"):
     """Streaming interview answer with history context."""
-    system_prompt = INTERVIEW_PROMPT
+    if question_type == 'behavioral':
+        system_prompt = BEHAVIORAL_PROMPT
+    elif question_type == 'system_design':
+        system_prompt = SYSTEM_DESIGN_PROMPT
+    else:
+        system_prompt = INTERVIEW_PROMPT
+
+    # Inject interview role context (set from terminal bar role selector)
+    try:
+        import config as _cfg
+        _role = getattr(_cfg, 'INTERVIEW_ROLE', 'general')
+        if _role and _role != 'general':
+            _role_hint = _ROLE_CONTEXT.get(_role)
+            if _role_hint:
+                system_prompt += f"\n\n{_role_hint}"
+    except Exception:
+        pass
 
     if active_user_context:
         # Rich context from user_manager (role + style hint + resume summary + JD + exp filter)
@@ -905,19 +1338,25 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
         if job_description:
             system_prompt += f"\n\nJOB DESCRIPTION (tailor answers to this):\n{job_description}"
 
+    question = (question or '').strip()
+    if not question:
+        return
+
     dlog.log(f"[LLM] Streaming: {question[:60]}", "DEBUG")
     stream_start = time.time()
 
-    # Build messages with history
+    # Build messages with history — skip any entry where q or a is empty
     messages = []
     for q, a in HISTORY:
-        messages.append({"role": "user", "content": q})
-        messages.append({"role": "assistant", "content": a})
+        if q and a:
+            messages.append({"role": "user", "content": q})
+            messages.append({"role": "assistant", "content": a})
     messages.append({"role": "user", "content": question})
     # Prefill to force bullet format
     messages.append({"role": "assistant", "content": "-"})
 
-    # Fallback model when primary (haiku) is overloaded
+    # Fallback model when primary is overloaded; use per-user model if provided
+    _primary_model = model or MODEL
     FALLBACK_MODEL = "claude-sonnet-4-6"
 
     # Use prompt caching on the system prompt so repeated questions share cached tokens.
@@ -929,13 +1368,13 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
     full_answer = "-"
     try:
         yield "-"
-        for attempt_model in [MODEL, FALLBACK_MODEL]:
+        for attempt_model in [_primary_model, FALLBACK_MODEL]:
             succeeded = False
             for retry in range(3):  # Retry up to 3x for 502/5xx errors
                 try:
                     with client.messages.stream(
                         model=attempt_model,
-                        max_tokens=MAX_TOKENS_INTERVIEW,
+                        max_tokens=_get_interview_token_budget(active_user_context, question),
                         temperature=TEMP_INTERVIEW,
                         system=system_block,
                         messages=messages,
@@ -956,15 +1395,21 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
                     if is_gateway_err and retry < 2:
                         wait = 0.5 * (retry + 1)
                         print(f"[LLM] Gateway error ({err_str[:40].strip()}), retry {retry+1}/2 in {wait}s...")
-                        time.sleep(wait)
+                        # Use gevent.sleep under gevent server to avoid blocking event loop
+                        try:
+                            import gevent as _gevent
+                            _gevent.sleep(wait)
+                        except ImportError:
+                            time.sleep(wait)
                         full_answer = "-"  # Reset for clean retry
                         continue
                     raise  # Re-raise for unrecoverable errors
             if succeeded:
                 break  # No need to try fallback model
 
-        # Update history after stream completes
-        HISTORY.append((question, full_answer))
+        # Update history — only store if both question and answer are non-empty
+        if question and full_answer and full_answer.strip('-').strip():
+            HISTORY.append((question, full_answer))
         dlog.log(f"[LLM] Stream done in {(time.time() - stream_start)*1000:.0f}ms", "DEBUG")
 
     except Exception as e:
@@ -1048,8 +1493,10 @@ def _clean_code_answer(text: str) -> str:
             final_lines.append(line)
             continue
         # Text explanation lines (no indentation, starts with "This", "Here", "The", etc.)
+        # Also catches mid-code LLM self-corrections like "Wait, you asked for Java."
         if (final_lines and not line.startswith(' ') and not line.startswith('\t') and
-            re.match(r'^(This|Here|The|It|Note|Output|Example|Usage|How|You)', line)):
+            re.match(r'^(This|Here|The|It|Note|Output|Example|Usage|How|You|Wait|Actually|'
+                     r'Oops|Sorry|Let me|Now|Above|Below|In the|To run|Run with)', line)):
             break
         final_lines.append(line)
     # Remove trailing empty lines
@@ -1105,7 +1552,7 @@ def detect_coding_language(question: str) -> str:
     return _cfg.CODING_LANGUAGE  # configured default (env var or "python")
 
 
-def get_coding_answer(question: str) -> str:
+def get_coding_answer(question: str, user_context: str = "") -> str:
     """Single-shot coding answer. Clean executable code only."""
     dlog.log(f"[LLM] Coding: {question[:60]}", "DEBUG")
 
@@ -1126,7 +1573,7 @@ def get_coding_answer(question: str) -> str:
 
     # Only inject hint if it's not already explicit in the question
     if lang not in q_lower and lang_display.lower() not in q_lower:
-        question_with_lang = f"[Write in {lang_display}]\n{question}"
+        question_with_lang = f"[Write in {lang_display} ONLY — no other languages]\n{question}"
     else:
         question_with_lang = question
 
@@ -1205,9 +1652,10 @@ RULES:
 - Maximum 1 line output"""
 
     try:
+        # Use Haiku with tight token budget — correction is just a rephrased question
         response = client.messages.create(
-            model=MODEL,
-            max_tokens=60,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=40,
             temperature=0.0,
             system=_CORRECTION_SYSTEM,
             messages=[{"role": "user", "content": question}]
@@ -1386,3 +1834,58 @@ def get_platform_solution(problem_text: str, editor_content: str = "", url: str 
     except Exception as e:
         dlog.log_error("[LLM] Platform failed", e)
         return ""
+
+
+import json as _json_mod
+
+_PROFILE_EXTRACT_SYSTEM = """\
+You are a resume parser. Given resume text, extract a concise professional profile.
+Return ONLY valid JSON with these exact keys:
+{
+  "key_skills": "comma-separated top 12 skills/tools/technologies from resume",
+  "domain": "primary domain e.g. Production Support / Investment Banking",
+  "custom_instructions": "2-3 sentence AI behavior rule tailored to this role. Include: preferred coding language, how to answer domain-specific questions (e.g. SQL→Python), and answer style focus."
+}
+Rules:
+- key_skills: extract ONLY tools/languages actually mentioned, comma-separated, max 12
+- domain: be specific (e.g. "Production Support / Investment Banking" not just "IT")
+- custom_instructions: mention coding language preference and any domain-specific answer style
+- Output ONLY the JSON object, no markdown, no explanation"""
+
+
+def extract_profile_from_resume(resume_text: str) -> dict:
+    """
+    Use LLM to extract key_skills, domain, and custom_instructions from resume text.
+    Returns dict with those 3 keys, or empty dict on failure.
+    Designed to run in a background thread — fast (Haiku, ~1s).
+    """
+    # Use Haiku for speed and cost efficiency
+    _haiku_model = "claude-haiku-4-5-20251001"
+    # Trim resume to 3000 chars to keep tokens low and response fast
+    text_slice = resume_text[:3000].strip()
+    if len(resume_text) > 3000:
+        text_slice += "\n[...truncated]"
+
+    try:
+        t0 = time.time()
+        response = client.messages.create(
+            model=_haiku_model,
+            max_tokens=400,
+            temperature=0.0,
+            system=_PROFILE_EXTRACT_SYSTEM,
+            messages=[{"role": "user", "content": text_slice}]
+        )
+        raw = response.content[0].text.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        result = _json_mod.loads(raw)
+        dlog.log(f"[LLM] Profile extracted in {(time.time()-t0)*1000:.0f}ms", "DEBUG")
+        return {k: str(v).strip() for k, v in result.items()
+                if k in ("key_skills", "domain", "custom_instructions")}
+    except Exception as e:
+        dlog.log_error("[LLM] extract_profile_from_resume failed", e)
+        return {}

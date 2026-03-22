@@ -9,6 +9,15 @@
   }
   window.__programizCodeTyperInjected = true;
 
+  // ── Ngrok bypass header ───────────────────────────────────────
+  const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
+  let SERVER_URL = 'https://particulate-arely-unrenovative.ngrok-free.dev';
+
+  function apiFetch(url, opts = {}) {
+    return fetch(url, { ...opts, headers: { ...NGROK_HEADERS, ...(opts.headers || {}) } });
+  }
+
+
   // Skip iframes on coding platforms to prevent duplicate typing
   const isTopFrame = window === window.top;
   const isCodingPlatform = /codewars|hackerrank|leetcode|codility|codesignal|programiz/i.test(window.location.href);
@@ -36,13 +45,15 @@
   const MAX_RETRIES = 2;
   let isOrphaned = false;
 
-  // Load WPM from storage (only once)
+  // Load WPM and SERVER_URL from storage (only once)
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-      chrome.storage.sync.get({ wpm: 20 }, (data) => {
+      chrome.storage.sync.get({ wpm: 20, serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev' }, (data) => {
         if (chrome.runtime.lastError) return;
         currentWpm = data.wpm;
+        SERVER_URL = (data.serverUrl || 'https://particulate-arely-unrenovative.ngrok-free.dev').replace(/\/$/, '');
         console.log(LOG, 'WPM loaded:', currentWpm);
+        console.log(LOG, 'SERVER_URL loaded:', SERVER_URL);
       });
     }
   } catch (e) { /* Extension context not available */ }
@@ -50,9 +61,15 @@
   try {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'sync' && changes.wpm) {
-          currentWpm = changes.wpm.newValue;
-          console.log(LOG, 'WPM updated to:', currentWpm);
+        if (area === 'sync') {
+          if (changes.wpm) {
+            currentWpm = changes.wpm.newValue;
+            console.log(LOG, 'WPM updated to:', currentWpm);
+          }
+          if (changes.serverUrl) {
+            SERVER_URL = (changes.serverUrl.newValue || 'https://particulate-arely-unrenovative.ngrok-free.dev').replace(/\/$/, '');
+            console.log(LOG, 'SERVER_URL updated to:', SERVER_URL);
+          }
         }
       });
     }
@@ -76,9 +93,6 @@
         clearInterval(triggerPollInterval);
         triggerPollInterval = null;
       }
-      if (ccCaptureEnabled) {
-        stopCCCapture();
-      }
       goIdle();
       showPageNotification('⟳ Extension reloaded — please refresh this tab to re-enable #N typing', 'warn', 6000);
     }
@@ -92,10 +106,10 @@
     if (old) old.remove();
 
     const colors = {
-      info:    { bg: '#1e3a5f', border: '#3b82f6', text: '#93c5fd' },
-      ok:      { bg: '#14532d', border: '#22c55e', text: '#86efac' },
-      warn:    { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
-      error:   { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
+      info: { bg: '#1e3a5f', border: '#3b82f6', text: '#93c5fd' },
+      ok: { bg: '#14532d', border: '#22c55e', text: '#86efac' },
+      warn: { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
+      error: { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
     };
     const c = colors[type] || colors.info;
 
@@ -754,6 +768,87 @@
   }
 
   // ═══════════════════════════════════════════════
+  // FORCE CAPTURE (Manual capture on demand)
+  // ═══════════════════════════════════════════════
+
+  async function forceCaptureNow() {
+    const platform = detectChatPlatform();
+    if (!platform) {
+      console.warn(LOG, 'Force capture: Not on a supported meeting platform');
+      return { captured: false, message: 'Not on Teams/Meet/Zoom' };
+    }
+
+    console.log(LOG, '⚡ FORCE CAPTURE initiated on', platform);
+
+    // Enable capture if not already
+    if (!ccCaptureEnabled) {
+      await startCCapture();
+    }
+
+    // Process existing chat messages
+    processAllExistingChatMessages();
+
+    // Try to capture current caption text
+    const captionContainer = findCaptionContainer();
+    let currentCaption = '';
+    if (captionContainer) {
+      currentCaption = extractCaptionText(captionContainer) || '';
+      if (currentCaption && currentCaption !== lastCaptionText) {
+        lastCaptionText = currentCaption;
+        if (!processedCaptions.has(currentCaption)) {
+          processedCaptions.add(currentCaption);
+          await sendCapturedQuestion(currentCaption.trim(), platform + '-manual-capture');
+          console.log(LOG, 'Captured caption via force:', currentCaption.slice(0, 80));
+        }
+      }
+    }
+
+    // Try Zoom chat
+    if (platform === 'zoom') {
+      const zoomMsgs = getZoomChatMessages();
+      if (zoomMsgs.length > 0) {
+        const lastMsg = zoomMsgs[zoomMsgs.length - 1];
+        await sendCapturedQuestion(lastMsg.text, platform + '-manual-capture');
+        console.log(LOG, 'Captured Zoom chat:', lastMsg.text.slice(0, 80));
+      }
+    }
+
+    // Try Teams chat
+    if (platform === 'teams') {
+      const teamsMsgs = getTeamsChatMessages();
+      if (teamsMsgs.length > 0) {
+        const lastMsg = teamsMsgs[teamsMsgs.length - 1];
+        await sendCapturedQuestion(lastMsg.text, platform + '-manual-capture');
+        console.log(LOG, 'Captured Teams chat:', lastMsg.text.slice(0, 80));
+      }
+    }
+
+    return { captured: true, platform, caption: currentCaption };
+  }
+
+  // Ctrl+Alt+Q shortcut for force capture
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'q') {
+      e.preventDefault();
+      forceCaptureNow().then(result => {
+        if (result.captured) {
+          showToast('Captured! Check dashboard.');
+        } else {
+          showToast('Not on a meeting page');
+        }
+      });
+    }
+  });
+
+  function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4f46e5;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  // ═══════════════════════════════════════════════
   // CC CAPTION CAPTURE
   // ═══════════════════════════════════════════════
 
@@ -1158,7 +1253,7 @@
 
   async function sendCapturedQuestion(question, source) {
     try {
-      const response = await fetch('http://localhost:8000/api/cc_question', {
+      const response = await apiFetch(`${SERVER_URL}/api/cc_question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1197,7 +1292,7 @@
     console.log(LOG, '🎙️ CC/Chat capture ENABLED');
 
     // Notify server
-    fetch('http://localhost:8000/api/cc_control', {
+    apiFetch(`${SERVER_URL}/api/cc_control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'start' })
@@ -1212,7 +1307,7 @@
     console.log(LOG, '⏹️ CC/Chat capture DISABLED');
 
     // Notify server
-    fetch('http://localhost:8000/api/cc_control', {
+    apiFetch(`${SERVER_URL}/api/cc_control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop' })
@@ -1795,7 +1890,7 @@
       if (e.message === 'orphaned' || e.message.includes('Extension context')) {
         showPageNotification('⟳ Extension reloaded — refresh this tab', 'warn', 5000);
       } else if (e.message.includes('Failed to fetch') || e.message.includes('Network') || e.message.includes('ERR_CONNECTION')) {
-        showPageNotification('🔴 Server offline — start the Drishi Pro first', 'error', 5000);
+        showPageNotification('🔴 Server offline — start Drishi Enterprise first', 'error', 5000);
       } else {
         showPageNotification(`⚠ Could not load #${index}: ${e.message}`, 'warn', 4000);
       }
@@ -1839,7 +1934,7 @@
 
     // If it's a theory answer (no code blocks), comment it as notes
     if (!rawCode.includes('def ') && !rawCode.includes('class ') &&
-        !rawCode.includes('return ') && rawCode.length > 50 && !rawCode.startsWith('#')) {
+      !rawCode.includes('return ') && rawCode.length > 50 && !rawCode.startsWith('#')) {
       rawCode = rawCode.split('\n').map(line => `# ${line}`).join('\n');
     }
 
@@ -1920,7 +2015,7 @@
 
     // 3. Request Solution
     try {
-      console.log(LOG, `⚡ Sending request to http://localhost:8000/api/solve_problem...`);
+      console.log(LOG, `⚡ Sending request to ${SERVER_URL}/api/solve_problem...`);
       console.log(LOG, `   URL: ${window.location.href}`);
       console.log(LOG, `   Editor Content Length: ${editorContent.length}`);
 
@@ -1996,7 +2091,7 @@
             await runAndDebug(problemText);
           }
         } else {
-          console.log(LOG, '👁️  VIEW-ONLY mode: Solution displayed on localhost only');
+          console.log(LOG, '👁️  VIEW-ONLY mode: Solution displayed on server only');
         }
       } else {
         console.error(LOG, 'No solution returned', data);
@@ -2178,7 +2273,7 @@
       controlState = 'running';
       typewriter.resume();
       try {
-        await fetch('http://localhost:8000/api/control/resume', { method: 'POST' });
+        await apiFetch(`${SERVER_URL}/api/control/resume`, { method: 'POST' });
       } catch (e) { }
       return;
     }
@@ -2257,7 +2352,7 @@
   async function triggerPause() {
     console.log(LOG, 'PAUSE triggered');
     try {
-      await fetch('http://localhost:8000/api/control/pause', { method: 'POST' });
+      await apiFetch(`${SERVER_URL}/api/control/pause`, { method: 'POST' });
     } catch (e) { }
 
     controlState = 'paused';
@@ -2269,7 +2364,7 @@
   async function triggerStop() {
     console.log(LOG, 'STOP triggered (kill switch)');
     try {
-      await fetch('http://localhost:8000/api/control/stop', { method: 'POST' });
+      await apiFetch(`${SERVER_URL}/api/control/stop`, { method: 'POST' });
     } catch (e) { }
 
     controlState = 'stopped';
@@ -2278,7 +2373,7 @@
 
   async function triggerToggleMode() {
     try {
-      const response = await fetch('http://localhost:8000/api/control/toggle_mode', { method: 'POST' });
+      const response = await apiFetch(`${SERVER_URL}/api/control/toggle_mode`, { method: 'POST' });
       const data = await response.json();
       currentMode = data.mode;
       console.log(LOG, `Mode switched to: ${currentMode === 'auto' ? 'AUTO-TYPE' : 'VIEW-ONLY'}`);
@@ -2365,6 +2460,12 @@
         goIdle();
       } else if (msg.type === 'getState') {
         sendResponse({ state });
+        return true;
+      } else if (msg.type === 'FORCE_CAPTURE') {
+        e.preventDefault();
+        forceCaptureNow().then(result => {
+          sendResponse({ success: result.captured, platform: result.platform });
+        });
         return true;
       }
     } catch (e) { /* Extension context handled */ }

@@ -144,6 +144,12 @@ STT_CORRECTIONS = {
     r"\bautosis\b": "Autosys",
     r"\bauto\s+sis\b": "Autosys",
     r"\bauto\s+sys\b": "Autosys",
+    # JIL (Job Information Language) misheard as Yale / Jill / Jeel / Gil
+    r"\byale\b(?=\s+(?:in|and|is|file|script|language|used|for|how|what))": "JIL",
+    r"\bjill\b(?=\s+(?:in|and|is|file|script|language|used|for|how|what))": "JIL",
+    r"\bjeel\b": "JIL",
+    r"\bwhat\s+is\s+yale\b": "what is JIL",
+    r"\bwhat\s+is\s+jill\b": "what is JIL",
     # Linux 'rm' command misheard as 'Aaram' (Hindi word for rest)
     r"\baaram\s+command\b": "rm command",
     r"\baaram\b": "rm",
@@ -592,9 +598,17 @@ STT_CORRECTIONS = {
     # context manager mishears
     r"\bcontact\s+manager\b": "context manager",
     r"\bcontent\s+manager\b": "context manager",
-    # metaclass mishears
+    # metaclass mishears (including Sarvam's "metacarp" / "meta carp")
     r"\bmeta\s+class\b": "metaclass",
     r"\bmeta\s+classes\b": "metaclasses",
+    r"\bmetacarp\b": "metaclass",
+    r"\bmeta\s*carp\b": "metaclass",
+    r"\bmetacarpal\b": "metaclass",
+    # "return" misheard as "turn" at sentence start (Sarvam artifact)
+    r"^turn\b(?=\s+and|\s+in|\s+vs|\s+statement|\s+keyword|\s+value|\s+type)": "return",
+    # "print" misheard as "payback" / "pay back" in Python context
+    r"\bpayback\b(?=\s+in\s+python|\s+function|\s+statement|\s+vs\s+return|\s+and\s+return)": "print",
+    r"\bpay\s+back\b(?=\s+in\s+python|\s+function|\s+statement)": "print",
     # Pickling
     r"\btickl(ing|e)\b": "pickling",
     # CAP theorem
@@ -630,7 +644,6 @@ STT_CORRECTIONS = {
     r"\bpolymerfism\b": "polymorphism",
     r"\bpolymerphism\b": "polymorphism",
     r"\bpolymorphysm\b": "polymorphism",
-    r"\bhashmap\b": "hash map",
     r"\bdeepth\b": "depth",
     r"\bstructued\b": "structured",
     r"\bscripted\b": "Scripted",
@@ -750,6 +763,420 @@ STT_CORRECTIONS = {
     r"^(\w[\w\s]+?),?\s+give\s+(me\s+)?an?\s+example\s*\.?$": r"Give an example of \1",
     r"^example\s+of\s+(\w[\w\s]+?)\s*\.?$": r"Give an example of \1",
     r"^write\s+example\s+for\s+(\w[\w\s]+?)\s*\.?$": r"Write an example of \1",
+
+    # ── Indian accent STT corrections (v/w confusion, dropped h, etc.) ────────
+    # "v" substituted for "w" — very common in Indian English STT output
+    r"^vat\s+is\b": "What is",
+    r"^vat\s+are\b": "What are",
+    r"^vat\s+do\b": "What do",
+    r"^vat\s+does\b": "What does",
+    r"^ven\s+(do|does|should|would|is)\b": r"When \1",
+    r"^vy\s+(do|does|is|would|should)\b": r"Why \1",
+    r"^vhere\s+(do|does|is|are)\b": r"Where \1",
+    r"\bvat\s+is\b": "what is",
+    r"\bvat\s+are\b": "what are",
+    # "wat" for "what" (dropped 'h' — common in some Indian accents/STTs)
+    r"^wat\s+is\b": "What is",
+    r"^wat\s+are\b": "What are",
+    r"^wat\s+do\b": "What do",
+    r"^wat\s+does\b": "What does",
+    r"\bwat\s+is\b": "what is",
+    r"\bwat\s+are\b": "what are",
+    # "ow to" / "ow do" — dropped 'h' at start of question
+    r"^ow\s+to\b": "How to",
+    r"^ow\s+do\b": "How do",
+    r"^ow\s+does\b": "How does",
+    # "sir" prefix — Indian interviews often start with "sir" (strip it)
+    r"^sir,?\s+(what|how|why|when|where|explain|tell|describe|define|write|can|do)\b": r"\1",
+    r"^ma'?am,?\s+(what|how|why|when|where|explain|tell|describe|define|write|can|do)\b": r"\1",
+
+    # ── Java Spring ecosystem mishears ────────────────────────────────────────
+    # Spring annotations
+    r"\bauto\s*wired\b": "Autowired",
+    r"\bauto\s*wire\b": "Autowired",
+    r"\bcomponent\s*scan\b": "ComponentScan",
+    r"\bspring\s*boot\s*application\b(?=\s+annotation|\s+class|\s+config|\?|$)": "SpringBootApplication",
+    r"\brest\s*controller\b": "RestController",
+    r"\brequest\s*mapping\b": "RequestMapping",
+    r"\bget\s*mapping\b": "GetMapping",
+    r"\bpost\s*mapping\b": "PostMapping",
+    r"\bentity\s+annotation\b": "@Entity annotation",
+    r"\btransactional\s+annotation\b": "@Transactional annotation",
+    r"\bqualifier\s+annotation\b": "@Qualifier annotation",
+    r"\bion\s*oc\b": "IoC",
+    r"\binversion\s+of\s+control\b": "IoC",
+    r"\bspring\s+i\s*o\s*c\b": "Spring IoC",
+    r"\bdependency\s+inject\w+\b": "dependency injection",
+    r"\bdi\s+container\b": "DI container",
+    r"\bspring\s+bean\b": "Spring Bean",
+    r"\bbean\s+lifecycle\b": "Bean lifecycle",
+    r"\bspring\s+aop\b": "Spring AOP",
+    r"\baspect\s+oriented\b": "Aspect-Oriented",
+    r"\bspring\s+data\s+jpa\b": "Spring Data JPA",
+    r"\bspring\s+cloud\b": "Spring Cloud",
+    r"\bfeign\s+client\b": "Feign client",
+    r"\beurika\b": "Eureka",
+    r"\beureka\s+(server|client|registry)\b": r"Eureka \1",
+    # Maven/Gradle mishears
+    r"\bmay\s+ven\b": "Maven",
+    r"\bmayven\b": "Maven",
+    r"\bmeaven\b": "Maven",
+    r"\bgradle\s+(build|wrapper|task|plugin)\b": r"Gradle \1",
+    r"\bpom\s+dot\s+xml\b": "pom.xml",
+    r"\bpom\s+xml\b": "pom.xml",
+    r"\bbuild\s+dot\s+gradle\b": "build.gradle",
+    # JUnit/TestNG/Mockito mishears
+    r"\bj\s*unit\b": "JUnit",
+    r"\bjay\s+unit\b": "JUnit",
+    r"\btest\s+n\s*g\b": "TestNG",
+    r"\btest\s+and\s+g\b": "TestNG",
+    r"\bmock\s*ito\b": "Mockito",
+    r"\bmoky\s*to\b": "Mockito",
+    r"\bpower\s+mock\b": "PowerMock",
+    r"\bspy\s+(method|object|annotation)\b": r"spy \1",
+    r"\bwhen\s+then\s+return\b": "when...thenReturn",
+    r"\bverify\s+(method|call|interaction)\b": r"verify \1",
+    # Java multithreading/concurrency mishears
+    r"\bsynchronize[ds]?\b": "synchronized",
+    r"\bsyn\s*chronic\b": "synchronized",
+    r"\bvolatile\s+(keyword|variable)\b": r"volatile \1",
+    r"\bwait\s+and\s+notify\b": "wait and notify",
+    r"\bthread\s+safe\b": "thread-safe",
+    r"\brace\s+condition\b": "race condition",
+    r"\bdeadlock\s+(in\s+java|example|situation)\b": r"deadlock \1",
+    r"\bfork\s+join\b": "ForkJoin",
+    r"\bfork[\s/-]join\s+pool\b": "ForkJoinPool",
+    r"\bcount\s*down\s*latch\b": "CountDownLatch",
+    r"\bcyclic\s*barrier\b": "CyclicBarrier",
+    r"\bsemaphore\s+(in\s+java|example)\b": r"Semaphore \1",
+    r"\blocal\s+variable\s+thread\b": "ThreadLocal variable",
+    # Java collections mishears
+    r"\barray\s*deque\b": "ArrayDeque",
+    r"\bpriority\s*queue\b": "PriorityQueue",
+    r"\biterator\s+(interface|pattern|in\s+java)\b": r"Iterator \1",
+    r"\bcomparator\s+(interface|in\s+java)\b": r"Comparator \1",
+    r"\bcomparable\s+(interface|in\s+java)\b": r"Comparable \1",
+    r"\bcollections\s+framework\b": "Collections Framework",
+    r"\bgeneric\s+(class|method|type|in\s+java)\b": r"Generic \1",
+    r"\bwild\s*card\s+(in\s+java|type|generics)\b": r"wildcard \1",
+    # Java exception handling
+    r"\bchecked\s+exception\b": "checked exception",
+    r"\bunchecked\s+exception\b": "unchecked exception",
+    r"\bruntime\s+exception\b": "RuntimeException",
+    r"\bnull\s*pointer\s+exception\b": "NullPointerException",
+    r"\barray\s+index\s+out\s+of\s+bounds\b": "ArrayIndexOutOfBoundsException",
+    r"\bclass\s+cast\s+exception\b": "ClassCastException",
+    r"\bfinally\s+block\b": "finally block",
+    r"\btry\s*with\s*resources?\b": "try-with-resources",
+    r"\bmulti[\s-]catch\b": "multi-catch",
+    # Java 8+ features
+    r"\boptional\s+(class|in\s+java|api)\b": r"Optional \1",
+    r"\bmethod\s+reference\b": "method reference",
+    r"\bdefault\s+method\b": "default method",
+    r"\binterface\s+default\b": "default method in interface",
+    r"\bstream\s+(filter|map|reduce|collect|pipeline)\b": r"Stream \1",
+    r"\bdate\s+time\s+api\b": "DateTime API",
+    r"\bjava\s+time\b": "java.time",
+    r"\blocal\s*date\s*time\b": "LocalDateTime",
+    # Abstract class vs interface (very common Indian interview Q)
+    r"\babstract\s+class\s+vs\s+interface\b": "abstract class vs interface",
+    r"\binterface\s+vs\s+abstract\s+class\b": "abstract class vs interface",
+    r"\babstract\s+class\s+and\s+interface\b": "abstract class and interface",
+    # OOP concepts - common Indian interview mishears
+    r"\bencapsul\w+\b": "encapsulation",
+    r"\binherit\w+\s+(in\s+java|concept|type)\b": r"inheritance \1",
+    r"\bmultiple\s+inherit\w+\b": "multiple inheritance",
+    r"\bhybrid\s+inherit\w+\b": "hybrid inheritance",
+    r"\bmulti\s*level\s+inherit\w+\b": "multilevel inheritance",
+    r"\bhierarchical\s+inherit\w+\b": "hierarchical inheritance",
+    # Design patterns - Indian interviews love these
+    r"\bdesign\s+pattern\s+(in\s+java|types|categories)\b": r"design pattern \1",
+    r"\bcreational\s+pattern\b": "creational pattern",
+    r"\bstructural\s+pattern\b": "structural pattern",
+    r"\bbehavioral\s+pattern\b": "behavioral pattern",
+    r"\bproxy\s+pattern\b": "Proxy pattern",
+    r"\bdecorate\s+pattern\b": "Decorator pattern",
+    r"\bstrategy\s+pattern\b": "Strategy pattern",
+    r"\bcommand\s+pattern\b": "Command pattern",
+    r"\btemplate\s+method\s+pattern\b": "Template Method pattern",
+    r"\bchain\s+of\s+responsibility\b": "Chain of Responsibility",
+    # Microservices patterns - very common in Indian IT interviews
+    r"\bcircuit\s+breaker\b": "Circuit Breaker",
+    r"\bapi\s+gate\s*way\b": "API Gateway",
+    r"\bservice\s+mesh\b": "service mesh",
+    r"\bsaga\s+pattern\b": "Saga pattern",
+    r"\bevent\s+driven\b": "event-driven",
+    r"\bcqrs\b": "CQRS",
+    r"\bcommand\s+query\s+responsibility\b": "CQRS",
+    r"\bevent\s+source\s*ring\b": "event sourcing",
+    r"\bservice\s+discover\w+\b": "service discovery",
+    r"\bload\s+balanc\w+\b": "load balancing",
+    r"\brate\s+limit\w+\b": "rate limiting",
+    r"\bbulk\s*head\s+pattern\b": "Bulkhead pattern",
+    r"\bretry\s+pattern\b": "Retry pattern",
+    # Kafka (very common in Indian enterprise interviews)
+    r"\bkafka\s+(topic|consumer|producer|broker|partition|offset|lag)\b": r"Kafka \1",
+    r"\bconsumer\s+group\b": "consumer group",
+    r"\bkafka\s+connect\b": "Kafka Connect",
+    r"\bkafka\s+streams\b": "Kafka Streams",
+    r"\bzookeeper\b": "ZooKeeper",
+    r"\bzoo\s+keeper\b": "ZooKeeper",
+    # Hibernate-specific mishears
+    r"\bhib\s+ern\w+\b": "Hibernate",
+    r"\bhiber\s*nate\s+(session|query|criteria|mapping|cache)\b": r"Hibernate \1",
+    r"\bfirst\s+level\s+cache\b": "first-level cache",
+    r"\bsecond\s+level\s+cache\b": "second-level cache",
+    r"\blazy\s+load(?:ing)?\b": "lazy loading",
+    r"\beager\s+load(?:ing)?\b": "eager loading",
+    r"\bone\s+to\s+many\b": "one-to-many",
+    r"\bmany\s+to\s+one\b": "many-to-one",
+    r"\bmany\s+to\s+many\b": "many-to-many",
+    r"\bone\s+to\s+one\b": "one-to-one",
+    r"\bn\s+plus\s+1\s+(problem|issue)\b": r"N+1 \1",
+
+    # ── DRF (Django REST Framework) mishears ──────────────────────────────────
+    # DRF itself
+    r"\bd\s*r\s*f\b": "DRF",
+    r"\bdjango\s+rest\s+frame\s*work\b": "DRF",
+    # APIView variants
+    r"\ba\s*p\s*i\s*view\b": "APIView",
+    r"\bapi\s+view\b": "APIView",
+    r"\bgeneric\s+a\s*p\s*i\s*view\b": "GenericAPIView",
+    r"\bgeneric\s+api\s+view\b": "GenericAPIView",
+    # ViewSet variants
+    r"\bview\s*set\b": "ViewSet",
+    r"\bmodel\s*view\s*set\b": "ModelViewSet",
+    r"\bread\s*only\s*model\s*view\s*set\b": "ReadOnlyModelViewSet",
+    # Generic views
+    r"\blist\s*api\s*view\b": "ListAPIView",
+    r"\bretrieve\s*api\s*view\b": "RetrieveAPIView",
+    r"\bcreate\s*api\s*view\b": "CreateAPIView",
+    r"\bupdate\s*api\s*view\b": "UpdateAPIView",
+    r"\bdestroy\s*api\s*view\b": "DestroyAPIView",
+    r"\blist\s+create\s*api\s*view\b": "ListCreateAPIView",
+    r"\bretrieve\s+update\s*api\s*view\b": "RetrieveUpdateAPIView",
+    # Router
+    r"\bdefault\s*router\b": "DefaultRouter",
+    r"\bsimple\s*router\b": "SimpleRouter",
+    # Serializer
+    r"\bhyper\s*linked\s*model\s*serial\w+\b": "HyperlinkedModelSerializer",
+    r"\bmodel\s*serial\w+\b": "ModelSerializer",
+    r"\bto\s*representation\b": "to_representation",
+    r"\bvalidated\s*data\b": "validated_data",
+    r"\bcreate\s+method\s+serial\w+\b": "create method serializer",
+    # Permissions
+    r"\bis\s*authenticated\b": "IsAuthenticated",
+    r"\bis\s*admin\s*user\b": "IsAdminUser",
+    r"\ballow\s*any\b": "AllowAny",
+    r"\bpermission\s*class\b": "permission class",
+    # Auth
+    r"\btoken\s*authentication\b": "TokenAuthentication",
+    r"\bsession\s*authentication\b": "SessionAuthentication",
+    r"\bbasic\s*authentication\b": "BasicAuthentication",
+    r"\bsimple\s*j\s*w\s*t\b": "SimpleJWT",
+    r"\brefresh\s*token\b": "refresh token",
+    r"\baccess\s*token\b": "access token",
+    # Throttling
+    r"\banon\s*rate\s*throttle\b": "AnonRateThrottle",
+    r"\buser\s*rate\s*throttle\b": "UserRateThrottle",
+    r"\bscoped\s*rate\s*throttle\b": "ScopedRateThrottle",
+    # Pagination
+    r"\bpage\s*number\s*pagination\b": "PageNumberPagination",
+    r"\bcursor\s*pagination\b": "CursorPagination",
+    r"\blimit\s*offset\s*pagination\b": "LimitOffsetPagination",
+    # Filter backends
+    r"\bdjango\s*filter\s*backend\b": "DjangoFilterBackend",
+    r"\bsearch\s*filter\b": "SearchFilter",
+    r"\bordering\s*filter\b": "OrderingFilter",
+
+    # ── Python advanced / stdlib mishears ─────────────────────────────────────
+    # f-strings
+    r"\bf\s*string\b": "f-string",
+    r"\bf\s*strings\b": "f-strings",
+    r"\bformatted\s+string\s+literal\b": "f-string",
+    # Walrus operator
+    r"\bcolon\s+equals\s*operator\b": "walrus operator",
+    r"\bcolon\s+equals\b": "walrus operator",
+    r"\b:=\s+operator\b": "walrus operator",
+    # Type hints / annotations
+    r"\btype\s+hint\b": "type hint",
+    r"\btype\s+hints\b": "type hints",
+    r"\btype\s+annotation\b": "type annotation",
+    r"\btype\s+annotations\b": "type annotations",
+    r"\boptional\s+type\b": "Optional type",
+    r"\bunion\s+type\b": "Union type",
+    # dataclass
+    r"\bdata\s*class\b": "dataclass",
+    r"\bdata\s*classes\b": "dataclasses",
+    # namedtuple
+    r"\bnamed\s*tuple\b": "namedtuple",
+    r"\bnamed\s*tuples\b": "namedtuples",
+    # Collections
+    r"\bdefault\s*dict\b": "defaultdict",
+    r"\bordered\s*dict\b": "OrderedDict",
+    r"\bcounter\s+(class|in\s+python|object)\b": r"Counter \1",
+    r"\bchain\s*map\b": "ChainMap",
+    r"\bdeque\s+(in\s+python|class|object)\b": r"deque \1",
+    # functools / lru_cache
+    r"\bl\s*r\s*u\s*cache\b": "lru_cache",
+    r"\blru\s*cache\b": "lru_cache",
+    r"\bcache\s*d\s+property\b": "cached_property",
+    r"\bpartial\s+function\b": "functools.partial",
+    r"\bfunc\s*tools\b": "functools",
+    r"\biter\s*tools\b": "itertools",
+    # context manager
+    r"\bwith\s+statement\b": "context manager",
+    r"\b__enter__\b": "__enter__",
+    r"\b__exit__\b": "__exit__",
+    # Abstract base class
+    r"\ba\s*b\s*c\s+(module|class|abstract)\b": r"ABC \1",
+    r"\babstract\s+base\s+class\b": "ABC",
+    r"\babstract\s+method\b": "abstractmethod",
+    # Pydantic
+    r"\bpid\s*antic\b": "Pydantic",
+    r"\bpid\s*antic\b": "Pydantic",
+    r"\bbase\s*model\b(?=\s+in\s+pydantic|\s+pydantic|\s+class|\?|$)": "BaseModel",
+    # pytest
+    r"\bpy\s*test\b": "pytest",
+    r"\bpy\s+test\b": "pytest",
+    r"\bconfttest\b": "conftest",
+    r"\bconf\s*test\b": "conftest",
+    r"\bpara\s*metrize\b": "parametrize",
+    r"\bpara\s*meter\s*ize\b": "parametrize",
+    # Virtual environments
+    r"\bvirtual\s*env\b": "virtualenv",
+    r"\bv\s*env\b": "venv",
+    r"\bpip\s*env\b": "pipenv",
+    # Threading / async
+    r"\bthread\s+lock\b": "thread lock",
+    r"\bthread\s+safe\b": "thread-safe",
+    r"\bgil\s+(lock|bypass|release)\b": r"GIL \1",
+    r"\bconcurrent\s+futures\b": "concurrent.futures",
+    r"\bthread\s*pool\s*executor\b": "ThreadPoolExecutor",
+    r"\bprocess\s*pool\s*executor\b": "ProcessPoolExecutor",
+
+    # ── SRE / Observability mishears ──────────────────────────────────────────
+    # SLO / SLI / SLA
+    r"\bs\s*l\s*o\b(?=\s+target|\s+window|\s+violation|\s+budget|\?|$)": "SLO",
+    r"\bs\s*l\s*i\b(?=\s+metric|\s+measure|\?|$)": "SLI",
+    r"\bs\s*l\s*a\b(?=\s+breach|\s+violation|\s+agreement|\?|$)": "SLA",
+    r"\berror\s*budget\s*(burn|policy|window)\b": r"error budget \1",
+    r"\bburn\s+rate\s+(alert|slo|policy)\b": r"burn rate \1",
+    r"\btoil\s+(automation|reduction|metric)\b": r"toil \1",
+    # Golden signals
+    r"\bfour\s+golden\s+signals?\b": "four golden signals",
+    # MTTD/MTTR
+    r"\bm\s*t\s*t\s*r\b": "MTTR",
+    r"\bm\s*t\s*t\s*d\b": "MTTD",
+    r"\bm\s*t\s*t\s*f\b": "MTTF",
+    r"\bmean\s+time\s+to\s+recover\b": "MTTR",
+    r"\bmean\s+time\s+to\s+detect\b": "MTTD",
+    r"\bmean\s+time\s+between\s+failure\b": "MTBF",
+    # Observability tools
+    r"\bopen\s*telemetry\b": "OpenTelemetry",
+    r"\bo\s*tel\b(?=\s+sdk|\s+collector|\s+trace|\?|$)": "OTel",
+    r"\bpager\s*duty\b": "PagerDuty",
+    r"\bops\s*genie\b": "OpsGenie",
+    r"\bprometheus\s+(alert|metric|rule|scrape)\b": r"Prometheus \1",
+    r"\bprom\s*q\s*l\b": "PromQL",
+    r"\balert\s*manager\b": "Alertmanager",
+    r"\bsplunk\s+(query|dashboard|index|forwarder)\b": r"Splunk \1",
+    r"\bdata\s*dog\b": "Datadog",
+    r"\bnew\s*relic\b": "New Relic",
+    r"\bdyna\s*trace\b": "Dynatrace",
+    r"\belastic\s*search\b": "Elasticsearch",
+    r"\bel\s*k\s+(stack|setup)\b": r"ELK \1",
+
+    # ── Production Support / ITIL mishears ────────────────────────────────────
+    # Severity/priority
+    r"\bp\s*1\s+(incident|issue|alert|ticket)\b": r"P1 \1",
+    r"\bp\s*2\s+(incident|issue|alert|ticket)\b": r"P2 \1",
+    r"\bp\s*3\s+(incident|issue|alert|ticket)\b": r"P3 \1",
+    r"\bpriority\s+one\b": "P1",
+    r"\bpriority\s+two\b": "P2",
+    r"\bpriority\s+three\b": "P3",
+    # ITIL processes
+    r"\br\s*c\s*a\b(?=\s+report|\s+process|\s+analysis|\?|$)": "RCA",
+    r"\broot\s+cause\s+analysis\b": "RCA",
+    r"\bchange\s+management\s+(process|itil)\b": r"change management \1",
+    r"\bc\s*m\s*d\s*b\b": "CMDB",
+    r"\bservice\s+now\b": "ServiceNow",
+    r"\bs\s*o\s*p\b(?=\s+document|\s+runbook|\?|$)": "SOP",
+    r"\bwar\s+room\s+(call|bridge|meeting)\b": r"war room \1",
+    r"\bbridge\s+(call|meeting)\b": r"bridge \1",
+    r"\bescalation\s+matrix\b": "escalation matrix",
+    r"\brollback\s+plan\b": "rollback plan",
+    r"\bchange\s+window\b": "change window",
+    r"\bblast\s+radius\b": "blast radius",
+    r"\bheartbeat\s+(check|monitor|alert)\b": r"heartbeat \1",
+
+    # ── Linux/Unix advanced mishears ─────────────────────────────────────────
+    # iostat/vmstat/sar
+    r"\bi\s*o\s*stat\b": "iostat",
+    r"\bvm\s*stat\b": "vmstat",
+    r"\bio\s*top\b": "iotop",
+    r"\bsar\s+command\b": "sar command",
+    r"\bload\s+average\b": "load average",
+    r"\bi\s*o\s*wait\b": "iowait",
+    r"\bio\s*wait\b": "iowait",
+    r"\bcontext\s+switch\b": "context switch",
+    r"\brun\s+queue\b": "run queue",
+    # ss / netstat
+    r"\b(ss|netstat)\s+command\b": r"\1 command",
+    r"\blisten\s+port\b": "listening port",
+    r"\bopen\s+port\b": "open port",
+    # swap / memory
+    r"\bswap\s+(space|usage|partition|file)\b": r"swap \1",
+    r"\bvirtual\s+memory\b": "virtual memory",
+    r"\bpage\s+fault\b": "page fault",
+    r"\bpage\s+in\b": "page-in",
+    r"\bpage\s+out\b": "page-out",
+    r"\boom\s+killer\b": "OOM killer",
+    r"\boo\s*m\s*killer\b": "OOM killer",
+    # Filesystem / inode
+    r"\bi\s*node\b": "inode",
+    r"\bi\s*nodes\b": "inodes",
+    r"\bfile\s+system\b": "filesystem",
+    r"\bfsck\s+command\b": "fsck command",
+    r"\bdisk\s+quota\b": "disk quota",
+    r"\bextended\s+file\s+system\b": "ext4",
+    r"\be\s*x\s*t\s*4\b": "ext4",
+    r"\bx\s*f\s*s\b(?=\s+filesystem|\s+partition|\?|$)": "XFS",
+    # systemd specifics
+    r"\bsystem\s*ctl\s+(status|start|stop|restart|enable|disable)\b": r"systemctl \1",
+    r"\bjournal\s*ctl\s+(-u|-f|--unit|--since)\b": r"journalctl \1",
+    r"\bservice\s+unit\s+file\b": "systemd unit file",
+    r"\bexec\s*start\b": "ExecStart",
+    r"\brestart\s*policy\b": "restart policy",
+    r"\bwanted\s*by\b": "WantedBy",
+    # cron
+    r"\bcron\s+(expression|syntax|format|job|tab)\b": r"cron \1",
+    r"\b5\s+star\s+cron\b": "five-field cron",
+    r"\b@\s*reboot\b": "@reboot",
+    r"\b@\s*hourly\b": "@hourly",
+    r"\b@\s*daily\b": "@daily",
+    # Autosys advanced
+    r"\bj\s*i\s*l\s+(script|file|syntax|language)\b": r"JIL \1",
+    r"\bsend\s+event\b": "sendevent",
+    r"\bauto\s*rep\b": "autorep",
+    r"\bauto\s*stat\s*d\b": "autostatd",
+    r"\bauto\s*ping\b": "autoping",
+    r"\bbox\s+job\b": "box job",
+    r"\bcommand\s+job\b": "command job",
+    r"\bfile\s+watcher\s+job\b": "file watcher job",
+    r"\bf\s*w\s+job\b": "FW job",
+    r"\bon\s*_?\s*hold\b": "on_hold",
+    r"\bon\s*_?\s*ice\b": "on_ice",
+    r"\bforce\s*_?\s*start\s*job\b": "force_startjob",
+    r"\bkill\s*_?\s*job\b": "killjob",
+    r"\bchoke\s+level\b": "choke level",
+    r"\brun\s+calendar\b": "run calendar",
+    r"\bca\s+workload\b": "CA Workload Automation",
+    r"\bw\s*c\s*c\b(?=\s+server|\s+agent|\?|$)": "WCC",
+    r"\bcontrol\s*-?\s*m\b": "Control-M",
+    r"\bca\s*7\b": "CA7",
+    r"\bgeneos\b": "Geneos",
+    r"\bitrs\s+(monitor|agent|probe)\b": r"ITRS \1",
 }
 
 COMPILED_STT_CORRECTIONS = [(re.compile(p, re.IGNORECASE), r) for p, r in STT_CORRECTIONS.items()]
@@ -849,11 +1276,11 @@ YOUTUBE_PATTERNS = [
     r"welcome to (my|this|the) (channel|video|tutorial|course|series)",
     r"hey (guys|everyone|everybody)", r"what's up (guys|everyone)",
     r"hello (everyone|guys|friends)", r"hi (guys|everyone)",
-    r"let's (get started|begin|dive|jump|look)", r"let me show you",
+    r"let'?s\s+(get started|begin|dive|jump|look)", r"let us (get started|begin|dive|jump|look)", r"let me show you",
     r"as you can see", r"on (the|your) screen",
     r"first (we need to|let's|we will|we'll)", r"step (one|two|three|1|2|3)",
     r"(next|now) (we|let's|I'll|I will|we'll)", r"moving on to",
-    r"(click|go to|navigate|open) (on|the|this|here)",
+    r"(click|go to|navigate) (on|the|this|here)",
     r"(link|links) (in|is in) (the|my) description",
     r"(leave|drop) a comment", r"comment (below|down)",
     r"share this video", r"don't forget to",
@@ -1002,7 +1429,12 @@ TECH_TERMS = {
     "mkdir", "rmdir", "kill", "killall",  # more commands
     "wc", "sort", "uniq", "cut", "tee",   # text processing
     "env", "export", "alias", "history",  # shell builtins
-    "autosys",  # enterprise job scheduler
+    # Autosys / CA Workload Automation
+    "autosys", "jil", "job information language", "sendevent", "autorep",
+    "box job", "box", "on_hold", "on_ice", "on hold", "on ice",
+    "force_startjob", "killjob", "autostatd", "autoping",
+    "job scheduler", "workload automation", "batch job", "job flow",
+    "wcc", "ca7", "control-m",  # related schedulers often asked together
     # DevOps/SRE terms
     "prometheus", "grafana", "monitoring", "metrics", "alerting",
     "kafka", "zookeeper", "broker", "topic", "partition",
@@ -1843,17 +2275,21 @@ def validate_question(text: str) -> Tuple[bool, str, str]:
         'marriage', 'wedding', 'birthday', 'anniversary',
         'astrology', 'horoscope', 'meditation', 'yoga',
     })
-    # "What is [X]?" or "Explain [X]" with a question starter but NO tech term
-    # AND the main content word is clearly non-IT → reject to prevent LLM hallucination
+    # Only reject questions whose subject is clearly unrelated to any professional context
+    # (pure noise like food recipes, weather, sports scores — never asked in interviews)
     if has_starter and not has_tech and not is_coding_question:
-        # Tokenize the question subject (words after the starter)
         _subject_words = set(re.sub(r"[^\w]", ' ', lower).split()) - {
             'what', 'is', 'are', 'the', 'a', 'an', 'how', 'why', 'does',
             'do', 'explain', 'describe', 'define', 'tell', 'me', 'about',
             'in', 'python', 'linux', 'of', 'for', 'and', 'difference',
             'between', 'give', 'example'
         }
-        if _subject_words & _CLEARLY_NON_IT:
+        _PURE_NOISE = frozenset({
+            'seasoning', 'recipe', 'cooking', 'baking', 'grilling', 'frying',
+            'weather', 'rain', 'snow', 'sunshine',
+            'hairstyle', 'makeup', 'astrology', 'horoscope',
+        })
+        if _subject_words & _PURE_NOISE:
             return False, "", "non_it_question"
 
     if has_starter and has_tech:
@@ -1919,14 +2355,13 @@ def validate_question(text: str) -> Tuple[bool, str, str]:
                 'queryset', 'migration', 'signal', 'middleware', 'blueprint',
                 'template', 'serializer', 'permission', 'throttle',
                 'wsgi', 'gunicorn', 'jinja',
+                # Autosys / job scheduler
+                'autosys', 'jil', 'sendevent', 'autorep', 'box', 'hold', 'ice',
+                'scheduler', 'batch', 'job', 'delay', 'cancel', 'force',
+                'killjob', 'autostatd', 'wcc', 'control',
             })
-            content_tokens = set(re.sub(r"[^\w]", ' ', lower).split()) - {
-                'what', 'is', 'are', 'the', 'a', 'an', 'how', 'why',
-                'does', 'do', 'explain', 'describe', 'tell', 'me',
-                'about', 'in', 'of', 'for', 'and', 'or', 'to',
-            }
-            if not (content_tokens & _IT_ADJACENT):
-                return False, "", "non_it_question"
+            # All questions with a question mark and 3+ words pass through to LLM.
+            # HR/general interview questions (strengths, weaknesses, experience) are valid.
     elif has_starter and len(words) >= 2 and not has_non_interview:
         pass
     elif has_tech and len(words) >= 4:          # lowered from 6 → catch short tech Qs
@@ -2001,10 +2436,12 @@ def split_merged_questions(text: str) -> str:
             text = text[0].upper() + text[1:]
 
     def _trim_at_first_complete_question(t: str) -> str:
-        """Return only the first complete question from merged text.
+        """Return only the best question from merged text.
 
         Handles two merged questions: "Q1? Q2." → "Q1?"
         But preserves compound single questions: "What is X and how do Y?" (? at end).
+        Special case: if Q2 starts with the same words as Q1 (STT repetition/completion),
+        prefer the longer Q2 — e.g. "Which command is used? Which command is used for remote login?"
         """
         q_idx = t.find('?')
         # Only trim if '?' appears before 80% of the text (not at the very end)
@@ -2013,10 +2450,18 @@ def split_merged_questions(text: str) -> str:
         trailing = t[q_idx + 1:].strip()
         if not trailing:
             return t
-        # Trailing is a second question → trim to first question only
-        # Trailing is answer echo → trim to first question only
-        # Either way: trim at '?'
-        return t[:q_idx + 1].strip()
+        q1 = t[:q_idx + 1].strip()
+        q2 = trailing.rstrip('?').strip() + ('?' if trailing.endswith('?') else '')
+        # If Q2 starts with the first 3+ words of Q1 → STT repeated with more detail,
+        # prefer the longer Q2.
+        q1_words = q1.rstrip('?').lower().split()
+        q2_words = q2.rstrip('?').lower().split()
+        overlap = min(3, len(q1_words))
+        if (len(q2_words) > len(q1_words)
+                and q1_words[:overlap] == q2_words[:overlap]):
+            return q2
+        # Default: return first question only
+        return q1
 
     # Step 1: Find QUESTION_STARTER positions in the current text.
     lower = text.lower()
@@ -2212,6 +2657,20 @@ def is_code_request(text: str) -> bool:
         "write a cron", "cron expression for",
     ]
     if any(p in lower for p in explicit_code_phrases):
+        return True
+
+    # Infra/code script pattern across all languages
+    # "Code/implement a solution/data-structure" patterns
+    if re.search(r'\b(code|implement|solve)\s+(a |an |the )?(solution|algorithm|program|approach)\b', lower):
+        return True
+    # "Implement a [data structure]" — always coding
+    if re.search(
+        r'\bimplement\s+(a |an |the )?(lru|lfu|fifo|circular)?\s*'
+        r'(cache|trie|heap|priority queue|hash\s*map|hash\s*table|'
+        r'linked list|doubly linked|binary tree|bst|avl|red.black tree|'
+        r'deque|ring buffer|bloom filter|graph|adjacency)',
+        lower
+    ):
         return True
 
     # Infra/code script pattern across all languages

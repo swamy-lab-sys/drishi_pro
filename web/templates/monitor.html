@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Drishi Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:        #F5F1EB;
+      --surface:   #FFFFFF;
+      --border:    #E3DDD4;
+      --text:      #161B2E;
+      --muted:     #3A4254;
+      --dim:       #717C8C;
+      --accent:    #227A4A;
+      --green:     #227A4A;
+      --grad:      linear-gradient(135deg, #227A4A, #2E9E88);
+      --amber:     #D97706;
+      --red:       #E53535;
+      --code-bg:   #F8F6F2;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Layout: full viewport stack ── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Status bar (compact 36px) ── */
+    .status-bar {
+      height: 36px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    /* Logo */
+    .logo-area {
+      display: flex; align-items: center; gap: 7px; flex-shrink: 0;
+    }
+    .logo-text {
+      font-size: 12px; font-weight: 800; letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    /* ── Inline state indicators ── */
+    .state-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+    }
+
+    .state-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      color: var(--dim);
+      text-transform: uppercase;
+    }
+
+    .state-item .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--dim);
+      flex-shrink: 0;
+    }
+
+    .state-item.active-listening  { color: var(--green); }
+    .state-item.active-listening  .dot { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+    .state-item.active-transcribing { color: var(--amber); }
+    .state-item.active-transcribing .dot { background: var(--amber); animation: pulse 0.7s ease-in-out infinite; }
+    .state-item.active-generating  { color: var(--accent); }
+    .state-item.active-generating  .dot { background: var(--accent); animation: spin 1s linear infinite; }
+    .state-item.active-ready       { color: var(--green); }
+    .state-item.active-ready       .dot { background: var(--green); }
+    .state-item.active-offline     { color: var(--red); }
+    .state-item.active-offline     .dot { background: var(--red); }
+
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+    @keyframes spin   { to { transform: rotate(360deg); border-radius: 2px; } }
+
+    .sb-spacer { flex: 1; }
+
+    /* Mode toggle */
+    .mode-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .mode-btn {
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      transition: all 0.1s;
+      white-space: nowrap;
+      font-family: 'Plus Jakarta Sans', monospace;
+      letter-spacing: 0.5px;
+    }
+    .mode-btn.active { background: linear-gradient(135deg, #227A4A, #2E9E88); color: #fff; }
+    .mode-btn:not(.active):hover { color: var(--muted); }
+
+    /* ── Transcribing bar ── */
+    .tr-bar {
+      padding: 5px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      background: var(--surface);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .tr-prefix { color: var(--accent); flex-shrink: 0; font-weight: 700; }
+    .tr-text {
+      flex: 1;
+      color: var(--dim);
+      font-style: italic;
+      transition: color 0.15s;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tr-text.active { color: var(--amber); font-style: normal; }
+
+    /* ── Main feed (scrollable) ── */
+    .feed {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      padding: 60px 24px;
+      color: var(--dim);
+      font-size: 13px;
+      line-height: 2.2;
+      text-align: center;
+    }
+    .empty-icon {
+      font-size: 40px; display: block; margin-bottom: 16px;
+    }
+    .empty-state .prompt { color: var(--dim); margin-bottom: 8px; font-family: monospace; font-size: 13px; }
+    .empty-state .msg { color: var(--muted); font-size: 14px; }
+
+    /* ── Q&A item ── */
+    .qa-item {
+      padding: 22px 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .qa-item:first-child { border-top: 1px solid var(--border); }
+
+    /* ── Question row ── */
+    .q-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .src-badge {
+      font-size: 9px;
+      font-weight: 800;
+      padding: 3px 7px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .src-badge.db  { background: rgba(34,122,74,0.1);  color: #1A5E38; border: 1px solid rgba(34,122,74,0.25); }
+    .src-badge.api { background: rgba(59,130,246,0.1); color: #2457B5; border: 1px solid rgba(59,130,246,0.25); }
+    .src-badge.gen { background: rgba(245,158,11,0.1); color: #92590A; border: 1px solid rgba(245,158,11,0.25); }
+
+    .q-text {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--dim);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.1s;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+    }
+    .copy-btn:hover  { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--green);  color: var(--green); }
+
+    /* ── Thinking indicator ── */
+    .thinking {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--amber);
+      font-size: 13px;
+      padding: 4px 0;
+    }
+    .thinking-dots { display: flex; gap: 4px; }
+    .thinking-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--amber);
+      opacity: 0.3;
+      animation: think 1.2s ease-in-out infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes think { 0%,100%{opacity:0.2;transform:scale(0.8)} 50%{opacity:1;transform:scale(1.2)} }
+
+    /* ── Streaming text ── */
+    .stream-text {
+      font-size: 22px;
+      line-height: 1.65;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .stream-text::after {
+      content: '▌';
+      color: var(--accent);
+      animation: blink 0.7s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── BULLET MODE ── */
+    .bullets-wrap { display: flex; flex-direction: column; gap: 12px; }
+    .bullet-item {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      font-size: 22px;
+      line-height: 1.65;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .bullet-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 14px;
+    }
+    .bullet-item .ic {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 18px;
+      background: rgba(34,122,74,0.1);
+      color: var(--green-dark, #1A5E38);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(34,122,74,0.2);
+    }
+
+    /* ── PARAGRAPH MODE ── */
+    .para-wrap {
+      font-size: 22px;
+      line-height: 1.75;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .para-wrap .ic {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 18px;
+      background: rgba(34,122,74,0.1);
+      color: var(--green-dark, #1A5E38);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(34,122,74,0.2);
+    }
+
+    /* ── Code block ── */
+    .code-block {
+      margin: 16px 0 8px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .code-head {
+      background: var(--surface);
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      justify-content: space-between;
+    }
+    .code-lang {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lang-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .lang-dot.py   { background: #3572A5; }
+    .lang-dot.js   { background: #F1E05A; }
+    .lang-dot.java { background: #B07219; }
+    .lang-dot.sql  { background: #E38C00; }
+    .lang-dot.bash { background: #89E051; }
+    .lang-dot.yaml { background: #CB171E; }
+    .lang-dot.def  { background: var(--accent); }
+
+    .code-copy {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      color: var(--dim);
+      transition: all 0.1s;
+    }
+    .code-copy:hover  { border-color: var(--accent); color: var(--accent); }
+    .code-copy.copied { border-color: var(--green);  color: var(--green); }
+
+    .code-body { overflow-x: auto; background: var(--code-bg); }
+    .code-body pre { margin: 0; background: var(--code-bg) !important; }
+    .code-body pre code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
+      font-size: 16px !important;
+      line-height: 1.6 !important;
+      padding: 14px 16px !important;
+      display: block;
+      tab-size: 4;
+      white-space: pre;
+      background: var(--code-bg) !important;
+    }
+
+    /* ── Footer ── */
+    .footer-bar {
+      height: 30px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 10px;
+      color: var(--dim);
+      flex-shrink: 0;
+    }
+    .f-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+    .f-dot.off  { background: var(--red); }
+    .f-dot.warn { background: var(--amber); }
+    .f-txt { flex: 1; font-weight: 500; }
+    .f-count { font-weight: 700; color: var(--accent); }
+    .f-time  { color: var(--border); font-size: 10px; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      top: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+      white-space: nowrap;
+    }
+    .toast.ok  { border-color: rgba(34,197,94,0.4); color: var(--green); opacity: 1; }
+    .toast.err { border-color: rgba(239,68,68,0.4); color: var(--red);   opacity: 1; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Mobile adjustments ── */
+    @media(max-width:480px) {
+      .bullet-item, .para-wrap, .stream-text { font-size: 20px !important; }
+      .code-body pre code { font-size: 14px !important; }
+      .q-text { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Status bar ── -->
+  <div class="status-bar">
+    <div class="logo-area">
+      <svg width="24" height="24" viewBox="0 0 30 30" fill="none">
+        <defs>
+          <linearGradient id="mLogoGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#227A4A"/>
+            <stop offset="100%" stop-color="#2E9E88"/>
+          </linearGradient>
+        </defs>
+        <rect width="30" height="30" rx="8" fill="url(#mLogoGrad)"/>
+        <text x="15" y="21" text-anchor="middle" font-family="Plus Jakarta Sans,system-ui" font-size="17" font-weight="800" fill="white">D</text>
+      </svg>
+      <span class="logo-text">drishi</span>
+    </div>
+    <div class="state-bar" id="stateBar">
+      <div class="state-item" id="si-listening">
+        <div class="dot"></div><span>Listening</span>
+      </div>
+      <div class="state-item" id="si-transcribing">
+        <div class="dot"></div><span>Transcribing</span>
+      </div>
+      <div class="state-item" id="si-generating">
+        <div class="dot"></div><span>Generating</span>
+      </div>
+      <div class="state-item" id="si-ready">
+        <div class="dot"></div><span>Ready</span>
+      </div>
+    </div>
+    <div class="sb-spacer"></div>
+    <a href="/" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:4px 10px;text-decoration:none;transition:all 0.15s;flex-shrink:0" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-bullet" onclick="setMode('bullet')">• Bullet</button>
+      <button class="mode-btn"        id="btn-para"   onclick="setMode('para')">¶ Para</button>
+    </div>
+  </div>
+
+  <!-- ── Transcribing bar ── -->
+  <div class="tr-bar" id="trBar">
+    <span class="tr-prefix">›</span>
+    <span class="tr-text" id="trText">waiting for speech…</span>
+  </div>
+
+  <!-- ── Main feed ── -->
+  <div class="feed" id="feed">
+    <div class="empty-state" id="emptyState">
+      <span class="empty-icon">🎤</span>
+      <div class="prompt">drishi monitor</div>
+      <div class="msg">Listening for interview questions…<br>
+        <span style="font-size:12px;color:var(--dim)">Answers appear here in real time</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer-bar">
+    <div class="f-dot off" id="fDot"></div>
+    <span class="f-txt" id="fTxt">Connecting…</span>
+    <span class="f-count" id="fCount"></span>
+    <span class="f-time" id="fTime"></span>
+  </div>
+
+</div><!-- .app -->
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  let _answers = [], _es = null, _stateTimer = null;
+  let _trTimer = null, _reconnectTimer = null, _reconnectDelay = 1500;
+  let _mode = localStorage.getItem('drishi_mon_mode') || 'bullet';
+
+  // ── Mode toggle ──────────────────────────────────────────────────────────────
+  function setMode(mode) {
+    _mode = mode;
+    localStorage.setItem('drishi_mon_mode', mode);
+    document.getElementById('btn-bullet').classList.toggle('active', mode === 'bullet');
+    document.getElementById('btn-para').classList.toggle('active', mode === 'para');
+    renderAll();
+  }
+  window.setMode = setMode;
+
+  (function initMode() {
+    document.getElementById('btn-bullet').classList.toggle('active', _mode === 'bullet');
+    document.getElementById('btn-para').classList.toggle('active', _mode === 'para');
+  })();
+
+  // ── State machine ────────────────────────────────────────────────────────────
+  const STATE_IDS = ['si-listening', 'si-transcribing', 'si-generating', 'si-ready'];
+
+  function setState(state) {
+    STATE_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.className = 'state-item';
+    });
+
+    const ftxt = document.getElementById('fTxt');
+    const fdot = document.getElementById('fDot');
+
+    const map = {
+      listening:    { id: 'si-listening',    cls: 'active-listening',    txt: 'Listening…' },
+      transcribing: { id: 'si-transcribing', cls: 'active-transcribing', txt: 'Transcribing…' },
+      generating:   { id: 'si-generating',   cls: 'active-generating',   txt: 'Generating…' },
+      ready:        { id: 'si-ready',        cls: 'active-ready',        txt: 'Ready' },
+      offline:      { id: null,              cls: '',                     txt: 'Offline — reconnecting…' },
+      connecting:   { id: null,              cls: '',                     txt: 'Connecting…' },
+    };
+
+    const s = map[state] || map.connecting;
+    if (s.id) {
+      const el = document.getElementById(s.id);
+      if (el) el.className = 'state-item ' + s.cls;
+    }
+
+    ftxt.textContent = s.txt;
+    fdot.className = 'f-dot';
+    if (state === 'offline' || state === 'connecting') fdot.classList.add('off');
+    if (state === 'transcribing') fdot.classList.add('warn');
+  }
+
+  // ── SSE Connection ──────────────────────────────────────────────────────────
+  function connect() {
+    if (_es) { try { _es.close(); } catch (_) {} }
+    setState('connecting');
+
+    _es = new EventSource('/api/stream');
+
+    _es.addEventListener('init', e => {
+      try {
+        const payload = JSON.parse(e.data);
+        const answers = Array.isArray(payload) ? payload : (payload.answers || []);
+        _answers = answers;
+        renderAll();
+        setState('listening');
+        _reconnectDelay = 1500;
+      } catch (_) {}
+    });
+
+    _es.addEventListener('answer', e => {
+      try {
+        const item = JSON.parse(e.data);
+        upsertAnswer(item);
+        renderAll();
+        setState('ready');
+        clearTimeout(_stateTimer);
+        _stateTimer = setTimeout(() => setState('listening'), 2500);
+      } catch (_) {}
+    });
+
+    _es.addEventListener('question', e => {
+      try {
+        const item = JSON.parse(e.data);
+        upsertAnswer(item);
+        renderAll();
+        setState('generating');
+      } catch (_) {}
+    });
+
+    _es.addEventListener('chunk', e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.question) {
+          const q = (d.question || '').toLowerCase().trim();
+          const idx = _answers.findIndex(a => (a.question || '').toLowerCase().trim() === q);
+          if (idx >= 0) {
+            _answers[idx].answer = (_answers[idx].answer || '') + (d.chunk || '');
+            _answers[idx].is_complete = false;
+          } else {
+            _answers.unshift({ question: d.question, answer: d.chunk || '', is_complete: false });
+          }
+          setState('generating');
+          renderAll();
+        }
+      } catch (_) {}
+    });
+
+    _es.addEventListener('transcribing', e => {
+      try {
+        const d = JSON.parse(e.data);
+        showTranscribing(d.text || '');
+        setState('transcribing');
+      } catch (_) {}
+    });
+
+    _es.addEventListener('ping', () => {});
+
+    _es.onerror = () => {
+      setState('offline');
+      _es.close(); _es = null;
+      clearTimeout(_reconnectTimer);
+      _reconnectTimer = setTimeout(() => {
+        _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000);
+        connect();
+      }, _reconnectDelay);
+    };
+  }
+
+  // ── Answer store ─────────────────────────────────────────────────────────────
+  function upsertAnswer(item) {
+    const q = (item.question || '').toLowerCase().trim();
+    const idx = _answers.findIndex(a => (a.question || '').toLowerCase().trim() === q);
+    if (idx >= 0) { _answers[idx] = item; }
+    else { _answers.unshift(item); }
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  function renderAll() {
+    const feed  = document.getElementById('feed');
+    const empty = document.getElementById('emptyState');
+    const count = document.getElementById('fCount');
+
+    const items = _answers.filter(a => a.question);
+    count.textContent = items.length ? `${items.length}q` : '';
+
+    if (items.length === 0) {
+      empty.style.display = '';
+      feed.querySelectorAll('.qa-item').forEach(el => el.remove());
+      return;
+    }
+    empty.style.display = 'none';
+    feed.querySelectorAll('.qa-item').forEach(el => el.remove());
+
+    items.slice(0, 8).forEach((item, idx) => {
+      const el = document.createElement('div');
+      el.className = 'qa-item';
+
+      const src      = (item.metrics && item.metrics.source) || '';
+      const isDb     = src.startsWith('db-');
+      const isGen    = !item.is_complete;
+      const badgeCls = isDb ? 'db' : (isGen ? 'gen' : 'api');
+      const badgeTxt = isDb ? 'DB' : (isGen ? 'GEN' : 'AI');
+
+      const qText  = (item.question || '').trim();
+      const ansText = (item.answer  || '').trim();
+
+      let ansHtml = '';
+      if (!item.is_complete) {
+        ansHtml = ansText
+          ? `<div class="stream-text">${esc(ansText)}</div>`
+          : `<div class="thinking"><span>generating</span><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
+      } else {
+        ansHtml = formatAnswer(ansText);
+      }
+
+      el.innerHTML = `
+        <div class="q-row">
+          <span class="src-badge ${badgeCls}">${badgeTxt}</span>
+          <span class="q-text">${esc(qText)}</span>
+          <button class="copy-btn" data-ans="${escAttr(ansText)}">copy</button>
+        </div>
+        <div class="ans-body">${ansHtml}</div>`;
+
+      feed.appendChild(el);
+    });
+
+    feed.querySelectorAll('pre code').forEach(block => {
+      try { hljs.highlightElement(block); } catch (_) {}
+    });
+
+    feed.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => copyText(btn.dataset.ans || '', btn));
+    });
+    feed.querySelectorAll('.code-copy').forEach(btn => {
+      btn.addEventListener('click', () => copyText(btn.dataset.code || '', btn));
+    });
+
+    updateTime();
+  }
+
+  // ── Format answer ─────────────────────────────────────────────────────────────
+  function formatAnswer(text) {
+    if (!text) return '';
+
+    if (text.includes('```')) {
+      const parts = text.split(/(```[\w]*\n[\s\S]*?```)/g);
+      return parts.map(part => {
+        const m = part.match(/^```([\w]*)\n([\s\S]*)```$/);
+        if (m) { return renderCodeBlock(m[2], m[1] || ''); }
+        const trimmed = part.trim();
+        if (!trimmed) return '';
+        return _mode === 'bullet'
+          ? renderBullets(trimmed)
+          : `<div class="para-wrap">${renderInline(trimmed)}</div>`;
+      }).join('');
+    }
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return '';
+
+    if (_mode === 'bullet') return renderBullets(text);
+    return `<div class="para-wrap">${renderInline(text)}</div>`;
+  }
+
+  function renderBullets(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const items = lines.map(l => {
+      const content = l.replace(/^[-•*]\s+/, '');
+      return `<div class="bullet-item"><div class="bullet-dot"></div><div>${renderInline(content)}</div></div>`;
+    }).join('');
+    return `<div class="bullets-wrap">${items}</div>`;
+  }
+
+  function renderCodeBlock(code, lang) {
+    const detectedLang = lang || detectLang(code);
+    const dotClass = langDot(detectedLang);
+    const codeEsc = esc(code.trimEnd());
+    return `<div class="code-block">
+      <div class="code-head">
+        <div class="code-lang"><span class="lang-dot ${dotClass}"></span>${detectedLang.toUpperCase() || 'CODE'}</div>
+        <button class="code-copy" data-code="${escAttr(code.trimEnd())}">copy</button>
+      </div>
+      <div class="code-body">
+        <pre><code class="language-${detectedLang}">${codeEsc}</code></pre>
+      </div>
+    </div>`;
+  }
+
+  function renderInline(text) {
+    let e = esc(text);
+    e = e.replace(/`([^`\n]+)`/g, (_, c) => `<code class="ic">${esc(c)}</code>`);
+    e = e.replace(/\n/g, '<br>');
+    return e;
+  }
+
+  function detectLang(code) {
+    const c = code.trim();
+    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP)\b/i.test(c)) return 'sql';
+    if (/^\s*(def |import |from |class |@\w+|print\()/m.test(c)) return 'python';
+    if (/^\s*(public |private |static |class |@Override)/m.test(c)) return 'java';
+    if (/^\s*(const |let |var |function |async |=>)/m.test(c)) return 'javascript';
+    if (/^---$|apiVersion:/m.test(c)) return 'yaml';
+    return 'bash';
+  }
+
+  function langDot(lang) {
+    const map = { python:'py', javascript:'js', java:'java', sql:'sql', bash:'bash', sh:'bash', yaml:'yaml', yml:'yaml' };
+    return map[lang] || 'def';
+  }
+
+  // ── Transcribing ─────────────────────────────────────────────────────────────
+  function showTranscribing(text) {
+    const el = document.getElementById('trText');
+    if (text) {
+      el.textContent = text;
+      el.className = 'tr-text active';
+      clearTimeout(_trTimer);
+      _trTimer = setTimeout(() => {
+        el.textContent = 'waiting for speech…';
+        el.className = 'tr-text';
+        if (document.getElementById('si-transcribing').classList.contains('active-transcribing')) {
+          setState('listening');
+        }
+      }, 4000);
+    }
+  }
+
+  // ── Copy ──────────────────────────────────────────────────────────────────────
+  async function copyText(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+    } catch (_) { showToast('copy failed', 'err'); }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escAttr(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&#34;');
+  }
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + (type || '');
+    setTimeout(() => { t.className = 'toast'; }, 2200);
+  }
+  function updateTime() {
+    const el = document.getElementById('fTime');
+    el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  // ── Start ─────────────────────────────────────────────────────────────────────
+  connect();
+  setInterval(updateTime, 1000);
+})();
+</script>
+
+</body>
+</html>

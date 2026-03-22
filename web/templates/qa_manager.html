@@ -1,359 +1,590 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Q&A Manager – Drishi Pro</title>
+{% extends "base.html" %}
+{% block title %}QA Manager{% endblock %}
+{% block page_name %}QA Manager{% endblock %}
+
+{% block head_extra %}
 <style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --border: #2a2d3a;
-    --accent: #4f8ef7;
-    --accent2: #22d3a0;
-    --warn: #f59e0b;
-    --danger: #ef4444;
-    --text: #e2e8f0;
-    --muted: #64748b;
-    --code-bg: #0d1117;
+  /* ── Split pane workspace ── */
+  #main-content { overflow: hidden; }
+  .page-content {
+    padding: 0; max-width: none;
+    display: flex; flex-direction: column;
+    height: calc(100vh - var(--header-h));
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; }
 
-  /* ── Layout ── */
-  .app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; overflow: hidden; }
-  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
-  .main { display: flex; flex-direction: column; overflow: hidden; }
+  /* ── Workspace header bar ── */
+  .ws-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ws-header h1 { font-size: 16px; font-weight: 800; color: var(--text-dark); }
+  .ws-header .ws-subtitle { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  .ws-spacer { flex: 1; }
 
-  /* ── Sidebar ── */
-  .sidebar-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
-  .sidebar-header h2 { font-size: 15px; font-weight: 700; color: var(--accent); }
-  .sidebar-header p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .stats-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); }
-  .stat { background: var(--bg); border-radius: 6px; padding: 4px 8px; font-size: 11px; }
-  .stat span { font-weight: 700; color: var(--accent2); }
-  .search-wrap { padding: 10px 16px; border-bottom: 1px solid var(--border); }
-  .search-wrap input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; }
-  .search-wrap input:focus { border-color: var(--accent); }
-  .qa-list { flex: 1; overflow-y: auto; padding: 8px 0; }
-  .qa-item { padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: background 0.15s; }
-  .qa-item:hover { background: rgba(255,255,255,0.04); }
-  .qa-item.active { background: rgba(79,142,247,0.12); border-left-color: var(--accent); }
-  .qa-item .q-text { font-size: 12px; font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .qa-item .q-meta { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; align-items: center; }
-  .badge { border-radius: 4px; padding: 1px 5px; font-size: 10px; font-weight: 600; }
-  .badge.theory  { background: #1d4ed840; color: #60a5fa; }
-  .badge.coding  { background: #14532d40; color: #4ade80; }
-  .badge.both    { background: #7c3aed40; color: #c084fc; }
-  .btn-new { margin: 12px 16px; padding: 8px; background: var(--accent); color: #fff; border: none; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: 13px; }
-  .btn-new:hover { opacity: 0.9; }
-  .empty-list { color: var(--muted); font-size: 12px; padding: 20px 16px; text-align: center; }
+  /* Stats pills */
+  .stat-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .stat-pill strong { color: var(--green); }
 
-  /* ── Main area ── */
-  .toolbar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .toolbar h3 { font-size: 15px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
-  .toolbar h3.has-title { color: var(--text); }
-  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.15s; }
-  .btn:hover { background: rgba(255,255,255,0.07); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.primary:hover { opacity: 0.9; }
-  .btn.danger  { background: var(--danger); border-color: var(--danger); color: #fff; }
-  .btn.danger:hover { opacity: 0.9; }
-  .btn.success { background: var(--accent2); border-color: var(--accent2); color: #000; }
-  .btn.success:hover { opacity: 0.9; }
-  .editor-area { flex: 1; overflow-y: auto; padding: 20px; }
-  .form-group { margin-bottom: 16px; }
-  label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
-  input[type=text], select, textarea {
-    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
-    padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+  /* ── Two-column split ── */
+  .ws-split {
+    flex: 1; display: flex; overflow: hidden;
+    gap: 0;
+  }
+
+  /* ── LEFT: List panel ── */
+  .ws-list-panel {
+    width: 340px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .list-toolbar {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center;
+    background: var(--white); flex-shrink: 0;
+  }
+  .list-search {
+    flex: 1; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 7px 10px; font-size: 12px; font-family: inherit;
+    color: var(--text-dark); outline: none;
     transition: border-color 0.15s;
   }
-  input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
-  textarea { resize: vertical; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 12.5px; line-height: 1.6; }
-  textarea.code-area { background: var(--code-bg); min-height: 180px; }
-  textarea.theory-area { min-height: 120px; }
-  .type-row { display: flex; gap: 10px; align-items: center; }
-  .type-row select { width: auto; min-width: 130px; }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .list-search:focus { border-color: var(--green); }
 
-  /* ── Test result ── */
-  .test-result { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 12px; }
-  .test-result.hit  { border-color: var(--accent2); }
-  .test-result.miss { border-color: var(--border); color: var(--muted); }
-  .score-bar { height: 5px; border-radius: 3px; background: var(--border); margin-top: 6px; overflow: hidden; }
-  .score-fill { height: 100%; border-radius: 3px; background: var(--accent2); transition: width .3s; }
+  .list-scroll {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+  }
+  .list-scroll::-webkit-scrollbar { width: 4px; }
+  .list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-  /* ── Empty state ── */
-  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--muted); }
-  .empty-state .icon { font-size: 48px; }
-  .empty-state p { font-size: 13px; text-align: center; max-width: 300px; }
+  .qa-list-item {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .qa-list-item:hover { background: var(--white); }
+  .qa-list-item.selected {
+    background: var(--white);
+    border-left: 3px solid var(--green);
+  }
+  .qa-list-item .ql-q {
+    font-size: 12px; font-weight: 600; color: var(--text-dark);
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    line-height: 1.4;
+  }
+  .qa-list-item .ql-meta {
+    display: flex; gap: 6px; align-items: center; margin-top: 5px;
+  }
+  .ql-badge {
+    font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .ql-badge.theory  { background: var(--blue-bg);    color: var(--blue); }
+  .ql-badge.coding  { background: var(--green-light); color: var(--green-dark); }
+  .ql-badge.both    { background: var(--purple-bg);   color: var(--purple); }
+  .ql-hits { font-size: 10px; color: var(--text-muted); }
 
-  /* ── Toast ── */
-  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 500; transform: translateY(80px); opacity: 0; transition: all .25s; z-index: 999; }
-  #toast.show { transform: translateY(0); opacity: 1; }
-  #toast.ok  { border-color: var(--accent2); color: var(--accent2); }
-  #toast.err { border-color: var(--danger); color: var(--danger); }
+  .list-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); font-size: 12px; }
 
-  /* ── Tabs ── */
-  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-  .tab { padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  /* ── RIGHT: Editor panel ── */
+  .ws-editor-panel {
+    flex: 1; display: flex; flex-direction: column;
+    background: var(--white); overflow: hidden;
+  }
 
-  /* ── Meta info ── */
-  .meta-info { font-size: 11px; color: var(--muted); display: flex; gap: 14px; padding: 6px 0 12px; }
-  .meta-info span { display: flex; align-items: center; gap: 4px; }
+  .editor-toolbar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+    background: var(--white);
+  }
+  .editor-title {
+    font-size: 14px; font-weight: 700; color: var(--text-dark); flex: 1;
+  }
 
-  /* ── Nav link ── */
-  .nav-link { font-size: 11px; color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 4px; }
-  .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .editor-body {
+    flex: 1; overflow-y: auto; padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .editor-body::-webkit-scrollbar { width: 5px; }
+  .editor-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* Empty/placeholder state */
+  .editor-placeholder {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); gap: 12px; text-align: center;
+    padding: 40px;
+  }
+  .editor-placeholder svg { opacity: 0.3; }
+  .editor-placeholder h3 { font-size: 15px; font-weight: 600; color: var(--text-medium); }
+  .editor-placeholder p { font-size: 13px; }
+
+  /* Form fields */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field > label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted);
+  }
+  .field input[type=text],
+  .field select,
+  .field textarea {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 12px;
+    color: var(--text-dark); font-family: inherit; font-size: 13px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .field input[type=text]:focus,
+  .field select:focus,
+  .field textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,122,74,0.08); }
+  .field textarea { resize: vertical; line-height: 1.6; }
+  .field textarea.code-area {
+    font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+    font-size: 12px; min-height: 160px;
+    background: #F8FAF7;
+  }
+  .field textarea.theory-area { min-height: 100px; }
+  .field .hint { font-size: 11px; color: var(--text-muted); }
+
+  .type-row { display: flex; gap: 14px; }
+  .type-row > div { flex: 1; }
+
+  /* Tabs inside editor */
+  .editor-tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    margin-bottom: 4px; flex-shrink: 0;
+  }
+  .etab {
+    padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: var(--text-muted); border: none; background: transparent;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color 0.15s;
+  }
+  .etab:hover { color: var(--green); }
+  .etab.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* Editor footer */
+  .editor-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-shrink: 0; background: var(--bg);
+  }
+
+  /* Test result */
+  .test-result { border-radius: 8px; padding: 10px 14px; margin-top: 4px; font-size: 12px; }
+  .test-result.hit  { border: 1px solid rgba(34,122,74,0.35); background: var(--green-light); color: var(--green-dark); }
+  .test-result.miss { border: 1px solid var(--border); color: var(--text-muted); }
+  .score-bar { height: 4px; border-radius: 3px; background: var(--border); margin-top: 6px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 3px; background: var(--green); transition: width 0.3s; }
+
+  /* Import modal overlay */
+  .import-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 300;
+    align-items: center; justify-content: center;
+  }
+  .import-overlay.open { display: flex; }
+  .import-modal {
+    background: var(--white); border-radius: 14px;
+    width: 560px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; overflow: hidden;
+    max-height: 85vh;
+  }
+  .import-modal-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .import-modal-head h3 { flex: 1; font-size: 15px; font-weight: 700; color: var(--text-dark); }
+  .import-modal-body { padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+  .import-textarea {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; color: var(--text-dark);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; line-height: 1.6; resize: vertical;
+    min-height: 200px; outline: none; transition: border-color 0.15s;
+  }
+  .import-textarea:focus { border-color: var(--green); }
+  .import-hint { font-size: 11px; color: var(--text-muted); }
+  .import-modal-foot {
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 10px;
+    background: var(--bg);
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--white); border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 11px 18px;
+    font-weight: 600; font-size: 13px;
+    display: none; z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  }
+  #toast.ok  { border-color: var(--green); color: var(--green); }
+  #toast.err { border-color: var(--red);   color: var(--red); }
 </style>
-</head>
-<body>
-<div class="app">
+{% endblock %}
 
-  <!-- ── Sidebar ── -->
-  <div class="sidebar">
-    <div class="sidebar-header">
-      <h2>Q&amp;A Database</h2>
-      <p>Pre-loaded answers — no API needed</p>
-      <a href="/" class="nav-link" style="display:inline-block;margin-top:6px;">← Back to Dashboard</a>
-    </div>
-    <div class="stats-bar" id="statsBar">
-      <div class="stat">Total <span id="statTotal">0</span></div>
-      <div class="stat">Theory <span id="statTheory">0</span></div>
-      <div class="stat">Coding <span id="statCoding">0</span></div>
-      <div class="stat">Both <span id="statBoth">0</span></div>
-      <div class="stat">Hits <span id="statHits">0</span></div>
-    </div>
-    <div class="search-wrap">
-      <input type="text" id="searchInput" placeholder="Search questions…" oninput="onSearch(this.value)">
-    </div>
-    <div class="qa-list" id="qaList"></div>
-    <button class="btn-new" onclick="newItem()">+ New Q&amp;A Pair</button>
+{% block content %}
+<div class="page-content">
+
+  <!-- Workspace header -->
+  <div class="ws-header">
+    <h1>QA Manager</h1>
+    <span class="ws-subtitle">— Knowledge base editor</span>
+    <div class="ws-spacer"></div>
+    <div class="stat-pill">Total <strong id="statTotal">0</strong></div>
+    <div class="stat-pill">Theory <strong id="statTheory">0</strong></div>
+    <div class="stat-pill">Coding <strong id="statCoding">0</strong></div>
+    <div class="stat-pill">Hits <strong id="statHits">0</strong></div>
+    <button class="btn btn-secondary btn-sm" onclick="toggleImport()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Import
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="openNewPanel()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Q&amp;A
+    </button>
   </div>
 
-  <!-- ── Main area ── -->
-  <div class="main">
-    <div class="toolbar">
-      <h3 id="toolbarTitle" class="">Select or create a Q&amp;A pair</h3>
-      <button class="btn success" id="btnTest" onclick="testLookup()" style="display:none">Test Lookup</button>
-      <button class="btn primary" id="btnSave" onclick="saveItem()" style="display:none">Save</button>
-      <button class="btn danger"  id="btnDelete" onclick="deleteItem()" style="display:none">Delete</button>
-    </div>
-    <div class="editor-area" id="editorArea">
-      <div class="empty-state">
-        <div class="icon">🗃️</div>
-        <p>Add pre-loaded Q&amp;A pairs here. When a question from audio matches an entry, the stored answer is shown instantly — no API call needed.</p>
-        <button class="btn primary" onclick="newItem()" style="margin-top:8px">+ New Q&amp;A Pair</button>
+  <!-- Split pane -->
+  <div class="ws-split">
+
+    <!-- LEFT: List -->
+    <div class="ws-list-panel">
+      <div class="list-toolbar">
+        <input class="list-search" id="searchInput" type="text"
+               placeholder="🔍 Search questions…" oninput="onSearch(this.value)">
       </div>
+      <div class="list-scroll" id="qaListContainer">
+        <div class="list-empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Editor -->
+    <div class="ws-editor-panel" id="editorPanel">
+      <div class="editor-placeholder" id="editorPlaceholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        <h3>Select a Q&amp;A pair to edit</h3>
+        <p>Choose from the list on the left, or create a new entry.</p>
+      </div>
+      <div id="editorContent" style="display:none;flex:1;display:none;flex-direction:column;overflow:hidden">
+        <div class="editor-toolbar">
+          <span class="editor-title" id="editorTitleBar">New Q&amp;A Pair</span>
+          <button class="btn btn-sm btn-secondary" id="btnTest" onclick="testLookup()" style="display:none">Test Lookup</button>
+        </div>
+        <div class="editor-tabs" id="editorTabs">
+          <button class="etab active" onclick="switchETab('theory')">Theory Answer</button>
+          <button class="etab" onclick="switchETab('coding')">Code Answer</button>
+        </div>
+        <div class="editor-body" id="panelBody">
+          <!-- filled by renderEditor() -->
+        </div>
+        <div class="editor-footer">
+          <div>
+            <button class="btn btn-sm btn-danger" id="btnDelete" onclick="deleteItem()" style="display:none">Delete</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-secondary" onclick="closePanel()">Discard</button>
+            <button class="btn btn-sm btn-primary" onclick="saveItem()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="import-overlay" id="importOverlay" onclick="if(event.target===this)toggleImport()">
+  <div class="import-modal">
+    <div class="import-modal-head">
+      <h3>Import Q&amp;A Pairs</h3>
+      <button class="btn btn-sm btn-secondary" onclick="toggleImport()">✕</button>
+    </div>
+    <div class="import-modal-body">
+      <textarea class="import-textarea" id="importText"
+        placeholder="Paste Q&amp;A pairs here. Supported formats:&#10;&#10;Q: What is X?&#10;A: X is...&#10;&#10;Q: How do you Y?&#10;A: You Y by..."></textarea>
+      <div class="import-hint">
+        Separate pairs with blank lines. Use Q:/A: format or plain question/answer pairs.
+      </div>
+    </div>
+    <div class="import-modal-foot">
+      <button class="btn btn-secondary" onclick="toggleImport()">Cancel</button>
+      <button class="btn btn-primary" onclick="parseImport()">Parse &amp; Import</button>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
+{% endblock %}
 
+{% block body_end %}
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
-let allItems = [];
-let currentId = null;   // null = new item
-let isNew = false;
+// ── State ─────────────────────────────────────────────────────────────────────
+let allItems  = [];
+let currentId = null;
+let isNew     = false;
+let _eTab     = 'theory';
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────────────────
 window.onload = () => loadList();
 
 async function loadList(search = '') {
   const url = search ? `/api/qa?search=${encodeURIComponent(search)}` : '/api/qa';
   try {
-    const r = await fetch(url);
+    const r    = await fetch(url);
     const data = await r.json();
-    allItems = data.items || [];
+    allItems   = data.items || [];
     renderList(allItems);
     updateStats(data.stats || {});
-  } catch(e) { toast('Failed to load list', 'err'); }
+  } catch (e) { toast('Failed to load list', 'err'); }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats(s) {
+  document.getElementById('statTotal').textContent  = s.total      || 0;
+  document.getElementById('statTheory').textContent = s.theory     || 0;
+  document.getElementById('statCoding').textContent = s.coding     || 0;
+  document.getElementById('statHits').textContent   = s.total_hits || 0;
 }
 
 // ── Render list ───────────────────────────────────────────────────────────────
 function renderList(items) {
-  const el = document.getElementById('qaList');
+  const el = document.getElementById('qaListContainer');
   if (!items.length) {
-    el.innerHTML = '<div class="empty-list">No entries yet. Click "+ New Q&A Pair".</div>';
+    el.innerHTML = '<div class="list-empty">No entries yet.<br>Click "+ New Q&A" to get started.</div>';
     return;
   }
   el.innerHTML = items.map(it => `
-    <div class="qa-item ${it.id === currentId ? 'active' : ''}" onclick="selectItem(${it.id})">
-      <div class="q-text">${esc(it.question)}</div>
-      <div class="q-meta">
-        <span class="badge ${it.type}">${it.type}</span>
-        <span>hits: ${it.hit_count}</span>
-        <span>${it.updated_at ? it.updated_at.slice(0,10) : ''}</span>
+    <div class="qa-list-item${currentId === it.id ? ' selected' : ''}" onclick="selectItem(${it.id})">
+      <div class="ql-q">${esc(it.question)}</div>
+      <div class="ql-meta">
+        <span class="ql-badge ${it.type}">${it.type}</span>
+        <span class="ql-hits">hits: ${it.hit_count || 0}</span>
       </div>
     </div>`).join('');
-}
-
-function updateStats(s) {
-  document.getElementById('statTotal').textContent  = s.total  || 0;
-  document.getElementById('statTheory').textContent = s.theory || 0;
-  document.getElementById('statCoding').textContent = s.coding || 0;
-  document.getElementById('statBoth').textContent   = s.both   || 0;
-  document.getElementById('statHits').textContent   = s.total_hits || 0;
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
 let searchTimer;
 function onSearch(v) {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => loadList(v), 300);
+  searchTimer = setTimeout(() => loadList(v), 280);
 }
 
-// ── Select / New ──────────────────────────────────────────────────────────────
-function selectItem(id) {
-  const item = allItems.find(i => i.id === id);
-  if (!item) return;
+// ── Editor tab switch ─────────────────────────────────────────────────────────
+function switchETab(tab) {
+  _eTab = tab;
+  document.querySelectorAll('.etab').forEach((b, i) => b.classList.toggle('active', (i===0 && tab==='theory') || (i===1 && tab==='coding')));
+  // Show/hide theory vs coding answer areas
+  const ta = document.getElementById('edit-theory-area');
+  const ca = document.getElementById('edit-coding-area');
+  if (ta) ta.closest('.field').style.display = tab === 'theory' ? '' : 'none';
+  if (ca) ca.closest('.field').style.display = tab === 'coding'  ? '' : 'none';
+}
+
+// ── Import toggle ─────────────────────────────────────────────────────────────
+function toggleImport() {
+  const ov = document.getElementById('importOverlay');
+  ov.classList.toggle('open');
+  if (!ov.classList.contains('open')) document.getElementById('importText').value = '';
+}
+
+async function parseImport() {
+  const text = document.getElementById('importText').value.trim();
+  if (!text) { toast('Paste some Q&A text first', 'err'); return; }
+  const blocks = text.split(/\n\s*\n/).filter(b => b.trim());
+  let added = 0;
+  for (const block of blocks) {
+    const lines  = block.split('\n').map(l => l.trim()).filter(Boolean);
+    const qLine  = lines.find(l => /^Q[:\.]?\s/i.test(l));
+    const aLines = lines.filter(l => !/^Q[:\.]?\s/i.test(l) && l.length > 0);
+    const qText  = qLine  ? qLine.replace(/^Q[:\.]?\s*/i, '').trim() : lines[0];
+    const aText  = aLines.join('\n');
+    if (!qText || !aText) continue;
+    try {
+      const r = await fetch('/api/qa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: qText, answer_theory: aText, answer_coding: '', type: 'theory', tags: [] })
+      });
+      if (r.ok) added++;
+    } catch (_) {}
+  }
+  toast(added ? `Imported ${added} item${added > 1 ? 's' : ''}` : 'Nothing to import', added ? 'ok' : 'err');
+  if (added) { toggleImport(); loadList(); }
+}
+
+// ── Select item ───────────────────────────────────────────────────────────────
+async function selectItem(id) {
   currentId = id;
   isNew = false;
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  showEditor(item.question);
   renderEditor(item);
-  renderList(allItems);  // refresh active state
-}
-
-function newItem() {
-  currentId = null;
-  isNew = true;
-  renderEditor({
-    question: '', answer_theory: '', answer_coding: '',
-    type: 'theory', keywords: '', hit_count: 0, created_at: '', updated_at: ''
+  document.getElementById('btnTest').style.display = '';
+  document.getElementById('btnDelete').style.display = '';
+  // Highlight selected
+  document.querySelectorAll('.qa-list-item').forEach(el => {
+    el.classList.toggle('selected', el.onclick && el.onclick.toString().includes(`selectItem(${id})`));
   });
+  renderList(allItems); // re-render to highlight
 }
 
-// ── Editor ────────────────────────────────────────────────────────────────────
+// ── New panel ─────────────────────────────────────────────────────────────────
+function openNewPanel() {
+  currentId = null; isNew = true;
+  showEditor('New Q&A Pair');
+  renderEditor(null);
+  document.getElementById('btnTest').style.display = 'none';
+  document.getElementById('btnDelete').style.display = 'none';
+}
+
+function showEditor(title) {
+  document.getElementById('editorPlaceholder').style.display = 'none';
+  const ec = document.getElementById('editorContent');
+  ec.style.display = 'flex';
+  document.getElementById('editorTitleBar').textContent = title || 'Editor';
+}
+
+function closePanel() {
+  currentId = null; isNew = false;
+  document.getElementById('editorPlaceholder').style.display = '';
+  document.getElementById('editorContent').style.display = 'none';
+  renderList(allItems);
+}
+
+// ── Render editor ─────────────────────────────────────────────────────────────
 function renderEditor(item) {
-  const title = item.question || 'New Q&A Pair';
-  document.getElementById('toolbarTitle').textContent = title;
-  document.getElementById('toolbarTitle').className = item.question ? 'has-title' : '';
-  document.getElementById('btnSave').style.display   = '';
-  document.getElementById('btnDelete').style.display = item.id ? '' : 'none';
-  document.getElementById('btnTest').style.display   = item.question ? '' : 'none';
+  const body = document.getElementById('panelBody');
+  const q    = item ? item.question       : '';
+  const at   = item ? (item.answer_theory || '') : '';
+  const ac   = item ? (item.answer_coding || '') : '';
+  const type = item ? (item.type          || 'theory') : 'theory';
+  const tags = item ? (item.tags          || []).join(', ') : '';
+  const meta = item ? `<div style="font-size:11px;color:var(--text-muted);display:flex;gap:14px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+    <span>Type: <strong>${type}</strong></span>
+    <span>Hits: <strong>${item.hit_count || 0}</strong></span>
+    ${item.updated_at ? `<span>Updated: <strong>${item.updated_at.slice(0,10)}</strong></span>` : ''}
+  </div>` : '';
 
-  const showTheory = item.type === 'theory' || item.type === 'both';
-  const showCoding = item.type === 'coding' || item.type === 'both';
-
-  document.getElementById('editorArea').innerHTML = `
-    <div class="form-group">
-      <label>Question Text</label>
-      <input type="text" id="fQuestion" value="${esc(item.question)}"
-             placeholder="e.g. What is the difference between list and tuple?"
-             oninput="onQuestionChange(this.value)">
-      <div class="hint">This is matched against the audio-to-text. Fuzzy matching — exact wording not required.</div>
+  body.innerHTML = `
+    ${meta}
+    <div class="field">
+      <label>Question</label>
+      <input type="text" id="edit-question" value="${escAttr(q)}" placeholder="Enter the interview question…">
     </div>
-    <div class="form-group">
-      <div class="type-row">
-        <div>
-          <label>Type</label>
-          <select id="fType" onchange="onTypeChange(this.value)">
-            <option value="theory" ${item.type==='theory'?'selected':''}>Theory (explanation)</option>
-            <option value="coding" ${item.type==='coding'?'selected':''}>Coding (code answer)</option>
-            <option value="both"   ${item.type==='both'  ?'selected':''}>Both (theory + code)</option>
-          </select>
-        </div>
-        <div style="flex:1">
-          <label>Keywords <span style="font-weight:400;text-transform:none">(optional, comma-separated)</span></label>
-          <input type="text" id="fKeywords" value="${esc(item.keywords||'')}"
-                 placeholder="e.g. kubernetes, k8s, container orchestration">
-        </div>
+    <div class="type-row">
+      <div class="field">
+        <label>Type</label>
+        <select id="edit-type" onchange="onTypeChange(this.value)">
+          <option value="theory"${type==='theory'?' selected':''}>Theory</option>
+          <option value="coding"${type==='coding'?' selected':''}>Coding</option>
+          <option value="both"${type==='both'?' selected':''}>Both</option>
+        </select>
       </div>
-      <div class="hint">Keywords boost matching score when the question contains these terms.</div>
-    </div>
-
-    <div class="tabs">
-      ${showTheory ? `<div class="tab active" id="tabTheory" onclick="switchTab('theory')">Theory Answer</div>` : ''}
-      ${showCoding ? `<div class="tab ${!showTheory?'active':''}" id="tabCoding" onclick="switchTab('coding')">Code Answer</div>` : ''}
-    </div>
-
-    <div id="panelTheory" style="display:${showTheory?'block':'none'}">
-      <div class="form-group">
-        <label>Theory / Explanation Answer</label>
-        <textarea class="theory-area" id="fAnswerTheory" placeholder="Write the answer in plain text or bullet points...">${esc(item.answer_theory||'')}</textarea>
-        <div class="hint">Used when the question is identified as a theory/explanation question.</div>
+      <div class="field">
+        <label>Tags (comma separated)</label>
+        <input type="text" id="edit-tags" value="${escAttr(tags)}" placeholder="e.g. django, python, api">
       </div>
     </div>
-    <div id="panelCoding" style="display:${showCoding&&!showTheory?'block':'none'}">
-      <div class="form-group">
-        <label>Code Answer</label>
-        <textarea class="code-area" id="fAnswerCoding" placeholder="Paste code here (with or without markdown code fences)...">${esc(item.answer_coding||'')}</textarea>
-        <div class="hint">Used when the question is identified as a coding request.</div>
+    <div class="type-row">
+      <div class="field">
+        <label>Company <span style="font-size:10px;color:var(--text-muted)">(boosts match for that company's users)</span></label>
+        <input type="text" id="edit-company" value="${escAttr(item?.company||'')}" placeholder="e.g. Google, Amazon, TCS">
+      </div>
+      <div class="field">
+        <label>Role Tag <span style="font-size:10px;color:var(--text-muted)">(boosts match for that role)</span></label>
+        <input type="text" id="edit-role-tag" value="${escAttr(item?.role_tag||'')}" placeholder="e.g. python, backend, sre">
       </div>
     </div>
+    <div id="duplicateWarning" style="display:none;padding:8px 10px;background:#7f1d1d33;border:1px solid #f87171;border-radius:7px;margin-bottom:8px;font-size:11px;">
+      <strong style="color:#f87171;">⚠ Similar question exists:</strong>
+      <span id="duplicateSimilarQ" style="color:#fca5a5;"></span>
+      <button onclick="saveItem(true)" style="margin-left:8px;background:#7f1d1d;border:none;border-radius:5px;padding:3px 10px;color:#f87171;font-size:11px;cursor:pointer;">Save Anyway</button>
+    </div>
+    <div class="field" id="theory-field">
+      <label>Theory Answer</label>
+      <textarea class="theory-area" id="edit-theory-area" placeholder="Write the conceptual/theory answer…">${esc(at)}</textarea>
+    </div>
+    <div class="field" id="coding-field" style="display:none">
+      <label>Code Answer</label>
+      <textarea class="code-area" id="edit-coding-area" placeholder="Write the code example…">${esc(ac)}</textarea>
+    </div>
+    <div id="testResult"></div>`;
 
-    ${item.id ? `<div class="meta-info">
-      <span>ID: ${item.id}</span>
-      <span>Hits: ${item.hit_count}</span>
-      <span>Created: ${item.created_at||'—'}</span>
-      <span>Updated: ${item.updated_at||'—'}</span>
-    </div>` : ''}
-
-    <div id="testResult"></div>
-  `;
+  onTypeChange(type);
+  _eTab = 'theory';
+  document.querySelectorAll('.etab').forEach((b,i) => b.classList.toggle('active', i===0));
 }
 
-function onQuestionChange(v) {
-  document.getElementById('toolbarTitle').textContent = v || 'New Q&A Pair';
-  document.getElementById('toolbarTitle').className = v ? 'has-title' : '';
-  document.getElementById('btnTest').style.display = v ? '' : 'none';
+function onTypeChange(val) {
+  const tf = document.getElementById('theory-field');
+  const cf = document.getElementById('coding-field');
+  if (val === 'theory') { tf.style.display=''; cf.style.display='none'; }
+  else if (val === 'coding') { tf.style.display='none'; cf.style.display=''; }
+  else { tf.style.display=''; cf.style.display=''; }
 }
 
-function onTypeChange(v) {
-  // Re-render editor preserving current field values
-  const q   = document.getElementById('fQuestion')?.value || '';
-  const kw  = document.getElementById('fKeywords')?.value || '';
-  const th  = document.getElementById('fAnswerTheory')?.value || '';
-  const co  = document.getElementById('fAnswerCoding')?.value || '';
-  renderEditor({ question: q, answer_theory: th, answer_coding: co, type: v, keywords: kw,
-                 id: currentId, hit_count: 0, created_at: '', updated_at: '' });
-}
-
-function switchTab(which) {
-  const t = document.getElementById('tabTheory');
-  const c = document.getElementById('tabCoding');
-  const pt = document.getElementById('panelTheory');
-  const pc = document.getElementById('panelCoding');
-  if (which === 'theory') {
-    if (t) t.className = 'tab active';
-    if (c) c.className = 'tab';
-    if (pt) pt.style.display = 'block';
-    if (pc) pc.style.display = 'none';
-  } else {
-    if (t) t.className = 'tab';
-    if (c) c.className = 'tab active';
-    if (pt) pt.style.display = 'none';
-    if (pc) pc.style.display = 'block';
-  }
-}
-
-// ── Save ─────────────────────────────────────────────────────────────────────
-async function saveItem() {
-  const q  = document.getElementById('fQuestion')?.value?.trim();
-  if (!q) { toast('Question text is required', 'err'); return; }
-  const payload = {
-    question:       q,
-    answer_theory:  document.getElementById('fAnswerTheory')?.value || '',
-    answer_coding:  document.getElementById('fAnswerCoding')?.value || '',
-    type:           document.getElementById('fType')?.value || 'theory',
-    keywords:       document.getElementById('fKeywords')?.value || '',
-  };
+// ── Save ──────────────────────────────────────────────────────────────────────
+async function saveItem(force = false) {
+  const q       = (document.getElementById('edit-question')?.value || '').trim();
+  const at      = document.getElementById('edit-theory-area')?.value || '';
+  const ac      = document.getElementById('edit-coding-area')?.value || '';
+  const ty      = document.getElementById('edit-type')?.value || 'theory';
+  const tg      = (document.getElementById('edit-tags')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const company = (document.getElementById('edit-company')?.value || '').trim();
+  const roleTag = (document.getElementById('edit-role-tag')?.value || '').trim();
+  if (!q) { toast('Question is required', 'err'); return; }
+  const payload = { question: q, answer_theory: at, answer_coding: ac, type: ty, tags: tg,
+                    company, role_tag: roleTag, force };
+  // Hide any existing duplicate warning
+  const dupWarn = document.getElementById('duplicateWarning');
+  if (dupWarn) dupWarn.style.display = 'none';
   try {
-    let r;
-    if (isNew || !currentId) {
-      r = await fetch('/api/qa', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      const data = await r.json();
-      if (r.ok) { currentId = data.id; isNew = false; toast('Saved!', 'ok'); loadList(); }
-      else toast(data.error || 'Save failed', 'err');
-    } else {
-      r = await fetch(`/api/qa/${currentId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      const data = await r.json();
-      if (r.ok) { toast('Updated!', 'ok'); loadList(); }
-      else toast(data.error || 'Update failed', 'err');
+    const r = isNew
+      ? await fetch('/api/qa', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      : await fetch(`/api/qa/${currentId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (r.status === 409 && isNew) {
+      // Duplicate warning
+      const d = await r.json();
+      if (dupWarn) {
+        document.getElementById('duplicateSimilarQ').textContent =
+          `"${d.similar_question}" (${Math.round((d.score||0)*100)}% match)`;
+        dupWarn.style.display = '';
+      }
+      return;
     }
-  } catch(e) { toast('Network error', 'err'); }
+    if (!r.ok) throw new Error();
+    toast('Saved!', 'ok');
+    loadList();
+    if (isNew) closePanel();
+  } catch { toast('Save failed', 'err'); }
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -361,59 +592,58 @@ async function deleteItem() {
   if (!currentId) return;
   if (!confirm('Delete this Q&A pair?')) return;
   try {
-    const r = await fetch(`/api/qa/${currentId}`, { method: 'DELETE' });
-    if (r.ok) {
-      currentId = null; isNew = false;
-      document.getElementById('editorArea').innerHTML = `<div class="empty-state"><div class="icon">🗃️</div><p>Deleted. Select another entry or create a new one.</p></div>`;
-      document.getElementById('toolbarTitle').textContent = 'Select or create a Q&A pair';
-      document.getElementById('toolbarTitle').className = '';
-      ['btnSave','btnDelete','btnTest'].forEach(id => document.getElementById(id).style.display = 'none');
-      toast('Deleted', 'ok');
-      loadList();
-    } else { toast('Delete failed', 'err'); }
-  } catch(e) { toast('Network error', 'err'); }
+    await fetch(`/api/qa/${currentId}`, { method: 'DELETE' });
+    toast('Deleted', 'ok');
+    closePanel();
+    loadList();
+  } catch { toast('Delete failed', 'err'); }
+}
+
+async function quickDelete(id, e) {
+  e.stopPropagation();
+  if (!confirm('Delete?')) return;
+  try {
+    await fetch(`/api/qa/${id}`, { method: 'DELETE' });
+    toast('Deleted', 'ok');
+    if (currentId === id) closePanel();
+    loadList();
+  } catch { toast('Delete failed', 'err'); }
 }
 
 // ── Test Lookup ───────────────────────────────────────────────────────────────
 async function testLookup() {
-  const q = document.getElementById('fQuestion')?.value?.trim();
-  if (!q) return;
-  const tp = document.getElementById('fType')?.value || 'theory';
-  const want_code = tp === 'coding';
+  const q = document.getElementById('edit-question')?.value?.trim();
+  if (!q) { toast('Enter a question first', 'err'); return; }
+  const btn = document.getElementById('btnTest');
+  btn.textContent = 'Testing…'; btn.disabled = true;
   try {
-    const r = await fetch('/api/qa/test', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ question: q, want_code })
-    });
-    const data = await r.json();
-    const el = document.getElementById('testResult');
-    if (data.found) {
-      const pct = Math.round(data.score * 100);
-      el.innerHTML = `<div class="test-result hit">
-        <strong>DB Hit</strong> — score ${pct}% (id #${data.qa_id})<br>
-        <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
-        <pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:var(--accent2)">${esc(data.answer?.slice(0,400))}${data.answer?.length>400?'…':''}</pre>
-      </div>`;
-    } else {
-      el.innerHTML = `<div class="test-result miss">No DB match found (score below threshold) — LLM API would be called.</div>`;
-    }
-  } catch(e) { toast('Test failed', 'err'); }
+    const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const d = await r.json();
+    const res = document.getElementById('testResult');
+    const hit = d.results && d.results.length > 0;
+    const score = hit ? Math.round((d.results[0].score || 0) * 100) : 0;
+    res.className = 'test-result ' + (hit ? 'hit' : 'miss');
+    res.style.display = '';
+    res.innerHTML = hit
+      ? `✓ Match found — score ${score}%<div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>`
+      : '✗ No match found in knowledge base';
+  } catch { toast('Test failed', 'err'); }
+  finally { btn.textContent = 'Test Lookup'; btn.disabled = false; }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-let toastTimer;
-function toast(msg, type='ok') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `show ${type}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.className = '', 2800);
+function escAttr(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&#34;');
+}
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = type || '';
+  t.style.display = 'block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.style.display = 'none'; }, 2500);
 }
 </script>
-</body>
-</html>
+{% endblock %}

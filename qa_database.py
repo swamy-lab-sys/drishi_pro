@@ -36,8 +36,9 @@ except Exception:
     _DB_DIR = Path.home() / ".drishi"
 
 DB_PATH = _DB_DIR / "qa_pairs.db"
-MATCH_THRESHOLD = 0.72
+MATCH_THRESHOLD = 0.65
 _lock = threading.Lock()
+_tls = threading.local()  # Thread-local storage for connection caching
 
 # Batch hit-count update queue — avoids spawning a thread per DB hit
 _hit_queue: _queue.Queue = _queue.Queue()
@@ -45,10 +46,7 @@ _hit_queue: _queue.Queue = _queue.Queue()
 def _hit_update_worker():
     """Single background thread that batches hit_count increments."""
     while True:
-        try:
-            row_id = _hit_queue.get(timeout=5.0)
-        except _queue.Empty:
-            continue
+        row_id = _hit_queue.get()  # blocks until work arrives — no CPU spin
         ids = [row_id]
         # Drain all pending ids in one batch
         while True:
@@ -80,19 +78,21 @@ _hit_worker.start()
 # Invalidated on any write. Only winner's answer text fetched from DB.
 _score_cache: Optional[List] = None
 
+# ── In-memory cache for role-specific prepared questions table ─────────────────
+# Maps role (str) → list of (id, norm_q, q_toks, answer)
+# Built on first lookup per role. Invalidated on any write to questions table.
+_prepared_cache: Dict[str, List] = {}
+
 
 def _get_score_cache() -> List:
     """Build/return the pre-tokenized scoring cache."""
     global _score_cache
     if _score_cache is not None:
         return _score_cache
-    conn = _get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT id, normalized_q, keywords, aliases FROM qa_pairs ORDER BY hit_count DESC"
-        ).fetchall()
-    finally:
-        conn.close()
+    conn = _get_read_conn()
+    rows = conn.execute(
+        "SELECT id, normalized_q, keywords, aliases FROM qa_pairs ORDER BY hit_count DESC"
+    ).fetchall()
 
     cache = []
     for r in rows:
@@ -126,8 +126,42 @@ def _get_score_cache() -> List:
 
 
 def _invalidate_cache():
-    global _score_cache
+    global _score_cache, _prepared_cache
     _score_cache = None
+    _prepared_cache = {}
+
+
+def _append_to_cache(row_id: int, norm: str, keywords: str = "", aliases: str = ""):
+    """Incrementally append a newly-inserted row to the live cache (avoids full rebuild).
+    Called by add_qa() so background auto-learn never triggers a full cache invalidation.
+    Only used when cache already exists; falls back to full rebuild on next access if not.
+    """
+    global _score_cache
+    if _score_cache is None:
+        return  # Cache not built yet — will be built on next find_answer() call
+
+    q_toks = frozenset(_tokens(norm))
+
+    kw_toks: frozenset = frozenset()
+    if keywords:
+        kw_flat = keywords.replace('_', ' ')
+        kw_set = set()
+        for phrase in kw_flat.split(','):
+            for tok in phrase.strip().lower().split():
+                if len(tok) > 2 and tok not in _STOP_WORDS:
+                    kw_set.add(_stem(tok))
+        kw_toks = frozenset(kw_set)
+
+    alias_entries = []
+    if aliases:
+        for alias in aliases.split('|'):
+            alias = alias.strip()
+            if alias:
+                norm_a = normalize_question(alias)
+                alias_entries.append((norm_a, frozenset(_tokens(norm_a))))
+
+    # Append new entry; hit_count=0 so it goes to end (cache is ordered hit_count DESC)
+    _score_cache.append((row_id, norm, q_toks, kw_toks, alias_entries))
 
 
 # ── Schema ────────────────────────────────────────────────────────────────────
@@ -139,6 +173,7 @@ CREATE TABLE IF NOT EXISTS qa_pairs (
     normalized_q     TEXT    NOT NULL,
     answer_theory    TEXT    DEFAULT '',
     answer_coding    TEXT    DEFAULT '',
+    answer_humanized TEXT    DEFAULT '',
     type             TEXT    NOT NULL DEFAULT 'theory',
     keywords         TEXT    DEFAULT '',
     aliases          TEXT    DEFAULT '',
@@ -148,6 +183,9 @@ CREATE TABLE IF NOT EXISTS qa_pairs (
     hit_count        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_type ON qa_pairs(type);
+CREATE INDEX IF NOT EXISTS idx_normalized_q ON qa_pairs(normalized_q);
+CREATE INDEX IF NOT EXISTS idx_hit_count ON qa_pairs(hit_count DESC);
+CREATE INDEX IF NOT EXISTS idx_questions_role ON questions(role);
 
 CREATE TABLE IF NOT EXISTS users (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,43 +205,107 @@ CREATE TABLE IF NOT EXISTS questions (
     prepared_answer  TEXT    NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS access_keys (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    key          TEXT    UNIQUE NOT NULL,
-    label        TEXT    DEFAULT '',
-    is_active    INTEGER NOT NULL DEFAULT 1,
-    created_at   REAL    NOT NULL,
-    last_used_at REAL    DEFAULT NULL
+CREATE TABLE IF NOT EXISTS ext_users (
+    token            TEXT    PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    role             TEXT    DEFAULT '',
+    coding_language  TEXT    DEFAULT 'python',
+    db_user_id       INTEGER DEFAULT 1,
+    active           INTEGER DEFAULT 1,
+    speed_preset     TEXT    DEFAULT 'balanced',
+    silence_duration REAL    DEFAULT 1.2,
+    llm_model        TEXT    DEFAULT 'claude-haiku-4-5-20251001',
+    stt_backend      TEXT    DEFAULT 'sarvam',
+    stt_model        TEXT    DEFAULT 'sarvam-saarika-v2',
+    created_at       TEXT    NOT NULL,
+    last_seen        TEXT    DEFAULT '',
+    total_questions  INTEGER DEFAULT 0,
+    total_llm_hits   INTEGER DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_access_keys_key ON access_keys(key);
+
+CREATE TABLE IF NOT EXISTS usage_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    token       TEXT    NOT NULL,
+    question    TEXT    NOT NULL,
+    source      TEXT    DEFAULT 'db',
+    answer_ms   INTEGER DEFAULT 0,
+    created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_token ON usage_log(token);
+CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
+
+CREATE TABLE IF NOT EXISTS stt_corrections (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    wrong      TEXT    NOT NULL COLLATE NOCASE,
+    right_text TEXT    NOT NULL,
+    source     TEXT    DEFAULT 'auto',
+    hit_count  INTEGER DEFAULT 0,
+    created_at TEXT    NOT NULL,
+    UNIQUE(wrong COLLATE NOCASE)
+);
+CREATE INDEX IF NOT EXISTS idx_stt_wrong ON stt_corrections(wrong COLLATE NOCASE);
 """
 
 _MIGRATE_ALIASES = """
 ALTER TABLE qa_pairs ADD COLUMN aliases TEXT DEFAULT '';
 """
 
+_MIGRATE_USER_SKILLS = "ALTER TABLE users ADD COLUMN key_skills TEXT DEFAULT '';"
+_MIGRATE_USER_INSTRUCTIONS = "ALTER TABLE users ADD COLUMN custom_instructions TEXT DEFAULT '';"
+_MIGRATE_USER_DOMAIN = "ALTER TABLE users ADD COLUMN domain TEXT DEFAULT '';"
+_MIGRATE_USER_UPDATED_AT = "ALTER TABLE users ADD COLUMN updated_at TEXT DEFAULT '';"
+
 
 def _get_conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # WAL mode: readers never block writers and vice versa (critical for
+    # concurrent audio pipeline + web server access).
+    conn.execute("PRAGMA journal_mode=WAL")
+    # Slightly relaxed durability — OS crash is acceptable, process crash is not.
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
+
+def _get_read_conn() -> sqlite3.Connection:
+    """Thread-local read connection — configured once per thread, never closed.
+    Used by hot-path read functions (find_answer, _get_score_cache) to avoid
+    per-call connection setup overhead (~5-10ms saved per query).
+    """
+    conn = getattr(_tls, 'read_conn', None)
+    if conn is not None:
+        return conn
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    _tls.read_conn = conn
     return conn
 
 
 def init_db():
-    """Create tables; add aliases/tags columns if missing (migration)."""
+    """Create tables; add aliases/tags/answer_humanized columns if missing (migration)."""
     with _lock:
         conn = _get_conn()
         conn.executescript(_CREATE_SQL)
-        # Safe migration: add aliases column if it doesn't exist
+        # Safe migration: add columns if they don't exist
         cols = {row[1] for row in conn.execute("PRAGMA table_info(qa_pairs)")}
         if 'aliases' not in cols:
             conn.execute("ALTER TABLE qa_pairs ADD COLUMN aliases TEXT DEFAULT ''")
         if 'tags' not in cols:
             conn.execute("ALTER TABLE qa_pairs ADD COLUMN tags TEXT DEFAULT ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tags ON qa_pairs(tags)")
-        
+        if 'answer_humanized' not in cols:
+            conn.execute("ALTER TABLE qa_pairs ADD COLUMN answer_humanized TEXT DEFAULT ''")
+        if 'company' not in cols:
+            conn.execute("ALTER TABLE qa_pairs ADD COLUMN company TEXT DEFAULT ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_company ON qa_pairs(company)")
+        if 'role_tag' not in cols:
+            conn.execute("ALTER TABLE qa_pairs ADD COLUMN role_tag TEXT DEFAULT ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_role_tag ON qa_pairs(role_tag)")
+
         # Safe migration: add resume_file and resume_summary to users table
         user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if 'resume_file' not in user_cols:
@@ -211,28 +313,66 @@ def init_db():
         if 'resume_summary' not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN resume_summary TEXT DEFAULT ''")
 
-        # Safe migration: create access_keys table if it doesn't exist
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS access_keys (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                key          TEXT    UNIQUE NOT NULL,
-                label        TEXT    DEFAULT '',
-                is_active    INTEGER NOT NULL DEFAULT 1,
-                created_at   REAL    NOT NULL,
-                last_used_at REAL    DEFAULT NULL
-            )
+        # Safe migration: add key_skills, custom_instructions, domain, updated_at, resume_path to users table
+        for sql in [_MIGRATE_USER_SKILLS, _MIGRATE_USER_INSTRUCTIONS, _MIGRATE_USER_DOMAIN, _MIGRATE_USER_UPDATED_AT,
+                    "ALTER TABLE users ADD COLUMN resume_path TEXT DEFAULT '';"]:
+            try:
+                conn.execute(sql)
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
+        # Create ext_users and usage_log tables if they don't exist (safe migration)
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS ext_users (
+                token TEXT PRIMARY KEY, name TEXT NOT NULL,
+                role TEXT DEFAULT '', coding_language TEXT DEFAULT 'python',
+                db_user_id INTEGER DEFAULT 1, active INTEGER DEFAULT 1,
+                speed_preset TEXT DEFAULT 'balanced', silence_duration REAL DEFAULT 1.2,
+                llm_model TEXT DEFAULT 'claude-haiku-4-5-20251001',
+                stt_backend TEXT DEFAULT 'sarvam', stt_model TEXT DEFAULT 'sarvam-saarika-v2',
+                created_at TEXT NOT NULL, last_seen TEXT DEFAULT '',
+                total_questions INTEGER DEFAULT 0, total_llm_hits INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL,
+                question TEXT NOT NULL, source TEXT DEFAULT 'db',
+                answer_ms INTEGER DEFAULT 0, created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_usage_token ON usage_log(token);
+            CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
         """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_access_keys_key ON access_keys(key)")
+        conn.commit()
+
+        # Ensure performance indexes exist on existing databases
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_normalized_q ON qa_pairs(normalized_q)",
+            "CREATE INDEX IF NOT EXISTS idx_hit_count ON qa_pairs(hit_count DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_questions_role ON questions(role)",
+        ]:
+            try:
+                conn.execute(idx_sql)
+            except sqlite3.OperationalError:
+                pass
 
         conn.commit()
 
         # Seed Unix/Bash Q&A pairs if not already present
         count = conn.execute("SELECT COUNT(*) FROM qa_pairs WHERE tags LIKE '%unix-seed%'").fetchone()[0]
+        needs_unix_seed = (count == 0)
+        # Seed interview-prompt Q&A pairs if not already present
+        count2 = conn.execute("SELECT COUNT(*) FROM qa_pairs WHERE tags LIKE '%python-seed%'").fetchone()[0]
+        needs_interview_seed = (count2 == 0)
         conn.close()
 
-    if count == 0:
+    # Call seed functions OUTSIDE the lock — they acquire _lock internally per insertion
+    if needs_unix_seed:
         _seed_unix_qa()
+    if needs_interview_seed:
+        _seed_interview_prompt_qa()
+
+    # Backfill answer_humanized for any rows that are missing it
+    _backfill_humanized()
 
 
 def _seed_unix_qa():
@@ -348,6 +488,9 @@ def _seed_unix_qa():
     for question, answer, qa_type, keywords, aliases, tags in _UNIX_QA:
         norm = normalize_question(question)
         ts = _nowts()
+        theory_ans = answer if qa_type == "theory" else ""
+        coding_ans = answer if qa_type == "bash" else ""
+        humanized = _build_humanized(theory_ans, coding_ans)
         with _lock:
             conn = _get_conn()
             try:
@@ -358,10 +501,10 @@ def _seed_unix_qa():
                     conn.execute(
                         """INSERT INTO qa_pairs
                            (question, normalized_q, answer_theory, answer_coding,
-                            type, keywords, aliases, tags, created_at, updated_at)
-                           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                        (question, norm, answer if qa_type == "theory" else "",
-                         answer if qa_type == "bash" else "",
+                            answer_humanized, type, keywords, aliases, tags,
+                            created_at, updated_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        (question, norm, theory_ans, coding_ans, humanized,
                          "theory" if qa_type == "theory" else "coding",
                          keywords, aliases, tags, ts, ts)
                     )
@@ -370,19 +513,715 @@ def _seed_unix_qa():
                 conn.close()
 
 
+def _seed_interview_prompt_qa():
+    """Seed all INTERVIEW_PROMPT Q&A examples into the DB with role tags for instant lookup."""
+    # Format: (question, answer, qa_type, keywords, aliases, tags)
+    _QA = [
+        # ── PYTHON ──────────────────────────────────────────────────────────
+        (
+            "What is a decorator in Python?",
+            "- A decorator wraps a function to add behavior without touching its code\n- It uses the @ syntax and works great for logging, auth, or caching\n- I've built retry and timing decorators for production API endpoints",
+            "theory", "python decorator function wrapping @login_required cache_page",
+            "python decorator wrap function|decorator pattern python|what does @ do python",
+            "python-seed"
+        ),
+        (
+            "Difference between list and tuple in Python?",
+            "- Lists are mutable so you can add or change items any time\n- Tuples are immutable and slightly faster for data that won't change\n- I use tuples for config constants and lists for collections that grow",
+            "theory", "python list tuple mutable immutable difference",
+            "list vs tuple python|list tuple difference|when to use tuple python",
+            "python-seed"
+        ),
+        (
+            "What is the GIL in Python?",
+            "- The GIL lets only one thread run Python bytecode at a time\n- It prevents race conditions on objects but limits CPU-bound threading\n- I work around it using multiprocessing or asyncio for parallel tasks",
+            "theory", "GIL global interpreter lock python threading cpu-bound",
+            "global interpreter lock python|GIL python threading|python GIL explanation",
+            "python-seed"
+        ),
+        (
+            "What does yield do in Python?",
+            "- yield pauses a function and returns a value without ending it\n- The next call to next() resumes from where it left off\n- I use generators in Django to stream large querysets without loading all rows",
+            "theory", "python yield generator iterator pause resume",
+            "what is yield python|yield keyword python|python generator yield",
+            "python-seed"
+        ),
+        (
+            "What is a lambda in Python?",
+            "- A lambda is an anonymous one-line function — no def, no name, just inline logic\n- `sorted(users, key=lambda u: u['age'])` or `double = lambda x: x * 2`\n- I use lambdas in map/filter/sorted when writing a full function would be overkill",
+            "theory", "python lambda anonymous function inline one-line",
+            "lambda function python|anonymous function python|python lambda expression",
+            "python-seed"
+        ),
+        (
+            "What is a list comprehension in Python?",
+            "- A list comprehension builds a new list in one line using a for-expression inside brackets\n- `evens = [x for x in range(20) if x % 2 == 0]` vs a 4-line for loop\n- I use them daily for transforming querysets, filtering lists, and building dicts fast",
+            "theory", "python list comprehension for-expression one-line filter transform",
+            "list comprehension python|python list comprehension syntax|dict comprehension python",
+            "python-seed"
+        ),
+        (
+            "What is a generator in Python?",
+            "- A generator is a function that yields values one at a time instead of building a full list\n- `def rows(): yield from db.execute('SELECT ...')` — reads one row per iteration\n- I use generators for large file processing and streaming DB results without memory blowup",
+            "theory", "python generator yield lazy evaluation memory efficient iterator",
+            "python generator function|generator vs list python|what is generator in python",
+            "python-seed"
+        ),
+        (
+            "What is *args and **kwargs in Python?",
+            "- `*args` collects extra positional arguments as a tuple; `**kwargs` collects keyword args as a dict\n- `def log(*args, **kwargs): print(args, kwargs)` — accepts anything without breaking\n- I use them in wrapper functions and middleware to pass-through arguments transparently",
+            "theory", "python args kwargs positional keyword variable arguments",
+            "*args **kwargs python|python args kwargs explanation|variable arguments python",
+            "python-seed"
+        ),
+        (
+            "What is the difference between is and == in Python?",
+            "- `==` checks if two objects have equal values; `is` checks if they are the same object in memory\n- `[] == []` is True but `[] is []` is False — they're different objects\n- I use `is` only for None checks (`if x is None`) and `==` for value comparisons",
+            "theory", "python is == equality identity operator difference",
+            "is vs == python|python equality identity|python is operator",
+            "python-seed"
+        ),
+        # ── LINUX / PRODUCTION SUPPORT ───────────────────────────────────────
+        (
+            "How do you check disk usage in Linux?",
+            "- `df -h` shows disk usage per partition in human-readable size\n- `du -sh /var/log/*` finds which directory is eating space\n- If disk hits 100% I check `/tmp`, old logs, and core dumps first",
+            "theory", "linux disk usage df du check partition storage",
+            "check disk space linux|df -h command|linux disk full troubleshoot",
+            "linux-seed,prod-support-seed"
+        ),
+        (
+            "How do you troubleshoot high CPU in Linux?",
+            "- `top` or `htop` shows which process is spiking CPU in real time\n- `ps aux --sort=-%cpu | head` gives the top CPU consumers at that moment\n- I've traced runaway processes to stuck loops or zombie child processes",
+            "theory", "linux high cpu troubleshoot top htop ps process spike",
+            "high cpu linux|troubleshoot cpu usage linux|linux cpu 100% fix",
+            "linux-seed,prod-support-seed"
+        ),
+        (
+            "How do you check a service that is not starting in Linux?",
+            "- `systemctl status servicename` shows the current state and recent logs\n- `journalctl -u servicename -n 50` gives the last 50 log lines\n- I usually start with the exit code and work backwards to the root cause",
+            "theory", "linux service not starting systemctl journalctl status logs",
+            "service not starting linux|systemctl failed|linux service troubleshoot",
+            "linux-seed,prod-support-seed"
+        ),
+        (
+            "What is an OOM kill in Linux?",
+            "- OOM killer runs when the kernel can't allocate memory to any process\n- It scores processes by memory usage and kills the highest-scoring one\n- I've seen it kill Java apps when the heap limit wasn't set correctly",
+            "theory", "linux OOM killer out of memory kernel memory allocation",
+            "OOM kill linux|out of memory killer|linux OOM killer explanation",
+            "linux-seed,prod-support-seed"
+        ),
+        (
+            "How do you analyze a production incident?",
+            "- I start with `dmesg`, `journalctl`, and application logs to find the event\n- Then I check CPU, memory, and disk metrics around the incident window\n- After fixing, I write an RCA with timeline, impact, and prevention steps",
+            "theory", "production incident analysis RCA root cause dmesg journalctl logs",
+            "production incident troubleshoot|how to handle production incident|RCA production issue",
+            "linux-seed,prod-support-seed"
+        ),
+        # ── DEVOPS / CI-CD ───────────────────────────────────────────────────
+        (
+            "What is the difference between Docker and a VM?",
+            "- Docker shares the host OS kernel so containers start in seconds\n- VMs have their own OS, making them heavier but more isolated\n- I containerize apps with Docker and use VMs when full OS isolation is needed",
+            "theory", "docker vm virtual machine container difference kernel OS isolation",
+            "docker vs vm|container vs virtual machine|docker vm difference",
+            "devops-seed"
+        ),
+        (
+            "How does a CI/CD pipeline work?",
+            "- Code push triggers a pipeline that builds, tests, and packages the artifact\n- If tests pass, the artifact is pushed to a registry and deployed automatically\n- I've set up GitHub Actions pipelines that deploy to Kubernetes on merge to main",
+            "theory", "cicd pipeline continuous integration deployment build test deploy",
+            "cicd pipeline explanation|how does CI/CD work|continuous integration deployment",
+            "devops-seed"
+        ),
+        (
+            "What is GitOps?",
+            "- GitOps means Git is the single source of truth for your infra state\n- Tools like ArgoCD sync the cluster to match the desired state in Git\n- I've used ArgoCD so every deployment is a pull request, fully auditable",
+            "theory", "gitops argocd git infrastructure as code declarative deployment",
+            "what is GitOps|gitops argocd|git as source of truth infra",
+            "devops-seed"
+        ),
+        (
+            "What is a Helm chart?",
+            "- A Helm chart is a template package for deploying apps on Kubernetes\n- It lets you parametrize manifests so the same chart works across environments\n- I use values.yaml overrides for dev, staging, and prod with the same chart",
+            "theory", "helm chart kubernetes template package manifest deployment",
+            "what is helm chart|helm kubernetes deployment|helm values.yaml",
+            "devops-seed,kubernetes-seed"
+        ),
+        # ── SRE / MONITORING ─────────────────────────────────────────────────
+        (
+            "What is an error budget in SRE?",
+            "- An error budget is the allowed downtime or error rate defined by the SLO\n- If the budget runs out, you freeze feature work and focus on reliability\n- I've used it to balance release velocity with service stability on-call",
+            "theory", "error budget SRE SLO reliability downtime allowance",
+            "what is error budget|sre error budget|error budget SLO explanation",
+            "sre-seed"
+        ),
+        (
+            "What are the four golden signals in SRE?",
+            "- The four golden signals are latency, traffic, errors, and saturation\n- They cover the key dimensions that affect user experience and system health\n- I monitor these in Grafana and alert on error rate and latency p99 spikes",
+            "theory", "four golden signals sre latency traffic errors saturation monitoring",
+            "four golden signals|sre monitoring signals|latency traffic errors saturation",
+            "sre-seed"
+        ),
+        (
+            "What is the difference between SLO SLI and SLA?",
+            "- SLI is the actual metric like request success rate or p99 latency\n- SLO is the target you set for that metric, like 99.9% over 30 days\n- SLA is the contract with consequences if you miss the SLO",
+            "theory", "SLO SLI SLA service level objective indicator agreement difference",
+            "SLO SLI SLA difference|what is SLO SLI|service level agreement objective",
+            "sre-seed"
+        ),
+        # ── KUBERNETES ───────────────────────────────────────────────────────
+        (
+            "What is Kubernetes architecture?",
+            "- Kubernetes has a control plane with API server, scheduler, and etcd for cluster state\n- Worker nodes run pods controlled by kubelet and the container runtime\n- I've deployed microservices on it with auto-scaling and rolling updates",
+            "theory", "kubernetes architecture control plane worker node etcd kubelet scheduler",
+            "kubernetes architecture|k8s components|kubernetes control plane worker node",
+            "kubernetes-seed,devops-seed"
+        ),
+        (
+            "Difference between StatefulSet and Deployment in Kubernetes?",
+            "- Deployments manage stateless pods that can be replaced at any time\n- StatefulSets give each pod a stable identity, hostname, and persistent volume\n- I use StatefulSets for databases like PostgreSQL and Elasticsearch in Kubernetes",
+            "theory", "kubernetes statefulset deployment stateless stateful pod identity volume",
+            "statefulset vs deployment kubernetes|when to use statefulset|kubernetes stateful workloads",
+            "kubernetes-seed"
+        ),
+        (
+            "What is a liveness probe versus a readiness probe in Kubernetes?",
+            "- Liveness probe restarts a pod if the app is stuck or crashed internally\n- Readiness probe removes the pod from the service endpoints until it's ready\n- I set both on every service so bad deploys don't get live traffic",
+            "theory", "kubernetes liveness readiness probe health check pod restart",
+            "liveness vs readiness probe|kubernetes health check|pod liveness readiness",
+            "kubernetes-seed"
+        ),
+        (
+            "What is RBAC in Kubernetes?",
+            "- RBAC controls who can do what in the cluster using roles and bindings\n- A Role defines permissions, a RoleBinding assigns that Role to a user or group\n- I create service accounts with least-privilege roles for each workload",
+            "theory", "kubernetes RBAC role based access control permissions service account",
+            "kubernetes RBAC|role based access control k8s|kubernetes role binding",
+            "kubernetes-seed"
+        ),
+        # ── OPENSTACK ────────────────────────────────────────────────────────
+        (
+            "What is the role of Nova in OpenStack?",
+            "- Nova is OpenStack's compute service that manages VM lifecycle\n- It handles scheduling VMs on hypervisors and communicates with Neutron for networking\n- I've used Nova to launch, resize, and live-migrate instances across compute nodes",
+            "theory", "openstack nova compute VM lifecycle hypervisor scheduler",
+            "nova openstack|openstack nova service|what is nova openstack",
+            "openstack-seed"
+        ),
+        (
+            "What is live migration in OpenStack?",
+            "- Live migration moves a running VM from one compute node to another with no downtime\n- It needs shared storage or block migration so the VM disk moves too\n- I've used it during hardware maintenance to drain nodes without guest impact",
+            "theory", "openstack live migration VM compute node no downtime shared storage",
+            "openstack live migration|VM live migration openstack|migrate VM without downtime",
+            "openstack-seed"
+        ),
+        (
+            "What is a security group in OpenStack?",
+            "- A security group is a stateful firewall applied to VM network interfaces\n- Rules define allowed ingress and egress traffic by port and protocol\n- I manage them via the API to lock down prod VMs to only needed ports",
+            "theory", "openstack security group firewall ingress egress port rules",
+            "openstack security group|security group openstack|VM firewall openstack",
+            "openstack-seed"
+        ),
+        # ── JAVA ─────────────────────────────────────────────────────────────
+        (
+            "How does garbage collection work in Java?",
+            "- The JVM tracks object references and marks unreachable objects for collection\n- G1 GC divides the heap into regions and collects garbage incrementally\n- I've tuned GC pauses by adjusting heap size and switching to ZGC for low latency",
+            "theory", "java garbage collection JVM G1GC ZGC heap memory management",
+            "java GC explanation|garbage collection java|java JVM GC tuning",
+            "java-seed"
+        ),
+        (
+            "What is the difference between HashMap and ConcurrentHashMap in Java?",
+            "- HashMap is not thread-safe so concurrent writes can corrupt its internal state\n- ConcurrentHashMap uses segment-level locking so multiple threads write safely\n- I use ConcurrentHashMap for shared caches in multi-threaded services",
+            "theory", "java hashmap concurrenthashmap thread-safe synchronization difference",
+            "hashmap vs concurrenthashmap|java concurrenthashmap|thread safe map java",
+            "java-seed"
+        ),
+        (
+            "What is the difference between checked and unchecked exceptions in Java?",
+            "- Checked exceptions must be declared or caught at compile time\n- Unchecked exceptions extend RuntimeException and don't need explicit handling\n- I use unchecked exceptions for programming errors and checked for recoverable ones",
+            "theory", "java checked unchecked exception runtime compile time difference",
+            "checked vs unchecked exception java|java exception types|RuntimeException java",
+            "java-seed"
+        ),
+        (
+            "What is a functional interface in Java?",
+            "- A functional interface has exactly one abstract method, used with lambda expressions\n- Runnable, Callable, Comparator, and Predicate are common examples from the JDK\n- I use them with Stream API to write concise filter and map operations",
+            "theory", "java functional interface lambda single abstract method SAM",
+            "functional interface java|java lambda interface|what is functional interface java",
+            "java-seed"
+        ),
+        # ── JAVASCRIPT ───────────────────────────────────────────────────────
+        (
+            "How does the event loop work in JavaScript?",
+            "- The event loop picks callbacks from the task queue when the call stack is empty\n- Promises use the microtask queue which runs before the next task queue item\n- I debug async ordering issues by thinking in terms of call stack, microtask, and task queue",
+            "theory", "javascript event loop call stack task queue microtask async",
+            "javascript event loop|how event loop works js|async javascript event loop",
+            "javascript-seed"
+        ),
+        (
+            "What is a closure in JavaScript?",
+            "- A closure is a function that remembers variables from its outer scope after it returns\n- This lets inner functions access enclosing variables even after the outer function is done\n- I use closures for factory functions and to create private state in modules",
+            "theory", "javascript closure scope outer function variable private state",
+            "javascript closure|what is closure js|closure example javascript",
+            "javascript-seed"
+        ),
+        (
+            "What is the difference between var let and const in JavaScript?",
+            "- var is function-scoped and hoisted, which can cause confusing bugs\n- let and const are block-scoped and not accessible before declaration\n- I always use const by default and let only when I need to reassign",
+            "theory", "javascript var let const scope hoisting block function difference",
+            "var vs let vs const|javascript variable declaration|let const var difference js",
+            "javascript-seed"
+        ),
+        (
+            "What is event delegation in JavaScript?",
+            "- Event delegation attaches one listener to a parent instead of each child element\n- It works because events bubble up the DOM tree to the parent\n- I use it for dynamic lists where items are added after the page loads",
+            "theory", "javascript event delegation bubble parent listener DOM dynamic",
+            "event delegation javascript|js event delegation|bubbling event listener javascript",
+            "javascript-seed"
+        ),
+        # ── HTML / CSS ────────────────────────────────────────────────────────
+        (
+            "What is the CSS box model?",
+            "- Every HTML element has content, padding, border, and margin around it\n- box-sizing: border-box makes width include padding and border, which is more predictable\n- I set border-box globally in every project to avoid layout calculation bugs",
+            "theory", "css box model content padding border margin box-sizing border-box",
+            "css box model|what is box model css|border-box vs content-box css",
+            "html-seed"
+        ),
+        (
+            "What is the difference between flexbox and CSS grid?",
+            "- Flexbox is one-dimensional, best for laying out items in a row or column\n- Grid is two-dimensional, great for full page layouts with rows and columns\n- I use flexbox for nav bars and card rows, grid for full page layouts",
+            "theory", "css flexbox grid one-dimensional two-dimensional layout difference",
+            "flexbox vs grid css|css layout flexbox grid|when to use flex vs grid",
+            "html-seed"
+        ),
+        (
+            "What is CSS specificity?",
+            "- Specificity decides which rule applies when multiple rules target the same element\n- Inline styles beat IDs, IDs beat classes, classes beat element selectors\n- I avoid ID selectors in CSS to keep specificity low and styles easy to override",
+            "theory", "css specificity inline id class element selector priority",
+            "css specificity|what is css specificity|css selector priority",
+            "html-seed"
+        ),
+        (
+            "What are semantic HTML elements?",
+            "- Semantic elements like header, nav, main, article describe what the content is\n- They help screen readers, SEO bots, and other developers understand the page structure\n- I use them in every project because they improve accessibility without extra effort",
+            "theory", "semantic html elements header nav main article accessibility SEO",
+            "semantic html|semantic elements html5|why use semantic html",
+            "html-seed"
+        ),
+        # ── DJANGO ────────────────────────────────────────────────────────────
+        (
+            "What is the N+1 query problem in Django?",
+            "- N+1 happens when you loop over a queryset and each iteration fires a new query\n- select_related does a SQL JOIN to fetch related objects in one query\n- I catch it with Django Debug Toolbar in development before it hits production",
+            "theory", "django N+1 query problem select_related queryset performance",
+            "N+1 problem django|django N+1 query|select_related django N+1",
+            "django-seed,python-seed"
+        ),
+        (
+            "How does Django signal work?",
+            "- Signals let decoupled code react to events like saving or deleting a model\n- post_save fires after a model instance is saved, pre_save fires before\n- I use signals to send notifications or update related records after a save",
+            "theory", "django signal post_save pre_save event decoupled model",
+            "django signals|post_save signal django|how signals work django",
+            "django-seed,python-seed"
+        ),
+        (
+            "What is the difference between class-based views and function-based views in Django?",
+            "- Class-based views inherit mixins and reduce boilerplate for standard CRUD operations\n- Function-based views are simpler and easier to trace for custom logic\n- I use CBVs for standard list and detail pages, FBVs for anything with complex branching",
+            "theory", "django class-based views function-based CBV FBV difference mixins",
+            "CBV vs FBV django|class based vs function based views django|when to use CBV FBV",
+            "django-seed,python-seed"
+        ),
+        (
+            "How does DRF serializer work?",
+            "- A serializer converts Django model instances to JSON and validates incoming data\n- It works like a Django form but outputs data instead of HTML\n- I use ModelSerializer for standard CRUD and override validate_ methods for custom rules",
+            "theory", "DRF serializer model serializer JSON validate data conversion",
+            "drf serializer|django rest framework serializer|modelserializer drf",
+            "django-seed,python-seed"
+        ),
+        # ── DJANGO / DRF DEEP ─────────────────────────────────────────────────
+        (
+            "What is select_related vs prefetch_related in Django?",
+            "- select_related does a SQL JOIN for ForeignKey and OneToOne relations in one query\n- prefetch_related does a separate query and joins in Python — needed for ManyToMany\n- I always profile with Django Debug Toolbar to catch N+1 before it hits production",
+            "theory", "django select_related prefetch_related JOIN query ManyToMany ForeignKey",
+            "select_related vs prefetch_related|django queryset optimization|prefetch_related django",
+            "django-seed,python-seed"
+        ),
+        (
+            "How do you create a custom DRF permission class?",
+            "- Subclass BasePermission and override has_permission or has_object_permission\n- Return True to allow, False to deny — DRF raises 403 automatically\n- I use custom permissions to enforce object-level ownership checks on every ViewSet",
+            "theory", "DRF custom permission BasePermission has_permission has_object_permission",
+            "custom drf permission|django rest framework permissions|object level permission drf",
+            "django-seed,python-seed"
+        ),
+        (
+            "How does DRF JWT authentication work?",
+            "- The client POSTs credentials to /api/token/ and gets access and refresh tokens\n- The access token is short-lived; the client uses the refresh token to get a new one\n- I configure SimpleJWT with ROTATE_REFRESH_TOKENS and blacklist the old tokens on logout",
+            "theory", "DRF JWT authentication token SimpleJWT access refresh token",
+            "drf jwt auth|django rest framework JWT|simplejwt drf|jwt token django",
+            "django-seed,python-seed"
+        ),
+        (
+            "What is the difference between APIView and ViewSet in DRF?",
+            "- APIView maps HTTP methods directly — get(), post(), put() methods on the class\n- ViewSet maps to CRUD actions — list(), create(), retrieve(), update() — wired via Router\n- I use ViewSet + DefaultRouter for standard CRUD and APIView for custom logic endpoints",
+            "theory", "DRF APIView ViewSet router CRUD HTTP methods difference",
+            "apiview vs viewset drf|django rest framework viewset|drf router viewset",
+            "django-seed,python-seed"
+        ),
+        (
+            "How does Celery work with Django?",
+            "- Celery is a distributed task queue — Django sends tasks to a broker like Redis\n- Workers pull tasks from the queue and execute them outside the HTTP request cycle\n- I use it for sending emails, generating reports, and any task over 200ms",
+            "theory", "celery django task queue redis broker worker background async",
+            "celery django|django celery redis|celery task queue django|async tasks django",
+            "django-seed,python-seed"
+        ),
+        (
+            "How do you handle database migrations in Django?",
+            "- `makemigrations` generates migration files from model changes; `migrate` applies them\n- I never delete migration files in production — I squash them if history gets too long\n- For team conflicts I always run `showmigrations` and resolve merge migrations before deploy",
+            "theory", "django migrations makemigrations migrate squash showmigrations database schema",
+            "django migrations|makemigrations migrate django|django migration conflicts",
+            "django-seed,python-seed"
+        ),
+        (
+            "What is Django caching and how do you use it?",
+            "- Django's cache framework supports Redis, Memcached, or file-based backends\n- `cache.set('key', value, timeout=300)` stores data; `cache.get('key')` retrieves it\n- I cache expensive QuerySets with `cache_page` on views and manual cache.set for DB aggregates",
+            "theory", "django caching redis memcached cache_page cache.set cache.get backend",
+            "django cache|django redis caching|cache_page django|django caching strategy",
+            "django-seed,python-seed"
+        ),
+        # ── FLASK ─────────────────────────────────────────────────────────────
+        (
+            "What is a Flask Blueprint?",
+            "- A Blueprint groups related routes, templates, and static files into a module\n- It lets you split a large app into feature-based packages you register at startup\n- I use Blueprints to separate auth, API, and admin routes into their own files",
+            "theory", "flask blueprint routes templates module register application factory",
+            "flask blueprint|what is blueprint flask|flask app structure blueprint",
+            "flask-seed,python-seed"
+        ),
+        (
+            "What is the application context in Flask?",
+            "- The application context pushes g and current_app so you can access them outside a request\n- It's needed when running background tasks or CLI commands outside the request cycle\n- I push it manually in Celery tasks that need database access via Flask-SQLAlchemy",
+            "theory", "flask application context g current_app request context background task",
+            "flask app context|application context flask|flask context object|flask g current_app",
+            "flask-seed,python-seed"
+        ),
+        (
+            "What is WSGI and how does Flask use it?",
+            "- WSGI is a standard interface between Python web apps and servers like gunicorn\n- Flask implements the WSGI callable so any WSGI server can run it\n- I deploy Flask behind gunicorn with 4 workers and nginx as the reverse proxy",
+            "theory", "WSGI flask gunicorn nginx python web server interface standard",
+            "what is WSGI flask|flask wsgi gunicorn|wsgi server flask|flask production deployment",
+            "flask-seed,python-seed"
+        ),
+        # ── SQL / POSTGRESQL ─────────────────────────────────────────────────
+        (
+            "What is the difference between INNER JOIN and LEFT JOIN in SQL?",
+            "- INNER JOIN returns only rows where both tables have a matching key\n- LEFT JOIN returns all rows from the left table, with nulls where there's no match\n- I use LEFT JOIN when I need results even if the related record doesn't exist",
+            "theory", "sql inner join left join difference null matching rows",
+            "inner join vs left join|sql join types|left join inner join sql",
+            "sql-seed"
+        ),
+        (
+            "What are ACID properties in a database?",
+            "- Atomicity means the whole transaction commits or none of it does\n- Consistency, Isolation, and Durability ensure data is valid, transactions don't interfere, and committed data survives crashes\n- I rely on ACID when money or inventory records must never be partially updated",
+            "theory", "ACID atomicity consistency isolation durability database transaction",
+            "ACID properties database|what is ACID|database ACID explained",
+            "sql-seed"
+        ),
+        (
+            "What is MVCC in PostgreSQL?",
+            "- MVCC keeps old row versions so readers never block writers and vice versa\n- Each transaction sees a snapshot of the database as it was at its start time\n- It makes PostgreSQL fast for read-heavy workloads without explicit read locks",
+            "theory", "postgresql MVCC multiversion concurrency control snapshot isolation row versions",
+            "MVCC postgresql|what is MVCC|multiversion concurrency control postgres",
+            "sql-seed"
+        ),
+        (
+            "What is a window function in SQL?",
+            "- A window function runs a calculation across a set of rows related to the current row\n- ROW_NUMBER, RANK, and LAG are common examples for ranking and comparing rows\n- I use them to calculate running totals and find the latest record per group",
+            "theory", "sql window function ROW_NUMBER RANK LAG OVER partition running total",
+            "sql window function|what is window function sql|ROW_NUMBER RANK sql",
+            "sql-seed"
+        ),
+        (
+            "What is the purpose of VACUUM in PostgreSQL?",
+            "- VACUUM reclaims space from rows marked as dead after UPDATE or DELETE\n- Without it, table bloat grows and query performance degrades over time\n- I run autovacuum in production and manually ANALYZE after large batch loads",
+            "theory", "postgresql vacuum autovacuum table bloat dead rows space reclaim",
+            "postgresql vacuum|what is vacuum postgres|autovacuum postgresql|table bloat postgres",
+            "sql-seed"
+        ),
+        # ── HR / GENERAL INTERVIEW ────────────────────────────────────────────
+        (
+            "What are your strengths?",
+            "- I'm strong at debugging production issues quickly under pressure\n- I communicate clearly in incidents — updates go out before people ask\n- I own problems end-to-end and don't drop things once I've picked them up",
+            "theory", "strengths interview personal qualities debugging communication ownership",
+            "what are your strengths|tell me your strengths|interview strengths question",
+            "hr-seed"
+        ),
+        (
+            "What are your weaknesses?",
+            "- I sometimes over-document things when a quick verbal update would be faster\n- I'm working on delegating more instead of fixing things myself every time\n- I've gotten better at this by consciously asking teammates before diving in",
+            "theory", "weaknesses interview self-improvement delegation over-engineering",
+            "what are your weaknesses|tell me your weakness|interview weakness question",
+            "hr-seed"
+        ),
+        (
+            "Where do you see yourself in five years?",
+            "- I want to be leading a production support or SRE team, not just an individual contributor\n- I want to have built systems that catch incidents before users feel them\n- I'm also working toward cloud certifications to move into architecture over time",
+            "theory", "five years career goal leadership SRE production support architect",
+            "where do you see yourself in 5 years|career goals interview|5 year plan interview",
+            "hr-seed"
+        ),
+        (
+            "Why do you want to leave your current job?",
+            "- I'm looking for a role with more scale and more complex systems to learn from\n- My current team is good but the growth path has plateaued for me\n- I want to work on infrastructure that handles real production load at volume",
+            "theory", "leaving current job reason growth scale complex systems career",
+            "why leave current job|reason for leaving job|why do you want to change job",
+            "hr-seed"
+        ),
+        (
+            "Tell me about a challenging incident you handled.",
+            "- We had a production database connection pool exhaustion that took down the app during peak hours\n- I isolated it to a long-running query holding locks, killed it, and the pool cleared in 90 seconds\n- I then added a query timeout and a runbook so the on-call team could handle it without escalation",
+            "theory", "production incident challenge story database connection pool lock resolution",
+            "challenging incident story|production problem you solved|tell me about a difficult situation",
+            "hr-seed,prod-support-seed"
+        ),
+        (
+            "Why should we hire you?",
+            "- I know production support and I've solved the kinds of incidents your team deals with daily\n- I pick up new tools fast and I don't need hand-holding on standard Linux and cloud environments\n- I take ownership — if I commit to something, it gets done",
+            "theory", "why hire you unique value ownership production support linux cloud",
+            "why should we hire you|why hire me interview|what makes you unique interview",
+            "hr-seed"
+        ),
+        # ── PRODUCTION SUPPORT DEEP ──────────────────────────────────────────
+        (
+            "How do you handle a P1 production incident?",
+            "- First I check monitoring dashboards and recent deployments to correlate the timeline\n- I isolate blast radius — is it one service, one region, or all users — then apply the fastest fix\n- After resolution I write an RCA with timeline, root cause, impact, and preventive action",
+            "theory", "P1 incident production support blast radius RCA root cause analysis monitoring",
+            "P1 incident handling|how to handle production incident P1|critical incident process",
+            "prod-support-seed,linux-seed"
+        ),
+        (
+            "How do you troubleshoot high memory usage on a Linux server?",
+            "- `free -h` gives overall memory; `ps aux --sort=-%mem | head` shows top memory consumers\n- `cat /proc/<pid>/status` shows VmRSS for the exact process RSS and swap usage\n- I've caught memory leaks by graphing RSS over time in Grafana and killing the process before OOM fires",
+            "theory", "linux high memory usage free ps aux /proc status RSS swap leak grafana",
+            "high memory linux troubleshoot|linux memory usage investigation|memory leak linux server",
+            "prod-support-seed,linux-seed"
+        ),
+        (
+            "How do you investigate a process that is consuming 100% CPU?",
+            "- `top -H -p <pid>` shows per-thread CPU so I can pinpoint the exact thread\n- `strace -p <pid> -c` samples syscalls to see if it's stuck in a tight loop or IO wait\n- I've found infinite loops in Python workers by dumping a traceback with `kill -USR1`",
+            "theory", "linux 100% cpu process thread strace top -H syscall traceback loop",
+            "100% cpu linux process|investigate high cpu process|thread cpu linux strace",
+            "prod-support-seed,linux-seed"
+        ),
+        (
+            "How do you analyze production logs quickly?",
+            "- `grep -i 'error\\|exception' app.log | tail -200` gets the most recent errors fast\n- `awk '{print $1}' access.log | sort | uniq -c | sort -rn | head` shows top IPs or endpoints\n- I pipe to `less -S` for wide logs and use `zgrep` on rotated `.gz` files without unpacking",
+            "theory", "production logs grep awk tail zgrep less analysis errors exceptions",
+            "analyze production logs|log analysis linux|grep log errors production",
+            "prod-support-seed,linux-seed"
+        ),
+        (
+            "What is log rotation and how do you configure it?",
+            "- Log rotation prevents disk fill-up by archiving old logs and creating fresh ones\n- `/etc/logrotate.d/myapp` defines rotate frequency, compress, and postrotate to reload the service\n- I always set `missingok` and `notifempty` so rotation doesn't fail if the log is missing",
+            "theory", "logrotate log rotation compress archive disk /etc/logrotate.d missingok",
+            "log rotation linux|configure logrotate|logrotate configuration|how logrotate works",
+            "prod-support-seed,linux-seed"
+        ),
+        # ── AUTOSYS ───────────────────────────────────────────────────────────
+        (
+            "What is Autosys?",
+            "- Autosys (CA Workload Automation) is an enterprise job scheduler that automates batch jobs across servers\n- Jobs are defined in JIL (Job Information Language) and can be chained into boxes (job groups)\n- I've used it to schedule file transfers, report generation, and ETL jobs in production",
+            "theory", "autosys CA workload automation job scheduler batch JIL box ETL",
+            "what is autosys|autosys job scheduler|CA workload automation autosys",
+            "autosys-seed"
+        ),
+        (
+            "What is JIL in Autosys?",
+            "- JIL (Job Information Language) is the scripting language used to define Autosys jobs and boxes\n- You write JIL files with attributes like machine, command, start_times, and dependencies\n- I load JIL into Autosys using `jil < myjob.jil` to create or update job definitions",
+            "theory", "autosys JIL job information language job definition attributes box",
+            "what is JIL autosys|autosys JIL syntax|job information language autosys",
+            "autosys-seed"
+        ),
+        (
+            "What are the various job states in Autosys?",
+            "- Key states are RUNNING, SUCCESS, FAILURE, TERMINATED, ON_HOLD, ON_ICE, INACTIVE, and ACTIVATED\n- ON_HOLD pauses a job but keeps it in the schedule; ON_ICE completely deactivates it until manually released\n- I use `autorep -j jobname -s` to check current status and `sendevent` to change states",
+            "theory", "autosys job states running success failure on_hold on_ice inactive terminated",
+            "autosys job status|autosys job states|on_hold on_ice autosys difference",
+            "autosys-seed"
+        ),
+        (
+            "What is the difference between ON_HOLD and ON_ICE in Autosys?",
+            "- ON_HOLD pauses the job so it won't run at its next scheduled time but stays in the queue\n- ON_ICE completely deactivates the job — it won't run at all until you explicitly take it off ice\n- I put jobs ON_HOLD during maintenance windows and ON_ICE when permanently suspending a job",
+            "theory", "autosys ON_HOLD ON_ICE difference deactivate pause maintenance",
+            "on_hold vs on_ice autosys|autosys hold ice difference|put autosys job on hold",
+            "autosys-seed"
+        ),
+        (
+            "What is a Box job in Autosys?",
+            "- A Box is a container job that groups related jobs together and controls their execution flow\n- Jobs inside a box inherit the box's start conditions and run according to their own dependencies\n- I use boxes to group ETL steps so the whole pipeline starts together and fails together",
+            "theory", "autosys box job container group dependency ETL pipeline execution flow",
+            "autosys box job|what is box in autosys|autosys job box container",
+            "autosys-seed"
+        ),
+        (
+            "What are basic Autosys commands?",
+            "- `autorep -j jobname` shows job definition; `autorep -j jobname -s` shows current run status\n- `sendevent -E FORCE_STARTJOB -j jobname` manually triggers a job; `sendevent -E CHANGE_STATUS -s ON_HOLD -j jobname` holds it\n- I use `autostatd` to check the event daemon and `autoping` to verify server connectivity",
+            "theory", "autosys commands autorep sendevent autostatd autoping FORCE_STARTJOB",
+            "autosys basic commands|autorep sendevent commands|autosys command list",
+            "autosys-seed"
+        ),
+        (
+            "How do you monitor Autosys jobs?",
+            "- `autorep -J ALL -s` lists all jobs and their current status across the scheduler\n- `grep -i 'error\\|failed' /var/log/autosys/*.log | grep $(date +%Y-%m-%d)` finds today's failures\n- I also use the Autosys GUI (WCC) to view job flows and drill into failed job output files",
+            "theory", "autosys monitor jobs autorep WCC GUI log grep failed status",
+            "monitor autosys jobs|autosys job monitoring|check autosys job status",
+            "autosys-seed"
+        ),
+        (
+            "How do you run a failed or ON_HOLD Autosys job?",
+            "- `sendevent -E CHANGE_STATUS -s ON_HOLD -j jobname` to put it on hold first if needed\n- `sendevent -E FORCE_STARTJOB -j jobname` to force start a job regardless of its schedule\n- I always check job dependencies with `autorep -j boxname -d` before force-starting to avoid cascade failures",
+            "theory", "autosys run failed job FORCE_STARTJOB sendevent ON_HOLD restart",
+            "run failed autosys job|force start autosys job|restart autosys job on hold",
+            "autosys-seed"
+        ),
+        (
+            "How do you cancel or kill a running Autosys job?",
+            "- `sendevent -E KILLJOB -j jobname` sends a kill signal to the running job process\n- `sendevent -E CHANGE_STATUS -s TERMINATED -j jobname` marks it terminated in the scheduler\n- I use KILLJOB only as a last resort and always check if the underlying process actually stopped",
+            "theory", "autosys kill job KILLJOB sendevent TERMINATED cancel running job",
+            "kill autosys job|cancel running autosys job|autosys KILLJOB command",
+            "autosys-seed"
+        ),
+        (
+            "What is sendevent in Autosys?",
+            "- `sendevent` is the CLI command to send events to the Autosys event server to change job states\n- Common events are FORCE_STARTJOB, KILLJOB, CHANGE_STATUS, JOB_ON_HOLD, and JOB_OFF_HOLD\n- I use it in shell scripts to automate job control based on file arrival or upstream job status",
+            "theory", "autosys sendevent CLI command events FORCE_STARTJOB KILLJOB CHANGE_STATUS",
+            "sendevent autosys|autosys sendevent command|what is sendevent autosys",
+            "autosys-seed"
+        ),
+    ]
+
+    for question, answer, qa_type, keywords, aliases, tags in _QA:
+        norm = normalize_question(question)
+        ts = _nowts()
+        theory_ans = answer if qa_type == "theory" else ""
+        coding_ans = answer if qa_type == "coding" else ""
+        humanized = _build_humanized(theory_ans, coding_ans)
+        with _lock:
+            conn = _get_conn()
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM qa_pairs WHERE normalized_q=?", (norm,)
+                ).fetchone()
+                if not existing:
+                    conn.execute(
+                        """INSERT INTO qa_pairs
+                           (question, normalized_q, answer_theory, answer_coding,
+                            answer_humanized, type, keywords, aliases, tags,
+                            created_at, updated_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        (question, norm, theory_ans, coding_ans, humanized,
+                         qa_type, keywords, aliases, tags, ts, ts)
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
+
+    _invalidate_cache()
+    print(f"[DB] Seeded {len(_QA)} interview Q&A pairs from INTERVIEW_PROMPT.")
+
+
+# ── Humanized answer helpers ───────────────────────────────────────────────────
+
+def _build_humanized(answer_theory: str, answer_coding: str) -> str:
+    """
+    Convert raw bullet-point answer text to spoken-style plain text.
+    Lazy-imports humanize_response from llm_client to avoid circular import at
+    module load time (llm_client itself imports config which is safe).
+    Falls back to a simple inline strip if import fails.
+    """
+    raw = (answer_theory or answer_coding or "").strip()
+    if not raw:
+        return ""
+    try:
+        from llm_client import humanize_response as _hr
+        return _hr(raw)
+    except Exception:
+        # Minimal fallback: strip leading "- " bullet markers only; keep backticks
+        # so the web frontend's renderInline() can style commands as <code>
+        lines = []
+        for line in raw.splitlines():
+            line = line.strip().lstrip("- ").strip()
+            if line:
+                lines.append(line)
+        return " ".join(lines)
+
+
+def _backfill_humanized():
+    """Populate answer_humanized for any rows where it is empty.
+
+    Also re-generates seeded rows where answer_theory contains inline backticks
+    but answer_humanized does not — this detects a stale backfill from the old
+    humanize_response() which stripped backticks (breaking <code> rendering in
+    the web frontend's renderInline()).
+    """
+    with _lock:
+        conn = _get_conn()
+        try:
+            # Rows with empty humanized: always backfill
+            empty_rows = conn.execute(
+                "SELECT id, answer_theory, answer_coding FROM qa_pairs "
+                "WHERE answer_humanized = '' OR answer_humanized IS NULL"
+            ).fetchall()
+            # Stale rows: theory has backtick code but humanized lost them (old bug)
+            stale_rows = conn.execute(
+                "SELECT id, answer_theory, answer_coding FROM qa_pairs "
+                "WHERE answer_theory LIKE '%`%' AND answer_humanized NOT LIKE '%`%' "
+                "AND (answer_humanized != '' AND answer_humanized IS NOT NULL)"
+            ).fetchall()
+        finally:
+            conn.close()
+
+    rows = list(empty_rows) + list(stale_rows)
+    if not rows:
+        return
+
+    updates = []
+    for r in rows:
+        humanized = _build_humanized(r["answer_theory"] or "", r["answer_coding"] or "")
+        if humanized:
+            updates.append((humanized, r["id"]))
+
+    if not updates:
+        return
+
+    with _lock:
+        conn = _get_conn()
+        try:
+            conn.executemany(
+                "UPDATE qa_pairs SET answer_humanized=? WHERE id=?", updates
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    stale_count = len(stale_rows)
+    empty_count = len(empty_rows)
+    if stale_count:
+        print(f"  [DB] Re-generated answer_humanized (backtick fix) for {stale_count} seeded rows")
+    if empty_count:
+        print(f"  [DB] Backfilled answer_humanized for {empty_count} empty rows")
+
+
 # ── User Profile CRUD ─────────────────────────────────────────────────────────
 
-def add_user(name: str, role: str, experience_years: int, resume_text: str = "", 
-             job_description: str = "", self_introduction: str = "") -> int:
+def add_user(name: str, role: str, experience_years: int, resume_text: str = "",
+             job_description: str = "", self_introduction: str = "",
+             key_skills: str = "", custom_instructions: str = "", domain: str = "") -> int:
     ts = _nowts()
     with _lock:
         conn = _get_conn()
         try:
             cur = conn.execute(
-                """INSERT INTO users (name, role, experience_years, resume_text, 
-                   job_description, self_introduction, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (name, role, experience_years, resume_text, job_description, self_introduction, ts)
+                """INSERT INTO users (name, role, experience_years, resume_text,
+                   job_description, self_introduction, key_skills, custom_instructions, domain, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (name, role, experience_years, resume_text, job_description,
+                 self_introduction, key_skills.strip(), custom_instructions.strip(), domain.strip(), ts)
             )
             conn.commit()
             return cur.lastrowid
@@ -409,7 +1248,8 @@ def get_all_users() -> List[Dict]:
 
 def update_user(user_id: int, name: str = None, role: str = None, experience_years: int = None,
                 resume_text: str = None, job_description: str = None, self_introduction: str = None,
-                resume_file: str = None, resume_summary: str = None) -> bool:
+                resume_file: str = None, resume_summary: str = None, resume_path: str = None,
+                key_skills: str = None, custom_instructions: str = None, domain: str = None) -> bool:
     with _lock:
         conn = _get_conn()
         try:
@@ -417,22 +1257,27 @@ def update_user(user_id: int, name: str = None, role: str = None, experience_yea
             if not row:
                 return False
 
+            _row_dict   = dict(row)
             new_name    = name              if name              is not None else row["name"]
             new_role    = role              if role              is not None else row["role"]
             new_exp     = experience_years  if experience_years  is not None else row["experience_years"]
             new_resume  = resume_text       if resume_text       is not None else row["resume_text"]
             new_jd      = job_description   if job_description   is not None else row["job_description"]
             new_intro   = self_introduction if self_introduction is not None else row["self_introduction"]
-            # New columns — fall back to existing value (may be None for old rows)
-            _row_dict   = dict(row)
             new_rf      = resume_file    if resume_file    is not None else _row_dict.get("resume_file",    "")
             new_rs      = resume_summary if resume_summary is not None else _row_dict.get("resume_summary", "")
+            new_rp      = resume_path    if resume_path    is not None else _row_dict.get("resume_path",    "")
+            new_ks = key_skills           if key_skills           is not None else (row["key_skills"] if "key_skills" in row.keys() else '')
+            new_ci = custom_instructions  if custom_instructions  is not None else (row["custom_instructions"] if "custom_instructions" in row.keys() else '')
+            new_dm = domain               if domain               is not None else (row["domain"] if "domain" in row.keys() else '')
+            ts = _nowts()
 
             conn.execute(
                 """UPDATE users SET name=?, role=?, experience_years=?, resume_text=?,
-                   job_description=?, self_introduction=?, resume_file=?, resume_summary=?
-                   WHERE id=?""",
-                (new_name, new_role, new_exp, new_resume, new_jd, new_intro, new_rf, new_rs, user_id)
+                   job_description=?, self_introduction=?, resume_file=?, resume_summary=?, resume_path=?,
+                   key_skills=?, custom_instructions=?, domain=?, updated_at=? WHERE id=?""",
+                (new_name, new_role, new_exp, new_resume, new_jd, new_intro, new_rf, new_rs, new_rp,
+                 new_ks, new_ci, new_dm, ts, user_id)
             )
             conn.commit()
             return True
@@ -444,119 +1289,6 @@ def delete_user(user_id: int) -> bool:
         conn = _get_conn()
         try:
             cur = conn.execute("DELETE FROM users WHERE id=?", (user_id,))
-            conn.commit()
-            return cur.rowcount > 0
-        finally:
-            conn.close()
-
-
-# ── Access Key CRUD ───────────────────────────────────────────────────────────
-
-import secrets as _secrets
-
-
-def create_access_key(user_id: int, label: str = '') -> Optional[str]:
-    """Generate a new access key for a user. Returns the key string or None."""
-    key = 'dk-' + _secrets.token_hex(8)  # e.g. dk-a3f9c271b8e2c415
-    with _lock:
-        conn = _get_conn()
-        try:
-            # Verify user exists
-            if not conn.execute("SELECT 1 FROM users WHERE id=?", (user_id,)).fetchone():
-                return None
-            conn.execute(
-                "INSERT INTO access_keys (user_id, key, label, is_active, created_at) "
-                "VALUES (?, ?, ?, 1, ?)",
-                (user_id, key, label or '', time.time())
-            )
-            conn.commit()
-            return key
-        finally:
-            conn.close()
-
-
-def get_user_by_key(key: str) -> Optional[Dict]:
-    """Look up user by access key. Returns user dict if key is active, else None."""
-    if not key or not key.startswith('dk-'):
-        return None
-    conn = _get_conn()
-    try:
-        row = conn.execute(
-            "SELECT ak.id as key_id, ak.key, ak.user_id, ak.label, ak.is_active, "
-            "u.id, u.name, u.role, u.experience_years, u.resume_text, u.job_description, "
-            "u.self_introduction, u.resume_file, u.resume_summary "
-            "FROM access_keys ak JOIN users u ON ak.user_id = u.id "
-            "WHERE ak.key=? AND ak.is_active=1",
-            (key,)
-        ).fetchone()
-        if row:
-            # Update last_used_at in background
-            key_id = row['key_id']
-            threading.Thread(target=update_key_last_used, args=(key_id,), daemon=True).start()
-            return dict(row)
-    finally:
-        conn.close()
-    return None
-
-
-def update_key_last_used(key_id: int):
-    """Update last_used_at timestamp for an access key."""
-    try:
-        conn = _get_conn()
-        conn.execute("UPDATE access_keys SET last_used_at=? WHERE id=?", (time.time(), key_id))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-
-def get_keys_for_user(user_id: int) -> List[Dict]:
-    """Return all access keys for a user."""
-    conn = _get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT id, key, label, is_active, created_at, last_used_at "
-            "FROM access_keys WHERE user_id=? ORDER BY created_at DESC",
-            (user_id,)
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def get_all_access_keys() -> List[Dict]:
-    """Return all access keys with user names (for admin view)."""
-    conn = _get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT ak.id, ak.key, ak.label, ak.is_active, ak.created_at, ak.last_used_at, "
-            "u.id as user_id, u.name as user_name, u.role as user_role "
-            "FROM access_keys ak JOIN users u ON ak.user_id = u.id "
-            "ORDER BY ak.created_at DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def delete_access_key(key_id: int) -> bool:
-    """Permanently delete an access key."""
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.execute("DELETE FROM access_keys WHERE id=?", (key_id,))
-            conn.commit()
-            return cur.rowcount > 0
-        finally:
-            conn.close()
-
-
-def revoke_access_key(key_id: int) -> bool:
-    """Disable an access key without deleting it."""
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.execute("UPDATE access_keys SET is_active=0 WHERE id=?", (key_id,))
             conn.commit()
             return cur.rowcount > 0
         finally:
@@ -577,6 +1309,7 @@ def add_prepared_question(role: str, question: str, prepared_answer: str) -> int
             return cur.lastrowid
         finally:
             conn.close()
+    _invalidate_cache()  # Invalidate prepared cache so new question is picked up
 
 def get_all_questions() -> List[Dict]:
     with _lock:
@@ -618,51 +1351,61 @@ def get_stats() -> Dict:
             conn.close()
 
 
+def _get_prepared_cache(role: str) -> List:
+    """Build/return in-memory cache for a role's prepared questions. O(1) on warm."""
+    global _prepared_cache
+    if role in _prepared_cache:
+        return _prepared_cache[role]
+    with _lock:
+        conn = _get_conn()
+        try:
+            if role:
+                rows = conn.execute(
+                    "SELECT id, question, prepared_answer FROM questions WHERE role=?", (role,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, question, prepared_answer FROM questions"
+                ).fetchall()
+        finally:
+            conn.close()
+    cache = []
+    for r in rows:
+        norm_q = normalize_question(r["question"])
+        q_toks = frozenset(_tokens(norm_q))
+        cache.append((r["id"], norm_q, q_toks, r["prepared_answer"]))
+    _prepared_cache[role] = cache
+    return cache
+
+
 def find_prepared_answer(question: str, role: str = None) -> Optional[Tuple[str, float, int]]:
-    """
-    Search specifically in the new 'questions' table with role filtering.
-    """
+    """Search the 'questions' table with role filtering using in-memory cache."""
     norm_input = normalize_question(question)
     input_toks = frozenset(_tokens(norm_input))
     if not input_toks:
         return None
 
-    with _lock:
-        conn = _get_conn()
-        try:
-            if role:
-                rows = conn.execute("SELECT * FROM questions WHERE role=?", (role,)).fetchall()
-            else:
-                rows = conn.execute("SELECT * FROM questions").fetchall()
-        finally:
-            conn.close()
+    cache = _get_prepared_cache(role or "")
 
     best_score = 0.0
     best_answer = None
     best_id = None
 
-    for r in rows:
-        norm_q = normalize_question(r["question"])
+    for qid, norm_q, q_toks, answer in cache:
         if norm_input == norm_q:
-            return r["prepared_answer"], 1.0, r["id"]
-        
-        q_toks = frozenset(_tokens(norm_q))
+            return answer, 1.0, qid
         if not q_toks:
             continue
-            
         score = len(input_toks & q_toks) / len(input_toks | q_toks)
-        
         if input_toks <= q_toks:
             score = max(score, MATCH_THRESHOLD + 0.05)
-            
         if score > best_score:
             best_score = score
-            best_answer = r["prepared_answer"]
-            best_id = r["id"]
+            best_answer = answer
+            best_id = qid
 
     if best_score >= MATCH_THRESHOLD:
         return best_answer, best_score, best_id
-    
     return None
 
 
@@ -790,8 +1533,10 @@ def _score_against(norm_input: str, norm_stored: str,
         score = _jaccard(input_toks, stored_toks)
 
         # Boost A: all input tokens found in stored text → confident short query
+        # Inversely weighted by stored length so shorter/more-specific matches score higher
         if input_toks <= stored_toks:
-            score = max(score, MATCH_THRESHOLD + 0.05)
+            boost_a = MATCH_THRESHOLD + 0.05 + (len(input_toks) / max(len(stored_toks), 1)) * 0.15
+            score = max(score, boost_a)
 
         # Boost B: keyword hits — only when no query token is completely foreign
         # (prevents "merge sort" from boosting into "bubble sort" via shared "sort" keyword)
@@ -826,16 +1571,27 @@ def _score_against(norm_input: str, norm_stored: str,
 
 # ── Lookup ────────────────────────────────────────────────────────────────────
 
-def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, float, int]]:
+def find_answer(question: str, want_code: bool = False,
+                user_role: str = "", company: str = "", role_tag: str = "") -> Optional[Tuple[str, float, int]]:
     """
     Search DB for a matching Q&A pair.
     Returns (answer_text, score, qa_id) or None.
     want_code=True  → prefer answer_coding
     want_code=False → prefer answer_theory
+    user_role       → if provided, also checks the role-filtered questions table first
+
+    Search order:
+      1. Role-specific questions table (if user_role provided) — highest priority
+      2. General qa_pairs table (in-memory Jaccard scoring cache)
 
     Uses pre-tokenized in-memory cache: pure set math, no per-call tokenization on stored rows.
     Only the winning row's answer text is fetched from DB.
     """
+    # Priority 1: role-specific prepared answers
+    if user_role:
+        role_result = find_prepared_answer(question, role=user_role)
+        if role_result:
+            return role_result
     norm_input = normalize_question(question)
     if not norm_input:
         return None
@@ -846,6 +1602,7 @@ def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, f
 
     best_score = 0.0
     best_id = None
+    best_q_toks = frozenset()  # track winner's tokens — avoids second O(n) scan below
 
     with _lock:
         cache = _get_score_cache()
@@ -862,8 +1619,10 @@ def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, f
                 score = len(inter) / len(input_toks | q_toks)
 
                 # Boost A: all input tokens found in stored tokens
+                # Score inversely weighted by stored length — prefers specific matches
                 if input_toks <= q_toks:
-                    score = max(score, MATCH_THRESHOLD + 0.05)
+                    boost_a = MATCH_THRESHOLD + 0.05 + (len(input_toks) / max(len(q_toks), 1)) * 0.15
+                    score = max(score, boost_a)
 
                 # Boost B: keyword hits with no foreign tokens
                 if kw_toks:
@@ -887,7 +1646,8 @@ def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, f
                     a_inter = input_toks & a_toks
                     a_score = len(a_inter) / len(input_toks | a_toks)
                     if input_toks <= a_toks:
-                        a_score = max(a_score, MATCH_THRESHOLD + 0.05)
+                        boost_a = MATCH_THRESHOLD + 0.05 + (len(input_toks) / max(len(a_toks), 1)) * 0.15
+                        a_score = max(a_score, boost_a)
                     if kw_toks:
                         foreign = input_toks - (a_toks | kw_toks)
                         kw_hits = len(input_toks & kw_toks)
@@ -901,6 +1661,7 @@ def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, f
         if score > best_score:
             best_score = score
             best_id = row_id
+            best_q_toks = q_toks  # capture winner inline — no second scan needed
             if best_score >= 1.0:
                 break  # exact match, stop early
 
@@ -910,29 +1671,55 @@ def find_answer(question: str, want_code: bool = False) -> Optional[Tuple[str, f
     # Short-query guard: queries with very few meaningful tokens get inflated scores via
     # keyword/alias boosts despite semantic mismatch.
     # e.g. "What is system load?" → only "load" token → falsely hits "Load Balancer" entries.
-    # e.g. "What is the basic Linux commands?" → only {command, linux} → falsely hits port-check entries.
-    # For short queries, only accept near-exact matches (prevent boost inflation).
-    if len(input_toks) <= 1 and best_score < 0.99:
-        return None  # 1-token query: only exact normalized match
-    if len(input_toks) == 2 and best_score < 0.92:
-        return None  # 2-token query: require very high confidence
+    # Exception: if ALL input tokens are contained in the winning stored question (Boost A),
+    # the match is semantically valid even at lower score — the query is a subset of the topic.
+    _all_contained = bool(best_q_toks) and input_toks <= best_q_toks
 
-    # Fetch only the winner's answer text (one row by ID)
-    with _lock:
-        conn = _get_conn()
-        try:
-            row = conn.execute(
-                "SELECT answer_theory, answer_coding FROM qa_pairs WHERE id=?", (best_id,)
-            ).fetchone()
-        finally:
-            conn.close()
+    if len(input_toks) <= 1 and best_score < 0.99:
+        # Allow 1-token queries only when the token is confirmed inside a specific stored question
+        # (Boost A fired: input_toks ⊆ stored_toks). Prevents generic words from false-matching.
+        if not (_all_contained and len(best_q_toks) <= 3):
+            return None
+    if len(input_toks) == 2 and best_score < 0.80 and not _all_contained:
+        return None  # 2-token query: require confidence unless tokens fully contained
+
+    # Fetch only the winner's answer text + tags for company/role boost
+    # Uses thread-local read connection — no open/close overhead on the hot path
+    conn = _get_read_conn()
+    row = conn.execute(
+        "SELECT answer_theory, answer_coding, answer_humanized, company, role_tag, tags "
+        "FROM qa_pairs WHERE id=?",
+        (best_id,)
+    ).fetchone()
+
+    # Company / role_tag boost: +10% if entry matches user's company or role
+    if row and (company or role_tag):
+        _row_company = (row["company"] or "").lower()
+        _row_role    = (row["role_tag"] or "").lower()
+        _row_tags    = (row["tags"] or "").lower()
+        _boost = 0.0
+        if company and company.lower() in (_row_company + ' ' + _row_tags):
+            _boost += 0.10
+        if role_tag and role_tag.lower() in (_row_role + ' ' + _row_tags):
+            _boost += 0.08
+        if _boost:
+            best_score = min(1.0, best_score + _boost)
 
     if not row:
         return None
 
-    theory_ans = (row["answer_theory"] or "").strip()
-    coding_ans  = (row["answer_coding"]  or "").strip()
-    answer = (coding_ans or theory_ans) if want_code else (theory_ans or coding_ans)
+    humanized  = (row["answer_humanized"] or "").strip()
+    theory_ans = (row["answer_theory"]    or "").strip()
+    coding_ans = (row["answer_coding"]    or "").strip()
+
+    # For code requests return raw coding answer (code blocks must stay intact);
+    # humanized is derived from theory text and should not replace actual code.
+    if want_code and coding_ans:
+        answer = coding_ans
+    elif humanized:
+        answer = humanized
+    else:
+        answer = theory_ans or coding_ans
 
     if not answer:
         return None
@@ -959,25 +1746,31 @@ def _nowts() -> str:
 
 def add_qa(question: str, answer_theory: str = "", answer_coding: str = "",
            qa_type: str = "theory", keywords: str = "", aliases: str = "",
-           tags: str = "") -> int:
+           tags: str = "", company: str = "", role_tag: str = "") -> int:
     """Insert a new Q&A pair. Returns new row id."""
     norm = normalize_question(question)
     ts = _nowts()
+    humanized = _build_humanized(answer_theory.strip(), answer_coding.strip())
     with _lock:
         conn = _get_conn()
         try:
             cur = conn.execute(
                 """INSERT INTO qa_pairs
-                   (question, normalized_q, answer_theory, answer_coding,
-                    type, keywords, aliases, tags, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                   (question, normalized_q, answer_theory, answer_coding, answer_humanized,
+                    type, keywords, aliases, tags, company, role_tag, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (question.strip(), norm,
-                 answer_theory.strip(), answer_coding.strip(),
-                 qa_type, keywords.strip(), aliases.strip(), tags.strip(), ts, ts)
+                 answer_theory.strip(), answer_coding.strip(), humanized,
+                 qa_type, keywords.strip(), aliases.strip(), tags.strip(),
+                 company.strip(), role_tag.strip(), ts, ts)
             )
             conn.commit()
-            _invalidate_cache()
-            return cur.lastrowid
+            new_id = cur.lastrowid
+            # Incremental cache update: append without full rebuild
+            # (only invalidate prepared_cache — role-specific table is unaffected by qa_pairs inserts)
+            _append_to_cache(new_id, norm, keywords.strip(), aliases.strip())
+            _prepared_cache.clear()
+            return new_id
         finally:
             conn.close()
 
@@ -1001,10 +1794,12 @@ def update_qa(qa_id: int, question: str = None, answer_theory: str = None,
             new_kw      = keywords.strip()       if keywords      is not None else row["keywords"]
             new_aliases = aliases.strip()        if aliases       is not None else (row["aliases"] or "")
             new_tags    = tags.strip()           if tags          is not None else (row["tags"] or "")
+            new_humanized = _build_humanized(new_theory, new_coding)
             conn.execute(
                 """UPDATE qa_pairs SET question=?, normalized_q=?, answer_theory=?,
-                   answer_coding=?, type=?, keywords=?, aliases=?, tags=?, updated_at=? WHERE id=?""",
-                (new_q, new_norm, new_theory, new_coding,
+                   answer_coding=?, answer_humanized=?, type=?, keywords=?, aliases=?,
+                   tags=?, updated_at=? WHERE id=?""",
+                (new_q, new_norm, new_theory, new_coding, new_humanized,
                  new_type, new_kw, new_aliases, new_tags, ts, qa_id)
             )
             conn.commit()

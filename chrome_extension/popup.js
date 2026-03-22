@@ -1,12 +1,26 @@
 // BASE URL loaded from storage — supports both local and Render.com
-let BASE = 'http://localhost:8000';
-let SECRET_CODE = '';
-let isOnline = false;
-let lastHash = '';
-let pollTimer = null;
+let BASE = 'https://particulate-arely-unrenovative.ngrok-free.dev';
+
+// ── Ngrok bypass header (required when tunnelled via ngrok) ───────────────────
+const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
+
+/** Drop-in fetch() that always sends the ngrok bypass header */
+function apiFetch(url, opts = {}) {
+  return fetch(url, {
+    ...opts,
+    headers: { ...NGROK_HEADERS, ...(opts.headers || {}) },
+  });
+}
+
+let SECRET_CODE  = '';
+let USER_TOKEN   = '';   // per-user token set in Settings
+let isOnline     = false;
+let lastHash     = '';
+let pollTimer    = null;
 let serverOnline = false;
-let typingState = 'idle';
-let capturing = false;
+let typingState  = 'idle';
+let _activeTab   = 'monitor';
+let _lastAnswers  = [];
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
 function switchTab(tab) {
@@ -14,56 +28,59 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
   document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+  _activeTab = tab;
 
   if (tab === 'coder') {
     fetchLatestAnswer();   // Always refresh slot list when switching to Coder tab
     loadTypingState();
+  } else if (tab === 'monitor') {
+    poll(); // Refresh feed when switching to Monitor tab
+    initMonitorTab();
   }
 }
 
-// ── Bootstrap — load settings then start polling ──────────────────────────────
-chrome.storage.sync.get({ serverUrl: 'http://localhost:8000', secretCode: '' }, (data) => {
-  BASE        = (data.serverUrl || 'http://localhost:8000').replace(/\/$/, '');
+// ── Bootstrap — load settings ──────────────────────────────
+chrome.storage.sync.get({
+  serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev',
+  secretCode: '',
+  userToken: '',
+}, (data) => {
+  BASE        = (data.serverUrl || 'https://particulate-arely-unrenovative.ngrok-free.dev').replace(/\/$/, '');
   SECRET_CODE = data.secretCode || '';
-  poll();
-  pollTimer = setInterval(poll, 1500);
-  checkScanChatAvailable();
+  USER_TOKEN  = data.userToken  || '';
+  poll(); // Initial poll on open
   loadSettingsForm();
+  updatePortalCard();
+  if (USER_TOKEN) loadUserIdentity(USER_TOKEN);
 });
 
-// Listen for capture status / answers from background
+// Listen for messages from background
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'CAPTURE_STATUS') {
-    updateCaptureStatus(msg.status);
-  }
   if (msg.type === 'SERVER_MESSAGE' && msg.data) {
     const d = msg.data;
     if (d.type === 'answer') showToast('Answer received!', 'ok');
-    if (d.type === 'transcript') {
-      document.getElementById('askStatus').textContent = `Heard: "${d.text}"`;
-      document.getElementById('askStatus').className = 'ask-status gen';
-    }
-    if (d.type === 'connected' && d.mobile_url) {
-      showMobileUrl(d.mobile_url);
-    }
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// INTERVIEW TAB
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ── Single poll: check server + refresh answers ───────────────────────────────
+// ── Single poll: check server online + refresh coder answers ─────────────────
+// Monitor tab no longer loads answers (open the web dashboard instead).
 async function poll() {
   try {
-    const r = await fetch(`${BASE}/api/answers`, { signal: AbortSignal.timeout(2500) });
+    const r = await apiFetch(`${BASE}/health`, { signal: AbortSignal.timeout(2500) });
     if (!r.ok) { setOnline(false); return; }
-    const answers = await r.json();
     setOnline(true);
-    const hash = JSON.stringify(answers.slice(0, 5).map(a => a.answer?.slice(-40) + a.is_complete));
-    if (hash !== lastHash) {
-      lastHash = hash;
-      renderFeed(answers);
+    // Only refresh answers when Coder tab is open
+    if (_activeTab === 'coder') {
+      const answersUrl = USER_TOKEN
+        ? `${BASE}/api/answers?user_token=${encodeURIComponent(USER_TOKEN)}`
+        : `${BASE}/api/answers`;
+      const ar = await apiFetch(answersUrl, { signal: AbortSignal.timeout(2500) });
+      if (ar.ok) {
+        const answers = await ar.json();
+        _lastAnswers = answers || [];
+        const hash = JSON.stringify(answers.slice(0, 5).map(a => a.answer?.slice(-40) + a.is_complete));
+        if (hash !== lastHash) { lastHash = hash; showLatestAnswer(answers); }
+      }
     }
   } catch (_) {
     setOnline(false);
@@ -78,116 +95,54 @@ function setOnline(online) {
   const txt = document.getElementById('statusTxt');
   dot.classList.toggle('offline', !online);
   txt.textContent = online ? 'Server Online' : 'Server Offline';
-  document.getElementById('askBtn').disabled = !online;
-  checkScanChatAvailable();
-  // Sync Code Typer server status indicator if visible
-  setCoderServerStatus(online);
 }
 
-// ── Scan Chat button ──────────────────────────────────────────────────────────
-async function checkScanChatAvailable() {
+// ── Portal card ───────────────────────────────────────────────────────────────
+
+function updatePortalCard() {
+  const card = document.getElementById('portalCard');
+  const hint = document.getElementById('noTokenHint');
+  const link = document.getElementById('portalLink');
+  const chip = document.getElementById('portalTokenChip');
+  if (!card || !hint) return;
+
+  if (USER_TOKEN) {
+    card.style.display = '';
+    hint.style.display = 'none';
+    if (link) link.href = `${BASE}/portal/${encodeURIComponent(USER_TOKEN)}`;
+    if (chip) chip.textContent = USER_TOKEN;
+    // Reset name/role to loading state
+    const nameEl = document.getElementById('portalUserName');
+    const roleEl = document.getElementById('portalUserRole');
+    if (nameEl) nameEl.textContent = 'Loading...';
+    if (roleEl) roleEl.textContent = '';
+  } else {
+    card.style.display = 'none';
+    hint.style.display = '';
+  }
+}
+
+async function loadUserIdentity(token) {
+  if (!token) return;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const url = tab?.url || '';
-    const isSupported = url.includes('meet.google.com') || url.includes('teams.microsoft.com') || url.includes('teams.live.com');
-    document.getElementById('scanChatBtn').disabled = !(isOnline && isSupported);
-    const countEl = document.getElementById('chatCount');
-    if (isSupported) {
-      try {
-        const r = await fetch(`${BASE}/api/chat_questions`, { signal: AbortSignal.timeout(1500) });
-        const d = await r.json();
-        countEl.textContent = d.count > 0
-          ? `${d.count} chat question${d.count !== 1 ? 's' : ''} captured this session`
-          : 'No chat questions captured yet';
-      } catch { countEl.textContent = ''; }
-    } else {
-      countEl.textContent = isOnline ? 'Open Google Meet or Teams to scan chat' : '';
-    }
-  } catch { }
+    const r = await apiFetch(`${BASE}/api/ext_users/${encodeURIComponent(token)}/settings`,
+      { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) { _setPortalIdentity(token, ''); return; }
+    const d = await r.json();
+    _setPortalIdentity(d.name || token, d.role || '');
+    // Also update portal link with correct base
+    const link = document.getElementById('portalLink');
+    if (link) link.href = `${BASE}/portal/${encodeURIComponent(token)}`;
+  } catch (_) {
+    _setPortalIdentity(token, '');
+  }
 }
 
-// ── Render Q&A feed ───────────────────────────────────────────────────────────
-function renderFeed(answers) {
-  const feed = document.getElementById('qaFeed');
-  const empty = document.getElementById('emptyMsg');
-
-  if (!answers || answers.length === 0) {
-    empty.style.display = '';
-    feed.querySelectorAll('.qa-card').forEach(el => el.remove());
-    return;
-  }
-  empty.style.display = 'none';
-
-  const shown = answers.slice(0, 5);
-  feed.querySelectorAll('.qa-card').forEach(el => el.remove());
-
-  shown.forEach((item, idx) => {
-    const card = document.createElement('div');
-    card.className = 'qa-card' + (idx === 0 ? ' latest' : '');
-
-    const src = (item.metrics && item.metrics.source) || '';
-    const isDb  = src.startsWith('db-');
-    const isGen = !item.is_complete;
-    let badgeCls = isDb ? 'db' : (isGen ? 'gen' : 'api');
-    let badgeTxt = isDb ? 'DB' : (isGen ? 'GEN' : 'API');
-    if (!item.is_complete) { card.classList.add('streaming'); card.classList.remove('latest'); }
-
-    const qText  = (item.question || '').trim();
-    const ansText = (item.answer || '').trim();
-
-    let ansHtml = '';
-    if (!item.is_complete) {
-      ansHtml = ansText
-        ? `<div class="ans-text">${esc(ansText)}</div>`
-        : `<div class="thinking">Generating answer</div>`;
-    } else {
-      ansHtml = formatAnswer(ansText);
-    }
-
-    card.innerHTML = `
-      <div class="card-top">
-        <span class="src-badge ${badgeCls}">${badgeTxt}</span>
-        <span class="q-text">${esc(qText)}</span>
-        <button class="copy-btn" data-ans="${esc(ansText)}" title="Copy answer">Copy</button>
-      </div>
-      <div class="ans-wrap">${ansHtml}</div>`;
-
-    feed.appendChild(card);
-  });
-
-  feed.scrollTop = 0;
-
-  feed.querySelectorAll('.copy-btn').forEach(btn => {
-    btn.addEventListener('click', () => copyText(btn.dataset.ans, btn));
-  });
-}
-
-function formatAnswer(text) {
-  if (!text) return '';
-
-  const codeMatch = text.match(/```[\w]*\n?([\s\S]*?)```/);
-  if (codeMatch) {
-    const pre  = text.slice(0, codeMatch.index).trim();
-    const code = codeMatch[1].trim();
-    const post = text.slice(codeMatch.index + codeMatch[0].length).trim();
-    let out = '';
-    if (pre)  out += formatAnswer(pre);
-    out += `<pre class="ans-code">${esc(code)}</pre>`;
-    if (post) out += formatAnswer(post);
-    return out;
-  }
-
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const bulletLines = lines.filter(l => l.startsWith('- ') || l.startsWith('• ') || l.startsWith('* '));
-  if (bulletLines.length >= 2 && bulletLines.length >= lines.length * 0.6) {
-    const items = lines.map(l => {
-      const clean = l.replace(/^[-•*]\s+/, '');
-      return `<li>${esc(clean)}</li>`;
-    });
-    return `<ul class="ans-bullets">${items.join('')}</ul>`;
-  }
-
-  return `<div class="ans-text">${esc(text)}</div>`;
+function _setPortalIdentity(name, role) {
+  const nameEl = document.getElementById('portalUserName');
+  const roleEl = document.getElementById('portalUserRole');
+  if (nameEl) nameEl.textContent = name || USER_TOKEN;
+  if (roleEl) roleEl.textContent = role || (role === '' ? 'Interview Candidate' : role);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -206,189 +161,69 @@ async function copyText(text, btn) {
     btn.textContent = 'Copied!';
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
-  } catch (_) {}
+  } catch (_) { }
 }
 
-// ── Quick Ask ─────────────────────────────────────────────────────────────────
-async function sendQuestion() {
-  const input  = document.getElementById('askInput');
-  const btn    = document.getElementById('askBtn');
-  const status = document.getElementById('askStatus');
-  const q = input.value.trim();
-  if (!q || !isOnline) return;
+function formatAnswer(text) {
+  if (!text) return '';
 
-  btn.disabled = true;
-  btn.textContent = '...';
-  status.textContent = 'Sending...';
-  status.className = 'ask-status gen';
+  const codeMatch = text.match(/```[\w]*\n?([\s\S]*?)```/);
+  if (codeMatch) {
+    const pre = text.slice(0, codeMatch.index).trim();
+    const code = codeMatch[1].trim();
+    const post = text.slice(codeMatch.index + codeMatch[0].length).trim();
+    let out = '';
+    if (pre) out += formatAnswer(pre);
+    out += `<pre class="ans-code">${esc(code)}</pre>`;
+    if (post) out += formatAnswer(post);
+    return out;
+  }
 
-  try {
-    const r = await fetch(`${BASE}/api/cc_question`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, source: 'chat' }),
-      signal: AbortSignal.timeout(20000)
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const bulletLines = lines.filter(l => l.startsWith('- ') || l.startsWith('• ') || l.startsWith('* '));
+  if (bulletLines.length >= 2 && bulletLines.length >= lines.length * 0.6) {
+    const items = lines.map(l => {
+      const clean = l.replace(/^[-•*]\s+/, '');
+      return `<li>${esc(clean)}</li>`;
     });
-    const d = await r.json();
-
-    if (d.status === 'answered' || d.status === 'processing') {
-      const src = d.source || '';
-      const label = src.startsWith('db-') ? 'DB hit' : 'API';
-      status.textContent = `✓ Sent (${label})`;
-      status.className = 'ask-status ok';
-      input.value = '';
-      await poll();
-    } else if (d.status === 'rejected') {
-      status.textContent = `Rejected: ${d.reason || 'not an interview question'}`;
-      status.className = 'ask-status err';
-    } else if (d.status === 'duplicate') {
-      status.textContent = 'Already answered above';
-      status.className = 'ask-status ok';
-    } else {
-      status.textContent = d.error || d.message || 'Queued for processing';
-      status.className = 'ask-status gen';
-    }
-  } catch (e) {
-    if (e.name === 'TimeoutError') {
-      status.textContent = 'Sent — answer generating...';
-      status.className = 'ask-status gen';
-      input.value = '';
-    } else {
-      status.textContent = 'Error: ' + e.message;
-      status.className = 'ask-status err';
-    }
-  } finally {
-    btn.disabled = !isOnline;
-    btn.textContent = 'Ask';
-    setTimeout(() => { status.textContent = ''; status.className = 'ask-status'; }, 5000);
+    return `<ul class="ans-bullets">${items.join('')}</ul>`;
   }
+
+  return `<div class="ans-text">${esc(text)}</div>`;
 }
-
-document.getElementById('askBtn').addEventListener('click', sendQuestion);
-document.getElementById('askInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendQuestion();
-});
-
-// ── Footer buttons ────────────────────────────────────────────────────────────
-document.getElementById('btnOpen').addEventListener('click', () => {
-  chrome.tabs.create({ url: `${BASE}/` });
-  window.close();
-});
-document.getElementById('btnExport').addEventListener('click', () => {
-  chrome.tabs.create({ url: `${BASE}/api/session_export` });
-});
-document.getElementById('btnQB').addEventListener('click', () => {
-  chrome.tabs.create({ url: `${BASE}/questions` });
-  window.close();
-});
-
-// ── QR Code for mobile ────────────────────────────────────────────────────────
-document.getElementById('btnQR').addEventListener('click', async () => {
-  const section = document.getElementById('qrSection');
-  if (section.classList.contains('visible')) {
-    section.classList.remove('visible');
-    return;
-  }
-  try {
-    const r = await fetch(`${BASE}/api/local_url`, { signal: AbortSignal.timeout(2000) });
-    const d = await r.json();
-    const url = d.url;
-    document.getElementById('qrUrl').textContent = url;
-    // Use QR server API to generate code image
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}&format=png&margin=4`;
-    document.getElementById('qrImg').src = qrApiUrl;
-    section.classList.add('visible');
-  } catch (e) {
-    showToast('Server offline', 'err');
-  }
-});
-
-document.getElementById('qrClose').addEventListener('click', () => {
-  document.getElementById('qrSection').classList.remove('visible');
-});
-
-// ── Scan Chat Now ─────────────────────────────────────────────────────────────
-document.getElementById('scanChatBtn').addEventListener('click', async () => {
-  const btn    = document.getElementById('scanChatBtn');
-  const status = document.getElementById('scanStatus');
-  btn.disabled = true;
-  btn.textContent = 'Scanning...';
-  status.textContent = '';
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) throw new Error('No active tab');
-
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'scan_chat' });
-    const count = response?.count ?? 0;
-
-    status.textContent = `Found ${count} msg${count !== 1 ? 's' : ''}`;
-    status.style.color = count > 0 ? '#4ade80' : '#64748b';
-
-    await checkScanChatAvailable();
-    await poll();
-  } catch (e) {
-    status.textContent = e.message?.includes('Could not establish connection')
-      ? 'No chat panel open'
-      : 'Error: ' + (e.message || 'unknown');
-    status.style.color = '#f87171';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '📥 Scan Chat Now';
-    setTimeout(() => { status.textContent = ''; status.style.color = ''; }, 4000);
-  }
-});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CODE TYPER TAB
 // ══════════════════════════════════════════════════════════════════════════════
 
-function setCoderServerStatus(online) {
-  // No separate server indicator in Code Typer tab — shared header dot handles it
-}
-
-async function checkServer() {
-  try {
-    const r = await fetch(`${BASE}/api/answers`, { signal: AbortSignal.timeout(2000) });
-    if (r.ok) {
-      serverOnline = true;
-      const answers = await r.json();
-      showLatestAnswer(answers);
-      return;
-    }
-  } catch (_) {}
-  serverOnline = false;
-  document.getElementById('apContent').innerHTML =
-    '<div class="ap-empty">🔴 Server offline — start the Drishi Pro</div>';
-}
-
 async function fetchLatestAnswer() {
   const btn = document.getElementById('apFetch');
   btn.textContent = '↻ Loading...';
   try {
-    const r = await fetch(`${BASE}/api/answers`, { signal: AbortSignal.timeout(3000) });
+    const answersUrl = USER_TOKEN
+      ? `${BASE}/api/answers?user_token=${encodeURIComponent(USER_TOKEN)}`
+      : `${BASE}/api/answers`;
+    const r = await apiFetch(answersUrl, { signal: AbortSignal.timeout(3000) });
     if (r.ok) {
       const answers = await r.json();
       showLatestAnswer(answers);
       btn.textContent = '↻ Refreshed!';
-      setTimeout(() => { btn.textContent = '↻ Refresh from server'; }, 1500);
+      setTimeout(() => { btn.textContent = '↻ Refresh slots'; }, 1500);
       return;
     }
-  } catch (_) {}
-  btn.textContent = '↻ Refresh from server';
+  } catch (_) { }
+  btn.textContent = '↻ Refresh slots';
   document.getElementById('apContent').innerHTML =
-    '<div class="ap-empty">🔴 Server offline — start the Drishi Pro</div>';
-  showToast('Server offline', 'err');
+    '<div class="ap-empty">🔴 Server offline</div>';
 }
 
 function showLatestAnswer(answers) {
   const el = document.getElementById('apContent');
   if (!answers || answers.length === 0) {
-    el.innerHTML = '<div class="ap-empty">No questions yet — ask something in Meet Chat</div>';
+    el.innerHTML = '<div class="ap-empty">No questions yet — waiting for interview</div>';
     return;
   }
 
-  // Show all completed answers as numbered slots
   const completed = [...answers].reverse().filter(a => a.is_complete && a.answer);
   if (completed.length === 0) {
     el.innerHTML = '<div class="ap-empty">No completed answers yet</div>';
@@ -398,7 +233,7 @@ function showLatestAnswer(answers) {
   const items = completed.map((a, i) => {
     const slotNum = i + 1;
     const q = (a.question || '').slice(0, 46) + (a.question && a.question.length > 46 ? '…' : '');
-    const hasCode = a.answer.includes('def ') || a.answer.includes('class ') || a.answer.includes('```');
+    const hasCode = a.answer.includes('def ') || a.answer.includes('```');
     const icon = hasCode ? '⌨' : '💬';
     return `<div class="slot-row" title="${escHtml(a.question || '')}">
       <span class="slot-num">#${slotNum}</span>
@@ -412,7 +247,7 @@ function showLatestAnswer(answers) {
 
 function initWpmSlider() {
   const slider = document.getElementById('wpmSlider');
-  const label  = document.getElementById('wpmValue');
+  const label = document.getElementById('wpmValue');
 
   chrome.storage.sync.get({ wpm: 40 }, data => {
     slider.value = data.wpm;
@@ -442,11 +277,11 @@ function loadTypingState() {
 function setTypingState(state) {
   typingState = state;
   const icon = document.getElementById('stateIcon');
-  const txt  = document.getElementById('stateTxt');
+  const txt = document.getElementById('stateTxt');
   txt.className = 'state-txt';
   switch (state) {
     case 'active':
-      icon.textContent = '▶'; txt.textContent = 'Typing in progress...'; txt.classList.add('active'); break;
+      icon.textContent = '▶'; txt.textContent = 'Typing...'; txt.classList.add('active'); break;
     case 'paused':
       icon.textContent = '⏸'; txt.textContent = 'Paused'; txt.classList.add('paused'); break;
     default:
@@ -461,9 +296,12 @@ async function onSolve() {
 
   if (serverOnline) {
     try {
-      const r = await fetch(`${BASE}/api/answers`, { signal: AbortSignal.timeout(2000) });
+      const answersUrl = USER_TOKEN
+        ? `${BASE}/api/answers?user_token=${encodeURIComponent(USER_TOKEN)}`
+        : `${BASE}/api/answers`;
+      const r = await apiFetch(answersUrl, { signal: AbortSignal.timeout(2000) });
       if (r.ok) { const answers = await r.json(); showLatestAnswer(answers); }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   sendCoderCmd('start-solving', {}, (success) => {
@@ -481,10 +319,6 @@ function sendCoderCmd(command, extra = {}, callback) {
       { type: 'EXTENSION_COMMAND', command, ...extra },
       resp => {
         const ok = !chrome.runtime.lastError && resp && resp.success !== false;
-        if (!ok && command !== 'get-state') {
-          if (command === 'trigger-pause') showToast('Paused', 'ok');
-          if (command === 'trigger-stop')  showToast('Stopped', 'ok');
-        }
         if (callback) callback(ok);
       }
     );
@@ -493,6 +327,7 @@ function sendCoderCmd(command, extra = {}, callback) {
 
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
+  if (!t) return;
   t.textContent = msg;
   t.className = 'toast' + (type ? ' ' + type : '') + ' show';
   setTimeout(() => { t.className = 'toast'; }, 2000);
@@ -502,183 +337,561 @@ function escHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ── Init Code Typer controls ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIO STREAM TAB CONTROLS
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initAudioStream() {
+  const startBtn  = document.getElementById('audioStartBtn');
+  const stopBtn   = document.getElementById('audioStopBtn');
+  const statusEl  = document.getElementById('audioStatus');
+
+  if (!startBtn) return;
+
+  function setAudioStatus(text, color) {
+    statusEl.textContent = text;
+    statusEl.style.color = color || '#475569';
+  }
+
+  function setStreamingUI(active, tabTitle) {
+    if (active) {
+      startBtn.style.background = '#14532d';
+      startBtn.style.borderColor = '#14532d';
+      startBtn.style.color = '#4ade80';
+      startBtn.textContent = '● Streaming';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      const src = tabTitle ? `Capturing: ${tabTitle.slice(0, 40)}` : 'Streaming tab audio → Drishi server';
+      setAudioStatus(src, '#4ade80');
+    } else {
+      startBtn.style.background = '#065f46';
+      startBtn.style.borderColor = '#065f46';
+      startBtn.style.color = '#4ade80';
+      startBtn.textContent = '▶ Start Stream';
+      startBtn.disabled = false;
+      stopBtn.disabled = false;
+      setAudioStatus('Auto-detects Google Meet / Teams / Zoom tab', '#94a3b8');
+    }
+  }
+
+  // Restore state on popup open
+  chrome.storage.local.get({ audioStreamStatus: 'stopped', captureTabTitle: '' }, (data) => {
+    setStreamingUI(data.audioStreamStatus === 'streaming', data.captureTabTitle);
+  });
+
+  // Listen for status updates from background
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (changes.audioStreamStatus || changes.captureTabTitle)) {
+      chrome.storage.local.get({ audioStreamStatus: 'stopped', captureTabTitle: '' }, (data) => {
+        setStreamingUI(data.audioStreamStatus === 'streaming', data.captureTabTitle);
+      });
+    }
+  });
+
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = '⏳ Starting...';
+    setAudioStatus('Detecting Meet / Teams / Zoom tab...', '#f59e0b');
+    try {
+      const resp = await chrome.runtime.sendMessage({ action: 'audio_start', userToken: USER_TOKEN });
+      if (resp?.ok) {
+        const { captureTabTitle } = await new Promise(r => chrome.storage.local.get({ captureTabTitle: '' }, r));
+        setStreamingUI(true, captureTabTitle);
+        showToast('Audio streaming started!', 'ok');
+      } else {
+        startBtn.disabled = false;
+        startBtn.textContent = '▶ Start Stream';
+        setAudioStatus('Error: ' + (resp?.error || 'unknown'), '#f87171');
+        showToast('Stream failed — open Meet / Teams / Zoom in Chrome first', 'err');
+      }
+    } catch (e) {
+      startBtn.disabled = false;
+      startBtn.textContent = '▶ Start Stream';
+      setAudioStatus('Error: ' + e.message, '#f87171');
+    }
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    stopBtn.disabled = true;
+    setAudioStatus('Stopping...', '#f59e0b');
+    try {
+      await chrome.runtime.sendMessage({ action: 'audio_stop' });
+      setStreamingUI(false);
+      showToast('Audio stream stopped', '');
+    } catch (e) {
+      setAudioStatus('Error: ' + e.message, '#f87171');
+    }
+    stopBtn.disabled = false;
+  });
+})();
+
 initWpmSlider();
 document.getElementById('btnStart').addEventListener('click', onSolve);
 document.getElementById('btnPause').addEventListener('click', () => sendCoderCmd('trigger-pause'));
-document.getElementById('btnStop').addEventListener('click',  () => sendCoderCmd('trigger-stop'));
+document.getElementById('btnStop').addEventListener('click', () => sendCoderCmd('trigger-stop'));
 document.getElementById('apFetch').addEventListener('click', fetchLatestAnswer);
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AUDIO CAPTURE (cloud / WebSocket mode)
+// MONITOR TAB
 // ══════════════════════════════════════════════════════════════════════════════
 
-document.getElementById('captureBtn').addEventListener('click', async () => {
-  if (capturing) {
-    // Stop capture
-    await chrome.runtime.sendMessage({ action: 'stopCapture' });
-    capturing = false;
-    updateCaptureStatus('stopped');
+function initMonitorTab() {
+  loadMonitorQr();
+  updatePortalCard();
+}
+
+async function loadMonitorQr() {
+  try {
+    const r = await apiFetch(`${BASE}/api/local_url`, { signal: AbortSignal.timeout(2000) });
+    const d = await r.json();
+    const monitorUrl = d.monitor_url || BASE + '/monitor';
+    const fullUrl = d.url || BASE + '/';
+
+    document.getElementById('monitorUrl').textContent = monitorUrl;
+
+    const _qr = (url, size) =>
+      `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&format=png&margin=4`;
+
+    document.getElementById('monitorQrImg').src = _qr(monitorUrl, 108);
+    document.getElementById('fullUiQrImg').src = _qr(fullUrl, 108);
+
+    document.getElementById('monitorCopyBtn')._url = monitorUrl;
+    document.getElementById('fullUiCopyBtn')._url = fullUrl;
+    // Update portal link with resolved base
+    const portalLink = document.getElementById('portalLink');
+    if (portalLink && USER_TOKEN) portalLink.href = `${d.url?.replace(/\/$/, '') || BASE}/portal/${encodeURIComponent(USER_TOKEN)}`;
+  } catch {
+    document.getElementById('monitorUrl').textContent = BASE + '/monitor';
+    const _qr = (url, size) =>
+      `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&format=png&margin=4`;
+    document.getElementById('monitorQrImg').src = _qr(BASE + '/monitor', 108);
+    document.getElementById('fullUiQrImg').src = _qr(BASE + '/', 108);
+    document.getElementById('monitorCopyBtn')._url = BASE + '/monitor';
+    document.getElementById('fullUiCopyBtn')._url = BASE + '/';
+  }
+}
+
+function renderMonitorFeed(answers) {
+  const feed = document.getElementById('monitorFeed');
+  const empty = document.getElementById('monitorEmpty');
+  const count = document.getElementById('monitorCount');
+
+  if (!answers || answers.length === 0) {
+    empty.style.display = '';
+    feed.querySelectorAll('.qa-card').forEach(el => el.remove());
+    count.textContent = '';
     return;
   }
+  empty.style.display = 'none';
+  count.textContent = `${answers.length} answer${answers.length !== 1 ? 's' : ''}`;
 
-  // Start capture on the currently active Meet/Teams/Zoom tab
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) { showToast('No active tab', 'err'); return; }
+  feed.querySelectorAll('.qa-card').forEach(el => el.remove());
+  answers.slice(0, 8).forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'qa-card' + (idx === 0 && item.is_complete ? ' latest' : '');
 
-    const url = tab.url || '';
-    const isMeetTab = url.includes('meet.google.com') || url.includes('teams.microsoft.com') ||
-                      url.includes('teams.live.com') || url.includes('zoom.us');
-    if (!isMeetTab) {
-      showToast('Open Meet / Teams / Zoom tab first', 'err');
-      document.getElementById('captureHint').textContent = '⚠ Switch to your interview tab, then click again';
-      return;
-    }
+    const src = (item.metrics && item.metrics.source) || '';
+    const isDb = src.startsWith('db-');
+    const isGen = !item.is_complete;
+    const badgeCls = isDb ? 'db' : (isGen ? 'gen' : 'api');
+    const badgeTxt = isDb ? 'DB' : (isGen ? 'GEN' : 'API');
 
-    document.getElementById('captureBtn').textContent = '⏳ Connecting...';
-    document.getElementById('captureBtn').disabled = true;
+    const qText = (item.question || '').trim();
+    const ansText = (item.answer || '').trim();
+    const ansHtml = !item.is_complete
+      ? (ansText ? `<div class="ans-text">${esc(ansText)}</div>` : `<div class="thinking">Generating answer</div>`)
+      : formatAnswer(ansText);
 
-    const resp = await chrome.runtime.sendMessage({ action: 'startCapture', tabId: tab.id });
-    if (resp?.ok !== false) {
-      capturing = true;
-      updateCaptureStatus('connecting');
-    } else {
-      showToast(resp?.error || 'Capture failed', 'err');
-      updateCaptureStatus('stopped');
-    }
-  } catch (e) {
-    showToast(e.message || 'Error', 'err');
-    updateCaptureStatus('stopped');
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="src-badge ${badgeCls}">${badgeTxt}</span>
+        <span class="q-text">${esc(qText)}</span>
+        <button class="copy-btn" data-ans="${esc(ansText)}" title="Copy">Copy</button>
+      </div>
+      <div class="ans-wrap">${ansHtml}</div>`;
+    feed.appendChild(card);
+  });
+
+  feed.scrollTop = 0;
+  feed.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.dataset.ans, btn));
+  });
+
+  // Auto-speak the newest complete answer if TTS is enabled
+  const newest = answers[0];
+  if (newest && newest.is_complete && newest.answer) {
+    ttsSpeak(newest.answer);
   }
+}
+
+async function _copyUrlBtn(btn, fallbackUrl) {
+  const url = btn._url || fallbackUrl || document.getElementById('monitorUrl').textContent;
+  try {
+    await navigator.clipboard.writeText(url);
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+  } catch { showToast('Copy failed', 'err'); }
+}
+
+document.getElementById('monitorCopyBtn').addEventListener('click', function () {
+  _copyUrlBtn(this, BASE + '/monitor');
 });
 
-function updateCaptureStatus(status) {
-  const btn  = document.getElementById('captureBtn');
-  const hint = document.getElementById('captureHint');
-  btn.disabled = false;
-
-  switch (status) {
-    case 'connected':
-      capturing = true;
-      btn.textContent = '⏹ Stop Capture';
-      btn.style.background = '#065f46'; btn.style.color = '#4ade80'; btn.style.borderColor = '#065f46';
-      hint.textContent = '🟢 Capturing — speak and answers will appear automatically';
-      document.getElementById('captureStatus').textContent = 'Live';
-      document.getElementById('captureStatus').style.color = '#4ade80';
-      break;
-    case 'connecting':
-      btn.textContent = '⏳ Connecting...';
-      btn.style.background = '#78350f'; btn.style.color = '#f59e0b'; btn.style.borderColor = '#78350f';
-      hint.textContent = 'Connecting to server...';
-      break;
-    case 'sent_segment':
-      hint.textContent = '🎙 Speech detected — transcribing...';
-      break;
-    case 'ws_error':
-      capturing = false;
-      hideMobileUrl();
-      btn.textContent = '🎙 Capture This Tab\'s Audio';
-      btn.style.background = '#7f1d1d'; btn.style.color = '#f87171'; btn.style.borderColor = '#7f1d1d';
-      hint.textContent = '⚠ Connection failed — check server URL and secret code in Settings';
-      document.getElementById('captureStatus').textContent = '';
-      break;
-    default:
-      capturing = false;
-      hideMobileUrl();
-      btn.textContent = '🎙 Capture This Tab\'s Audio';
-      btn.style.background = '#1e3a5f'; btn.style.color = '#60a5fa'; btn.style.borderColor = '#1e3a5f';
-      hint.textContent = 'Works on Meet, Teams, Zoom — captures interviewer\'s voice';
-      document.getElementById('captureStatus').textContent = '';
-  }
-}
-
-// ── Mobile URL display ────────────────────────────────────────────────────────
-
-function showMobileUrl(url) {
-  const box = document.getElementById('mobileUrlBox');
-  const inp = document.getElementById('mobileUrlInput');
-  if (!box || !inp) return;
-  inp.value = url;
-  box.style.display = 'block';
-}
-
-function copyMobileUrl() {
-  const inp = document.getElementById('mobileUrlInput');
-  const btn = document.getElementById('copyMobileBtn');
-  if (!inp || !inp.value) return;
-  navigator.clipboard.writeText(inp.value).then(() => {
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => btn.textContent = 'Copy', 2000);
-  });
-}
-
-// Hide mobile URL box when capture stops
-function hideMobileUrl() {
-  const box = document.getElementById('mobileUrlBox');
-  if (box) box.style.display = 'none';
-}
-
+document.getElementById('fullUiCopyBtn').addEventListener('click', function () {
+  _copyUrlBtn(this, BASE + '/');
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS TAB
 // ══════════════════════════════════════════════════════════════════════════════
 
 function loadSettingsForm() {
-  document.getElementById('settingsUrl').value  = BASE;
+  document.getElementById('settingsUrl').value = BASE;
   document.getElementById('settingsCode').value = SECRET_CODE;
+  document.getElementById('settingsUserToken').value = USER_TOKEN;
+  _updateUserTokenStatus(USER_TOKEN);
+}
+
+function _updateUserTokenStatus(token) {
+  const el = document.getElementById('userTokenStatus');
+  const portalLinkEl = document.getElementById('settingsPortalLink');
+  if (!el) return;
+  if (token) {
+    el.textContent = `✓ Token set — answers isolated to your account`;
+    el.style.color = '#4ade80';
+    if (portalLinkEl) {
+      portalLinkEl.style.display = '';
+      portalLinkEl.href = `${BASE}/portal/${encodeURIComponent(token)}`;
+    }
+  } else {
+    el.textContent = 'No token — using shared/global answers (system audio mode)';
+    el.style.color = '#64748b';
+    if (portalLinkEl) portalLinkEl.style.display = 'none';
+  }
 }
 
 document.getElementById('settingsSave').addEventListener('click', () => {
-  const url  = (document.getElementById('settingsUrl').value  || '').trim().replace(/\/$/, '');
-  const code = (document.getElementById('settingsCode').value || '').trim();
+  const url   = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
+  const code  = (document.getElementById('settingsCode').value || '').trim();
+  const token = (document.getElementById('settingsUserToken').value || '').trim();
 
   if (!url) { setSettingsMsg('Enter a server URL', '#f87171'); return; }
 
-  chrome.storage.sync.set({ serverUrl: url, secretCode: code }, () => {
+  chrome.storage.sync.set({ serverUrl: url, secretCode: code, userToken: token }, () => {
     BASE        = url;
     SECRET_CODE = code;
-    setSettingsMsg('✓ Saved! Reconnecting...', '#4ade80');
-    // Restart polling with new BASE
-    clearInterval(pollTimer);
+    USER_TOKEN  = token;
+    _updateUserTokenStatus(token);
+    setSettingsMsg('✓ Saved!', '#4ade80');
     lastHash = '';
     setOnline(false);
-    pollTimer = setInterval(poll, 1500);
     poll();
+    updatePortalCard();
+    if (token) loadUserIdentity(token);
     setTimeout(() => setSettingsMsg('', ''), 3000);
   });
 });
 
 document.getElementById('settingsTest').addEventListener('click', async () => {
   const url = (document.getElementById('settingsUrl').value || '').trim().replace(/\/$/, '');
-  const code = (document.getElementById('settingsCode').value || '').trim();
   setSettingsMsg('Testing...', '#f59e0b');
   try {
-    const r = await fetch(`${url}/health`, { signal: AbortSignal.timeout(4000) });
+    const r = await apiFetch(`${url}/health`, { signal: AbortSignal.timeout(4000) });
     if (r.ok) {
-      const d = await r.json();
-      setSettingsMsg(`✓ Connected! Cloud mode: ${d.cloud ? 'yes' : 'no'}`, '#4ade80');
-      // Test auth if secret code provided
-      if (code) {
-        const ar = await fetch(`${url}/api/auth`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-          signal: AbortSignal.timeout(4000)
-        });
-        const ad = await ar.json();
-        setSettingsMsg(ad.ok ? '✓ Server + auth OK!' : '⚠ Wrong secret code', ad.ok ? '#4ade80' : '#f87171');
-      }
+      setSettingsMsg(`✓ Connected!`, '#4ade80');
     } else {
       setSettingsMsg(`Server error: ${r.status}`, '#f87171');
     }
   } catch (e) {
-    setSettingsMsg(`Cannot reach server: ${e.message}`, '#f87171');
+    setSettingsMsg(`Cannot reach server`, '#f87171');
   }
+});
+
+// ── Init Tab listeners ────────────────────────────────────────────────────────
+document.getElementById('tabCoder').addEventListener('click', () => switchTab('coder'));
+document.getElementById('tabMonitor').addEventListener('click', () => switchTab('monitor'));
+document.getElementById('tabSettings').addEventListener('click', () => switchTab('settings'));
+
+// ── TTS (Read Answers Aloud) ──────────────────────────────────────────────────
+let _ttsEnabled = false;
+let _ttsLastSpoken = '';
+
+(function initTts() {
+  const toggle = document.getElementById('ttsToggle');
+  const stopBtn = document.getElementById('ttsStopBtn');
+  if (!toggle) return;
+
+  // Restore saved preference
+  chrome.storage.sync.get({ ttsEnabled: false }, d => {
+    _ttsEnabled = d.ttsEnabled;
+    toggle.checked = _ttsEnabled;
+  });
+
+  toggle.addEventListener('change', () => {
+    _ttsEnabled = toggle.checked;
+    chrome.storage.sync.set({ ttsEnabled: _ttsEnabled });
+    if (!_ttsEnabled) speechSynthesis.cancel();
+  });
+
+  if (stopBtn) stopBtn.addEventListener('click', () => speechSynthesis.cancel());
+})();
+
+function ttsSpeak(text) {
+  if (!_ttsEnabled || !text || text === _ttsLastSpoken) return;
+  _ttsLastSpoken = text;
+  speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 0.95;
+  utt.pitch = 1;
+  utt.lang = 'en-US';
+  speechSynthesis.speak(utt);
+}
+
+// ── Solve Problem from Screenshot ─────────────────────────────────────────────
+document.getElementById('btnSolveImg').addEventListener('click', async () => {
+  const btn = document.getElementById('btnSolveImg');
+  const status = document.getElementById('captureStatus');
+  btn.disabled = true;
+  btn.textContent = '⏳ Capturing screenshot...';
+  try {
+    const imgDataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    const b64 = imgDataUrl.replace(/^data:image\/png;base64,/, '');
+    status.textContent = 'Sending to AI solver...';
+    status.style.color = '#60a5fa';
+
+    const r = await apiFetch(`${BASE}/api/solve_from_image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: b64, media_type: 'image/png' }),
+    });
+    const d = await r.json();
+    if (d.solution) {
+      status.textContent = '';
+      showToast('Solution ready!', 'ok');
+      // Show result in a panel below the button
+      let resultEl = document.getElementById('solveImgResult');
+      if (!resultEl) {
+        resultEl = document.createElement('div');
+        resultEl.id = 'solveImgResult';
+        resultEl.style.cssText = 'margin-top:8px;background:#0a0e1a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;';
+        btn.parentNode.insertBefore(resultEl, status);
+      }
+      resultEl.innerHTML = `
+        <div style="font-size:9px;font-weight:800;color:#60a5fa;letter-spacing:.5px;margin-bottom:6px;">📋 SOLUTION</div>
+        <pre style="font-size:10px;color:#a5f3fc;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto;font-family:monospace;line-height:1.5;">${d.solution.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`;
+      if (_ttsEnabled) ttsSpeak('Solution generated from screenshot.');
+    } else {
+      status.textContent = d.error || 'No solution returned';
+      status.style.color = '#f87171';
+    }
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    status.style.color = '#f87171';
+    showToast('Screenshot failed', 'err');
+  }
+  btn.disabled = false;
+  btn.textContent = '📷 Solve Problem from Screenshot';
+  setTimeout(() => { status.textContent = ''; }, 4000);
+});
+
+// ── CAPTURE Button (Ctrl+Alt+Q) ─────────────────────────────────────────────
+document.getElementById('btnCapture').addEventListener('click', async () => {
+  const btn = document.getElementById('btnCapture');
+  const status = document.getElementById('captureStatus');
+  
+  btn.disabled = true;
+  btn.textContent = '⏳ Capturing...';
+  btn.style.opacity = '0.7';
+  status.textContent = 'Sending force capture to meeting page...';
+  
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error('No active tab');
+    
+    const resp = await chrome.tabs.sendMessage(tab.id, { type: 'FORCE_CAPTURE' });
+    
+    if (resp && resp.success) {
+      status.textContent = `✅ Captured on ${resp.platform}! Check dashboard.`;
+      status.style.color = '#4ade80';
+      showToast('Capture sent! Check dashboard.', 'ok');
+    } else {
+      status.textContent = '⚠️ Not on a meeting page';
+      status.style.color = '#f59e0b';
+    }
+  } catch (e) {
+    status.textContent = '❌ Error: Open Teams/Meet/Zoom first';
+    status.style.color = '#f87171';
+    showToast('Open a meeting page first', 'err');
+  }
+  
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '📸 CAPTURE NOW <span style="font-size:10px;opacity:.7;">(Ctrl+Alt+Q)</span>';
+    btn.style.opacity = '1';
+  }, 2000);
 });
 
 function setSettingsMsg(text, color) {
   const el = document.getElementById('settingsMsg');
   el.textContent = text;
-  el.style.color  = color || '#64748b';
+  el.style.color = color || '#64748b';
 }
+
+// ── Browser Monitor controls ───────────────────────────────────────────────
+(function initBrowserMonitor() {
+  const startBtn = document.getElementById('monStartBtn');
+  const stopBtn = document.getElementById('monStopBtn');
+  const statusEl = document.getElementById('monStatus');
+  const sessionEl = document.getElementById('monSessionId');
+  const screenEl = document.getElementById('monScreenEnabled');
+  const viewerUrlEl = document.getElementById('monViewerUrl');
+  const viewerCopyBtn = document.getElementById('monViewerCopyBtn');
+  const monitorCount = document.getElementById('monitorCount');
+
+  if (!startBtn) return;
+
+  // Hover effects for the copy button
+  if (viewerCopyBtn) {
+    viewerCopyBtn.addEventListener('mouseenter', () => {
+      viewerCopyBtn.style.borderColor = '#818cf8';
+      viewerCopyBtn.style.color = '#818cf8';
+    });
+    viewerCopyBtn.addEventListener('mouseleave', () => {
+      if (!viewerCopyBtn.classList.contains('copied')) {
+        viewerCopyBtn.style.borderColor = '#252840';
+        viewerCopyBtn.style.color = '#64748b';
+      }
+    });
+    viewerCopyBtn.addEventListener('click', async () => {
+      const url = viewerUrlEl.textContent.trim();
+      if (!url || url === '\u2014' || url === '\u2014') { showToast('No URL yet — start monitor first', 'err'); return; }
+      try {
+        await navigator.clipboard.writeText(url);
+        const orig = viewerCopyBtn.textContent;
+        viewerCopyBtn.textContent = '\u2705 Copied!';
+        viewerCopyBtn.style.borderColor = '#4ade80';
+        viewerCopyBtn.style.color = '#4ade80';
+        viewerCopyBtn.classList.add('copied');
+        setTimeout(() => {
+          viewerCopyBtn.textContent = orig;
+          viewerCopyBtn.style.borderColor = '#252840';
+          viewerCopyBtn.style.color = '#64748b';
+          viewerCopyBtn.classList.remove('copied');
+        }, 1800);
+        showToast('Viewer URL copied!', 'ok');
+      } catch (_) { showToast('Copy failed', 'err'); }
+    });
+  }
+
+  function setMonStatus(text, color) {
+    statusEl.textContent = text;
+    statusEl.style.color = color || '#475569';
+  }
+
+  function updateViewerUrl(serverUrl, sessionId) {
+    const base = serverUrl.replace(/\/$/, '');
+    // Use the new simplified /v/ format
+    const url = `${base}/v/${encodeURIComponent(sessionId)}`;
+    viewerUrlEl.textContent = url;
+    viewerUrlEl.title = url;
+  }
+
+  function updateMonCountBadge(count) {
+    if (!monitorCount) return;
+    if (count > 0) {
+      monitorCount.textContent = `(${count} viewer${count !== 1 ? 's' : ''})`;
+      monitorCount.style.color = '#4ade80';
+    } else {
+      monitorCount.textContent = '';
+    }
+  }
+
+  chrome.runtime.sendMessage({ type: 'mon_get_state' }, (state) => {
+    if (!state) return;
+    sessionEl.value = state.sessionId || 'default';
+    screenEl.checked = state.screenEnabled || false;
+    updateMonCountBadge(state.streamViewerCount || 0);
+    if (state.monitoring) {
+      setMonStatus('Monitoring active — ' + (state.connectionStatus || ''), '#4ade80');
+    }
+  });
+
+  // Listen for real-time viewer count updates via storage
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.monitorSettings) {
+      const newState = changes.monitorSettings.newValue;
+      if (newState) {
+        updateMonCountBadge(newState.streamViewerCount || 0);
+        if (newState.monitoring) {
+          setMonStatus('Monitoring active — ' + (newState.connectionStatus || ''), '#4ade80');
+        } else {
+          setMonStatus(newState.connectionStatus === 'disconnected' ? 'Stopped' : newState.connectionStatus, '#64748b');
+        }
+      }
+    }
+  });
+
+  startBtn.addEventListener('click', async () => {
+    const sessionId = sessionEl.value.trim() || 'default';
+    const screenEnabled = screenEl.checked;
+    setMonStatus('Starting…', '#f59e0b');
+    try {
+      const resp = await chrome.runtime.sendMessage({
+        type: 'mon_start_monitoring',
+        sessionId,
+        screenEnabled,
+      });
+      if (resp?.ok) {
+        setMonStatus('Monitoring active', '#4ade80');
+        chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev' }, (data) => {
+          updateViewerUrl(data.serverUrl, sessionId);
+        });
+      } else {
+        setMonStatus('Error: ' + (resp?.error || 'unknown'), '#f87171');
+      }
+    } catch (e) {
+      setMonStatus('Error: ' + e.message, '#f87171');
+    }
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    setMonStatus('Stopping…', '#f59e0b');
+    try {
+      await chrome.runtime.sendMessage({ type: 'mon_stop_monitoring' });
+      setMonStatus('Stopped', '#64748b');
+      viewerUrlEl.textContent = '\u2014';
+      if (viewerCopyBtn) {
+        viewerCopyBtn.style.borderColor = '#252840';
+        viewerCopyBtn.style.color = '#64748b';
+        viewerCopyBtn.textContent = '\ud83d\udccb Copy';
+        viewerCopyBtn.classList.remove('copied');
+      }
+    } catch (e) {
+      setMonStatus('Error: ' + e.message, '#f87171');
+    }
+  });
+
+  chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev' }, (data) => {
+    chrome.runtime.sendMessage({ type: 'mon_get_state' }, (state) => {
+      if (state?.monitoring) {
+        updateViewerUrl(data.serverUrl, state.sessionId || 'default');
+      }
+    });
+
+    // Add a periodic diagnostic check while popup is open
+    setInterval(async () => {
+      try {
+        const r = await apiFetch(`${data.serverUrl}/health`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+          const statusTxt = document.getElementById('statusTxt');
+          if (statusTxt) {
+            statusTxt.textContent = "Tunnel: OK";
+            statusTxt.style.color = "#4ade80";
+          }
+        }
+      } catch (e) { }
+    }, 5000);
+  });
+})();

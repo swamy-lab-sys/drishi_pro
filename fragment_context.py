@@ -9,6 +9,7 @@ Uses shared file for cross-process communication (main.py + web/server.py).
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ MERGE_WINDOW = 10  # seconds - allow slow speakers
 # In-memory cache to avoid disk reads in same process
 _context_cache = None
 _dir_ensured = False
+_disk_write_timer: threading.Timer = None  # Debounce timer for disk writes
 
 # Incomplete fragment cache — saves rejected slow-speaker fragments for merging
 # e.g. "What is the difference between" → rejected → saved here →
@@ -71,6 +73,12 @@ CONTINUATION_STARTERS = (
 
 # Pronoun-first starters — "it", "this", "that" at position 0 means referring to prior context
 PRONOUN_STARTERS = frozenset({'it', 'its', 'this', 'that', 'these', 'those'})
+
+# Pre-compiled regex for continuation detection — replaces O(n) startswith loop
+_CONTINUATION_RE = re.compile(
+    r'^(?:' + '|'.join(re.escape(s.rstrip()) for s in sorted(CONTINUATION_STARTERS, key=len, reverse=True)) + r')',
+    re.IGNORECASE
+)
 
 # Method/technique keywords that indicate a continuation when in short fragments
 METHOD_KEYWORDS = {
@@ -163,15 +171,9 @@ def clear_incomplete_context():
     _incomplete_time = 0.0
 
 
-def save_context(question: str, source: str):
-    """Save processed question as context for future merging."""
-    global _context_cache, _dir_ensured
-    data = {
-        'question': question.strip(),
-        'source': source,
-        'timestamp': time.time(),
-    }
-    _context_cache = data
+def _write_context_to_disk(data: dict):
+    """Write context to disk for cross-process merging (Chrome extension → server)."""
+    global _dir_ensured
     try:
         if not _dir_ensured:
             CONTEXT_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -180,6 +182,27 @@ def save_context(question: str, source: str):
             json.dump(data, f)
     except Exception:
         pass
+
+
+def save_context(question: str, source: str):
+    """Save processed question as context for future merging.
+    In-memory update is immediate; disk write is debounced by 200ms to avoid
+    blocking the pipeline on every question (~5-10ms saved per call).
+    """
+    global _context_cache, _disk_write_timer
+    data = {
+        'question': question.strip(),
+        'source': source,
+        'timestamp': time.time(),
+    }
+    _context_cache = data
+
+    # Debounce disk write — cancel any pending timer and schedule a new one
+    if _disk_write_timer is not None and _disk_write_timer.is_alive():
+        _disk_write_timer.cancel()
+    _disk_write_timer = threading.Timer(0.2, _write_context_to_disk, args=(data,))
+    _disk_write_timer.daemon = True
+    _disk_write_timer.start()
 
 
 def get_recent_context():
@@ -214,9 +237,8 @@ def is_continuation(text: str) -> bool:
         return False
 
     # Starts with continuation word
-    for starter in CONTINUATION_STARTERS:
-        if lower.startswith(starter):
-            return True
+    if _CONTINUATION_RE.match(lower):
+        return True
 
     # Short fragment with method keyword but no question starter
     if len(words) <= 6:
@@ -317,9 +339,8 @@ def merge_with_context(new_text: str) -> tuple:
 
     # ── Case 1: Explicit continuation starter ────────────────────────────────
     # e.g. "now sort it", "using slicing", "optimize it", "make it iterative"
-    for starter in CONTINUATION_STARTERS:
-        if new_lower.startswith(starter):
-            return _build_merged_text(prev_q, new_text), True
+    if _CONTINUATION_RE.match(new_lower):
+        return _build_merged_text(prev_q, new_text), True
 
     # ── Case 2: Pronoun reference — "it", "this", "that" at position 0 ───────
     # e.g. "it should also handle negatives", "this list needs to be sorted"

@@ -268,25 +268,48 @@ def get_role_style_hint(role: str) -> str:
             'VM lifecycle management, live migration, KVM/QEMU, OVS networking, '
             'Ceph storage, and production OpenStack troubleshooting workflows.'
         )
-    if any(k in r for k in ('devops', 'sre', 'site reliability', 'platform engineer', 'infra')):
+    if any(k in r for k in ('devops', 'platform engineer', 'infra engineer', 'release engineer')):
         return (
             'Answer style: Emphasize CI/CD pipelines, Docker, Kubernetes, '
-            'infrastructure-as-code, and observability stack.'
+            'infrastructure-as-code (Ansible/Terraform), and observability stack. '
+            'Show Jenkinsfile/YAML snippets where relevant.'
         )
-    if any(k in r for k in ('python developer', 'software engineer', 'backend', 'full stack', 'full-stack')):
+    if any(k in r for k in ('sre', 'site reliability', 'reliability engineer')):
         return (
-            'Answer style: Focus on code examples, language internals, '
-            'design patterns, and API development.'
+            'Answer style: Focus on SLO/SLI/error budgets, the four golden signals, '
+            'on-call incident response, Prometheus/Grafana, and toil reduction. '
+            'Quantify availability and latency targets where possible.'
         )
-    if any(k in r for k in ('data engineer', 'data scientist', 'ml engineer', 'analytics')):
+    if any(k in r for k in ('java developer', 'java engineer', 'j2ee', 'spring developer')):
         return (
-            'Answer style: Emphasize data pipelines, ETL, ML frameworks, '
-            'and large-scale data processing.'
+            'Answer style: Focus on JVM internals, garbage collection, Spring Boot, '
+            'Java concurrency (ThreadPool, CompletableFuture), design patterns, '
+            'and JPA/Hibernate. Prefer Java code examples.'
         )
-    if any(k in r for k in ('cloud', 'aws', 'azure', 'gcp')):
+    if any(k in r for k in ('python developer', 'python engineer', 'backend developer', 'backend engineer',
+                             'software engineer', 'backend', 'full stack', 'full-stack')):
         return (
-            'Answer style: Focus on cloud services, managed infrastructure, '
-            'cost optimization, and cloud-native architectures.'
+            'Answer style: Focus on Python internals (GIL, generators, decorators, asyncio, closures), '
+            'Django ORM/QuerySet patterns, Django REST Framework (DRF ViewSets, serializers, JWT auth), '
+            'Celery task queues, Redis caching, and API best practices. '
+            'Include short inline code examples for concept questions.'
+        )
+    if any(k in r for k in ('autosys', 'batch', 'etl', 'job scheduling', 'workload automation',
+                             'batch support', 'etl engineer', 'batch engineer')):
+        return (
+            'Answer style: Focus on Autosys JIL, job states, sendevent commands, '
+            'box job dependencies, and production batch failure recovery procedures. '
+            'Show actual Autosys commands in backticks.'
+        )
+    if any(k in r for k in ('data engineer', 'data scientist', 'ml engineer', 'analytics', 'bi engineer')):
+        return (
+            'Answer style: Emphasize data pipelines, SQL optimization, ETL workflows, '
+            'Python data libraries (Pandas/PySpark), and large-scale data processing.'
+        )
+    if any(k in r for k in ('cloud engineer', 'cloud architect', 'cloud', 'aws', 'azure', 'gcp')):
+        return (
+            'Answer style: Focus on cloud services (compute/storage/networking/IAM), '
+            'managed infrastructure, cost optimization, and cloud-native architectures.'
         )
     return ''
 
@@ -398,12 +421,28 @@ def build_resume_context_for_llm(user: Optional[Dict] = None) -> str:
     if exp_years:
         lines.append(f'Experience: {exp_years} years')
 
+    # Key skills — most important signal for the LLM
+    key_skills = (user.get('key_skills') or '').strip()
+    if key_skills:
+        lines.append(f'Key skills & technologies: {key_skills}')
+
+    # Custom instructions — user-defined AI behavior
+    custom_instructions = (user.get('custom_instructions') or '').strip()
+    if custom_instructions:
+        lines.append(f'Custom instructions: {custom_instructions}')
+
+    # Domain
+    domain = (user.get('domain') or '').strip()
+    if domain:
+        lines.append(f'Domain/specialization: {domain}')
+
     if not lines:
         return ''
 
     lines.append(
-        'IMPORTANT: Only claim hands-on experience with technologies listed in the resume. '
-        'For unlisted ones say "I have studied" or "I am familiar with" — never claim worked on them.'
+        'IMPORTANT: Answer from the perspective of someone with the listed key skills and role. '
+        'Only claim hands-on experience with technologies in the key skills or resume. '
+        'For unlisted technologies say "I have studied" or "I am familiar with" — never claim direct experience.'
     )
 
     return '\n'.join(lines)

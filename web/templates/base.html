@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Drishi Enterprise{% endblock %} — Interview Intelligence</title>
+  <link rel="icon" type="image/png" href="/static/drishi.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  {% block head_extra %}{% endblock %}
+  <style>
+    /* ══════════════════════════════════════════════════
+       DESIGN SYSTEM — CSS VARIABLES
+       ══════════════════════════════════════════════════ */
+    :root {
+      /* ── Background & Surface ── */
+      --bg:           #F5F1EB;   /* hsl(40 35% 96%) warm cream */
+      --surface:      #FFFFFF;
+      --sidebar-bg:   #FFFFFF;   /* light, matches surface */
+      --white:        #FFFFFF;
+
+      /* ── Primary Green (forest, not lime) ── */
+      --green:        #227A4A;   /* hsl(155 62% 36%) */
+      --green-dark:   #1A5E38;   /* hsl(155 62% 28%) */
+      --green-light:  #D4EDE1;   /* hsl(155 45% 92%) */
+      --green-bg:     rgba(34,122,74,0.1);
+
+      /* ── Gold / Amber Accent ── */
+      --gold:         #F5A12F;   /* hsl(38 92% 55%) */
+      --gold-light:   #F3E9CC;   /* hsl(42 65% 92%) */
+      --gold-bg:      rgba(245,161,47,0.12);
+
+      /* ── Text ── */
+      --text-dark:    #161B2E;   /* hsl(220 25% 12%) */
+      --text-medium:  #3A4254;   /* hsl(220 20% 28%) */
+      --text-muted:   #717C8C;   /* hsl(220 10% 48%) */
+
+      /* ── Border ── */
+      --border:       #E3DDD4;   /* hsl(40 18% 87%) */
+      --card-border:  #EAE6DE;
+
+      /* ── Semantic ── */
+      --orange:       #F5A12F;
+      --orange-bg:    rgba(245,161,47,0.12);
+      --red:          #E53535;   /* hsl(0 72% 55%) */
+      --red-bg:       rgba(229,53,53,0.1);
+      --blue:         #3B7EF0;   /* hsl(210 80% 55%) */
+      --blue-bg:      rgba(59,126,240,0.1);
+      --purple:       #8B5CF6;
+      --purple-bg:    rgba(139,92,246,0.1);
+
+      /* ── Shadows ── */
+      --card-shadow:  0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+
+      /* ── Layout ── */
+      --sb-w:         224px;
+      --sb-w-col:     54px;
+      --header-h:     54px;
+      --radius:       0.75rem;   /* 12px */
+
+      /* ── Gradients ── */
+      --grad-primary: linear-gradient(135deg, #227A4A, #2E9E88);
+      --grad-gold:    linear-gradient(135deg, #F5A12F, #E8803A);
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text-dark);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    /* ══════════════════════════════════════════════════
+       SIDEBAR
+       ══════════════════════════════════════════════════ */
+    #sidebar {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: var(--sb-w);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 100;
+      transition: width 0.2s ease;
+      overflow: hidden;
+    }
+
+    #sidebar.collapsed { width: var(--sb-w-col); }
+
+    /* Sidebar header */
+    .sb-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--border);
+      height: 56px; flex-shrink: 0;
+    }
+
+    .sb-logo { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+    .sb-logo img { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; object-fit: cover; }
+    .sb-logo-text {
+      font-size: 15px; font-weight: 800; letter-spacing: 1px;
+      color: var(--text-dark); white-space: nowrap;
+      opacity: 1; transition: opacity 0.15s;
+    }
+    #sidebar.collapsed .sb-logo-text { opacity: 0; }
+
+    .sb-toggle {
+      margin-left: auto; flex-shrink: 0;
+      width: 28px; height: 28px; border: none; background: none;
+      cursor: pointer; color: var(--text-muted); font-size: 14px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sb-toggle:hover { background: var(--bg); color: var(--text-dark); }
+
+    /* Sidebar nav */
+    .sb-nav { flex: 1; padding: 8px 0; overflow-y: auto; overflow-x: hidden; }
+    .sb-nav::-webkit-scrollbar { width: 3px; }
+    .sb-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .sb-section {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--text-muted);
+      padding: 12px 14px 4px;
+      white-space: nowrap; overflow: hidden;
+      opacity: 1; transition: opacity 0.15s;
+    }
+    #sidebar.collapsed .sb-section { opacity: 0; height: 0; padding: 0; }
+
+    .sb-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 10px;
+      height: 38px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-medium);
+      text-decoration: none; cursor: pointer;
+      border: none; background: none; width: 100%; text-align: left;
+      position: relative; white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+      border-left: 3px solid transparent;
+    }
+    .sb-item:hover {
+      background: var(--bg);
+      color: var(--text-dark);
+    }
+    .sb-item.active {
+      background: var(--green-bg);
+      border-left-color: var(--green);
+      color: var(--green-dark);
+    }
+
+    .sb-icon {
+      width: 20px; height: 20px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sb-icon svg { width: 18px; height: 18px; }
+
+    .sb-label {
+      flex: 1; overflow: hidden;
+      transition: opacity 0.15s, max-width 0.2s;
+      max-width: 160px;
+    }
+    #sidebar.collapsed .sb-label { opacity: 0; max-width: 0; }
+
+    /* Tooltip when collapsed */
+    .sb-tooltip {
+      display: none;
+      position: absolute;
+      left: calc(var(--sb-w-col) + 8px); top: 50%;
+      transform: translateY(-50%);
+      background: var(--text-dark); color: #F9FAFB;
+      padding: 5px 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 600;
+      white-space: nowrap; pointer-events: none; z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    #sidebar.collapsed .sb-item:hover .sb-tooltip { display: block; }
+
+    .sb-footer {
+      padding: 8px 0 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ══════════════════════════════════════════════════
+       HEADER (TOP BAR)
+       ══════════════════════════════════════════════════ */
+    #topbar {
+      position: fixed;
+      top: 0; left: var(--sb-w); right: 0;
+      height: var(--header-h);
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 20px; gap: 12px;
+      z-index: 90;
+      transition: left 0.2s ease;
+    }
+    body.sb-collapsed #topbar { left: var(--sb-w-col); }
+
+    .breadcrumb {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px;
+    }
+    .bc-home {
+      color: var(--green); font-weight: 700; cursor: pointer;
+    }
+    .bc-home:hover { text-decoration: underline; }
+    .bc-sep {
+      color: var(--text-muted); font-size: 12px;
+    }
+    .bc-current {
+      color: var(--text-muted); font-weight: 500;
+    }
+
+    .topbar-spacer { flex: 1; }
+
+    /* Status badges */
+    .status-area {
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .status-badge.active-session {
+      background: var(--grad-primary); color: #FFFFFF;
+    }
+    .status-badge.recording {
+      background: var(--red); color: #FFFFFF;
+    }
+    .status-badge.paused {
+      background: var(--orange); color: #FFFFFF;
+    }
+    .status-badge.ready {
+      background: transparent; color: var(--green);
+      border: 1.5px solid var(--green);
+    }
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+
+    /* User area in header */
+    .topbar-user {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text-medium); font-weight: 500;
+      padding: 4px 10px; border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: default;
+    }
+    .topbar-user-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--grad-primary);
+    }
+
+    /* ══════════════════════════════════════════════════
+       MAIN CONTENT AREA
+       ══════════════════════════════════════════════════ */
+    #main-content {
+      margin-left: var(--sb-w);
+      margin-top: var(--header-h);
+      min-height: calc(100vh - var(--header-h));
+      transition: margin-left 0.2s ease;
+    }
+    body.sb-collapsed #main-content { margin-left: var(--sb-w-col); }
+
+    .page-content {
+      padding: 24px;
+      max-width: 1400px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       SHARED CARD STYLES
+       ══════════════════════════════════════════════════ */
+    .card {
+      background: var(--white);
+      border-radius: 12px;
+      box-shadow: var(--card-shadow);
+      border: 1px solid var(--card-border);
+    }
+
+    /* ══════════════════════════════════════════════════
+       SHARED BUTTON STYLES
+       ══════════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--grad-primary); color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(34,122,74,0.25);
+    }
+    .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 4px 14px rgba(34,122,74,0.35); }
+    .btn-secondary {
+      background: var(--white); color: var(--text-dark);
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .btn-secondary:hover { background: var(--bg); border-color: #C8C0B4; }
+    .btn-danger {
+      background: var(--red-bg); color: var(--red);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.18); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-icon {
+      padding: 7px; width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* ══════════════════════════════════════════════════
+       CATEGORY TAG PILLS
+       ══════════════════════════════════════════════════ */
+    .tag-pill {
+      display: inline-block;
+      padding: 2px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+      text-transform: lowercase;
+    }
+    .tag-django, .tag-python  { background: var(--green-light); color: var(--green-dark); }
+    .tag-java                 { background: var(--gold-light); color: #92590A; }
+    .tag-react, .tag-css      { background: rgba(59,126,240,0.1); color: #2457B5; }
+    .tag-javascript           { background: rgba(234,179,8,0.1); color: #9A6100; }
+    .tag-sql                  { background: var(--purple-bg); color: var(--purple); }
+    .tag-generic, .tag-theory { background: rgba(113,124,140,0.1); color: var(--text-muted); }
+    .tag-coding               { background: var(--blue-bg); color: var(--blue); }
+    .tag-both                 { background: var(--green-light); color: var(--green-dark); }
+
+    /* ══════════════════════════════════════════════════
+       TOAST
+       ══════════════════════════════════════════════════ */
+    #base-toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-dark); color: #F9FAFB;
+      padding: 9px 18px; border-radius: 20px;
+      font-size: 13px; font-weight: 600;
+      opacity: 0; transition: opacity 0.25s;
+      z-index: 9999; pointer-events: none; white-space: nowrap;
+    }
+    #base-toast.show { opacity: 1; }
+
+    /* ══════════════════════════════════════════════════
+       MOBILE
+       ══════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #topbar { left: 0 !important; }
+      #main-content { margin-left: 0 !important; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: #C8C0B4; }
+
+    /* ══════════════════════════════════════════════════
+       ANIMATIONS (matching Lovable design)
+       ══════════════════════════════════════════════════ */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @keyframes pulse-green {
+      0%,100% { box-shadow: 0 0 0 2px rgba(34,122,74,0.15); }
+      50%      { box-shadow: 0 0 0 6px rgba(34,122,74,0.04); }
+    }
+
+    .page-content { animation: fadeUp 0.15s ease both; }
+
+    .animate-fade-up { animation: fadeUp 0.15s ease both; }
+    .animate-fade-in { animation: fadeIn 0.15s ease both; }
+
+    /* gradient text utility */
+    .gradient-text {
+      background: linear-gradient(135deg, var(--green), #2E9E88);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* shimmer loading skeleton */
+    .shimmer {
+      background: linear-gradient(110deg, transparent 25%, rgba(245,161,47,0.08) 37%, transparent 63%);
+      background-size: 200% 100%;
+      animation: shimmer 2s ease-in-out infinite;
+    }
+
+    /* ── Topbar shadow for depth ── */
+    #topbar { box-shadow: 0 1px 0 var(--border), 0 2px 8px rgba(0,0,0,0.04); }
+
+    /* ── Card hover lift ── */
+    .card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+    .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.05); }
+  </style>
+</head>
+<body>
+
+  <!-- ════ SIDEBAR ════ -->
+  <nav id="sidebar">
+    <div class="sb-header">
+      <div class="sb-logo">
+        <img src="/static/drishi.png" alt="Drishi" width="30" height="30">
+        <span class="sb-logo-text">drishi</span>
+      </div>
+      <button class="sb-toggle" id="sb-toggle-btn" title="Toggle sidebar" onclick="toggleSidebar()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="sb-nav">
+
+      <!-- MAIN section -->
+      <div class="sb-section">Main</div>
+
+      <a href="/" class="sb-item {% if request.path == '/' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+        </span>
+        <span class="sb-label">Interview</span>
+        <span class="sb-tooltip">Interview</span>
+      </a>
+
+      <a href="/monitor" target="_blank" class="sb-item {% if request.path == '/monitor' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </span>
+        <span class="sb-label">Monitor</span>
+        <span class="sb-tooltip">Monitor</span>
+      </a>
+
+      <!-- LIBRARY section -->
+      <div class="sb-section">Library</div>
+
+      <a href="/users" class="sb-item {% if request.path == '/users' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        </span>
+        <span class="sb-label">Profiles</span>
+        <span class="sb-tooltip">Profiles</span>
+      </a>
+
+      <a href="/questions" class="sb-item {% if request.path == '/questions' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </span>
+        <span class="sb-label">Questions</span>
+        <span class="sb-tooltip">Questions</span>
+      </a>
+
+      <a href="/lookup" class="sb-item {% if request.path == '/lookup' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <span class="sb-label">Keyword Lookup</span>
+        <span class="sb-tooltip">Keyword Lookup</span>
+      </a>
+
+      <a href="/qa-manager" class="sb-item {% if request.path == '/qa-manager' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+        </span>
+        <span class="sb-label">QA Manager</span>
+        <span class="sb-tooltip">QA Manager</span>
+      </a>
+
+      <!-- CONFIG section -->
+      <div class="sb-section">Config</div>
+
+      <a href="/settings" class="sb-item {% if request.path == '/settings' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </span>
+        <span class="sb-label">Settings</span>
+        <span class="sb-tooltip">Settings</span>
+      </a>
+
+      <a href="/api-dashboard" class="sb-item {% if request.path == '/api-dashboard' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+        </span>
+        <span class="sb-label">API Keys</span>
+        <span class="sb-tooltip">API Keys</span>
+      </a>
+
+      <!-- ADMIN section -->
+      <div class="sb-section">Admin</div>
+
+      <a href="/ext-users" class="sb-item {% if request.path == '/ext-users' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </span>
+        <span class="sb-label">Ext Users</span>
+        <span class="sb-tooltip">Ext Users</span>
+      </a>
+
+      <a href="/voice" class="sb-item {% if request.path == '/voice' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+            <polyline points="17 11 17 13 7 13 7 11"/>
+          </svg>
+        </span>
+        <span class="sb-label">Voice</span>
+        <span class="sb-tooltip">Voice</span>
+      </a>
+
+      <a href="/admin-docs" class="sb-item {% if request.path == '/admin-docs' %}active{% endif %}">
+        <span class="sb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </span>
+        <span class="sb-label">Admin Docs</span>
+        <span class="sb-tooltip">Admin Docs</span>
+      </a>
+
+    </div><!-- /sb-nav -->
+  </nav><!-- /sidebar -->
+
+
+  <!-- ════ TOP HEADER ════ -->
+  <header id="topbar">
+    <!-- Breadcrumbs -->
+    <nav class="breadcrumb">
+      <a href="/" class="bc-home">Drishi</a>
+      <span class="bc-sep">›</span>
+      <span class="bc-current">{% block page_name %}Page{% endblock %}</span>
+      {% block breadcrumb_path %}{% endblock %}
+    </nav>
+
+    <div class="topbar-spacer"></div>
+
+    <!-- Status area -->
+    <div class="status-area" id="status-area">
+      <!-- Dynamically updated by JS below -->
+    </div>
+
+    <!-- User pill -->
+    <div class="topbar-user" id="topbar-user" style="display:none">
+      <div class="topbar-user-dot"></div>
+      <span id="topbar-user-name">User</span>
+    </div>
+  </header>
+
+
+  <!-- ════ MAIN CONTENT ════ -->
+  <main id="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Toast (base) -->
+  <div id="base-toast"></div>
+
+  {% block body_end %}{% endblock %}
+
+  <script>
+  'use strict';
+
+  // ── Sidebar toggle ────────────────────────────────────────────────────────────
+  let _sbOpen = localStorage.getItem('drishi_sb') !== '0';
+
+  function applySidebar() {
+    const sb = document.getElementById('sidebar');
+    if (_sbOpen) {
+      sb.classList.remove('collapsed');
+      document.body.classList.remove('sb-collapsed');
+    } else {
+      sb.classList.add('collapsed');
+      document.body.classList.add('sb-collapsed');
+    }
+  }
+
+  function toggleSidebar() {
+    _sbOpen = !_sbOpen;
+    localStorage.setItem('drishi_sb', _sbOpen ? '1' : '0');
+    applySidebar();
+  }
+
+  applySidebar();
+
+  // ── Session status (header badges) ───────────────────────────────────────────
+  async function updateSessionStatus() {
+    try {
+      const info = await fetch('/api/session-info').then(r => r.json());
+      const area = document.getElementById('status-area');
+      const badges = [];
+
+      // Determine session state
+      const state = info.session_state || info.state || '';
+      if (state === 'recording') {
+        badges.push('<span class="status-badge recording"><span class="status-dot"></span>RECORDING</span>');
+      } else if (state === 'paused') {
+        badges.push('<span class="status-badge paused"><span class="status-dot"></span>PAUSED</span>');
+      } else if (state === 'active' || info.connected) {
+        badges.push('<span class="status-badge active-session"><span class="status-dot"></span>ACTIVE SESSION</span>');
+      } else {
+        badges.push('<span class="status-badge ready">READY</span>');
+      }
+
+      area.innerHTML = badges.join('');
+
+      // User pill
+      const userEl = document.getElementById('topbar-user');
+      const userNameEl = document.getElementById('topbar-user-name');
+      if (info.user_name && info.user_name !== 'None' && info.user_name !== 'null') {
+        userNameEl.textContent = info.user_name + (info.user_role && info.user_role !== 'None' ? ' · ' + info.user_role : '');
+        userEl.style.display = 'flex';
+      } else {
+        userEl.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  updateSessionStatus();
+  setInterval(updateSessionStatus, 3000);
+
+  // ── Active sidebar item detection ─────────────────────────────────────────────
+  (function markActiveSidebarItem() {
+    const path = window.location.pathname;
+    document.querySelectorAll('#sidebar .sb-item').forEach(el => {
+      const href = el.getAttribute('href') || '';
+      const isActive = (href === '/' && path === '/') ||
+                       (href !== '/' && path.startsWith(href));
+      el.classList.toggle('active', isActive);
+    });
+  })();
+
+  // ── Base toast ────────────────────────────────────────────────────────────────
+  function showBaseToast(msg, dur) {
+    dur = dur || 2200;
+    const el = document.getElementById('base-toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(showBaseToast._t);
+    showBaseToast._t = setTimeout(() => el.classList.remove('show'), dur);
+  }
+  </script>
+
+</body>
+</html>

@@ -16,6 +16,9 @@ pyaudio>=0.2.14           # fallback audio backend (used if sounddevice fails)
 # ── Web UI ─────────────────────────────────────────────────────────
 flask>=3.0.0
 flask-sock>=0.7.0            # WebSocket support for audio streaming from extension
+gevent>=23.9.1               # Async WSGI server for WebSocket support through proxies (ngrok)
+gevent-websocket>=0.10.1     # WebSocket handler for gevent (enables remote access via ngrok)
+
 gunicorn>=21.2.0             # Production WSGI server for Render.com
 
 # ── Semantic Engine (v7.0) ─────────────────────────────────────────
@@ -25,6 +28,13 @@ scikit-learn>=1.3.0       # TF-IDF vectorizer + cosine similarity for tiered cac
 python-dotenv>=1.0.0      # .env loading with override support
 requests>=2.31.0          # Sarvam & Deepgram cloud STT HTTP calls
 psutil>=5.9.0             # CPU/memory monitoring for watchdog
+pyautogui>=0.9.54         # System-wide remote control (mouse/keyboard)
+python-xlib>=0.33         # X11 support for pyautogui on Linux
+
+# ── Framework Migration ─────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn>=0.27.0
+pydantic>=2.0.0
 
 # ── PDF Resume Extraction ──────────────────────────────────────────
 pypdf>=4.0.0               # lightweight PDF text extraction (no binary deps)

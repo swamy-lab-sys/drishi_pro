@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+{% block title %}Profile Editor{% endblock %}
+{% block page_name %}Profile Editor{% endblock %}
+
+{% block head_extra %}
+<style>
+/* ── Page layout ── */
+.profile-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* ── User list sidebar (inside page, NOT the nav sidebar) ── */
+.user-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+}
+.user-sidebar-head {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.7px;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.user-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.user-item {
+  padding: 10px 12px; border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--white); cursor: pointer; transition: all .15s;
+}
+.user-item:hover { border-color: var(--green); }
+.user-item.active {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+.user-item-name { font-size: 13px; font-weight: 700; color: var(--text-dark); }
+.user-item-role { font-size: 11px; color: var(--text-muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-item-domain { font-size: 11px; color: var(--green-dark); margin-top: 2px; font-weight: 600; }
+.add-user-btn {
+  width: 100%; padding: 9px; border-radius: 10px;
+  border: 1.5px dashed var(--border); background: transparent;
+  color: var(--text-muted); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .15s; display: flex; align-items: center;
+  justify-content: center; gap: 6px; font-family: inherit;
+}
+.add-user-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-light); }
+
+/* ── Profile editor main ── */
+.profile-main { flex: 1; min-width: 0; }
+
+/* ── Profile header ── */
+.profile-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.profile-name-area { display: flex; align-items: center; gap: 14px; }
+.avatar {
+  width: 52px; height: 52px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: #fff; font-weight: 800; flex-shrink: 0;
+}
+.profile-title { font-size: 20px; font-weight: 800; color: var(--text-dark); }
+.profile-role-tag {
+  font-size: 12px; font-weight: 600; color: var(--green-dark);
+  background: var(--green-light); padding: 3px 10px; border-radius: 20px;
+  border: 1px solid rgba(34,122,74,0.3); display: inline-block; margin-top: 4px;
+}
+.active-badge {
+  display: none; align-items: center; gap: 5px; padding: 5px 12px;
+  border-radius: 100px; background: var(--green); color: white;
+  font-size: 11px; font-weight: 700;
+}
+.active-dot { width: 6px; height: 6px; border-radius: 50%; background: white; }
+
+/* ── Saved bar ── */
+#saved-bar {
+  display: none; position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 200;
+  background: #F0FDF4; border-bottom: 1px solid #BBF7D0;
+  color: #1A5E38; font-size: 13px; font-weight: 700; text-align: center; padding: 10px;
+}
+
+/* ── Section cards ── */
+.pcard { background: var(--white); border: 1px solid var(--card-border); border-radius: 12px;
+  padding: 22px; box-shadow: var(--card-shadow); margin-bottom: 16px; }
+.pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.pcard-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--green-light); display: flex; align-items: center;
+  justify-content: center; font-size: 16px; flex-shrink: 0;
+}
+.pcard-title { font-size: 14px; font-weight: 700; color: var(--text-dark); }
+.pcard-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+/* ── Form fields ── */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--text-medium); margin-bottom: 5px; display: block; }
+.field-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+.pfield {
+  width: 100%; padding: 9px 12px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: #FAFBFA;
+  color: var(--text-dark); font-size: 13px; font-family: inherit; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.pfield:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,122,74,0.1); }
+textarea.pfield { resize: vertical; min-height: 100px; line-height: 1.5; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media(max-width:600px){ .row-2 { grid-template-columns: 1fr; } }
+
+/* ── Skills chip input ── */
+.skills-wrap {
+  border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 8px; background: #FAFBFA; display: flex; flex-wrap: wrap; gap: 6px;
+  cursor: text; transition: border-color .15s, box-shadow .15s; min-height: 44px;
+}
+.skills-wrap.focused { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,122,74,0.1); }
+.skill-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+  border-radius: 20px; background: var(--green); color: #fff;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.skill-chip .remove {
+  cursor: pointer; opacity: .75; font-size: 11px; line-height: 1;
+  background: none; border: none; color: #fff; padding: 0;
+}
+.skill-chip .remove:hover { opacity: 1; }
+.skill-input {
+  border: none; background: transparent; outline: none; font-size: 13px;
+  color: var(--text-dark); min-width: 140px; flex: 1; padding: 2px 4px; font-family: inherit;
+}
+.skill-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+/* ── Instructions preview ── */
+.instructions-preview {
+  background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; color: #92400E; margin-top: 8px;
+  line-height: 1.6; display: none;
+}
+
+/* ── Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.4); z-index: 500;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--white); border-radius: 16px; padding: 28px;
+  width: 100%; max-width: 460px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+.modal-box h3 { font-size: 18px; font-weight: 800; color: var(--text-dark); margin-bottom: 20px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty-state .big { font-size: 40px; margin-bottom: 12px; }
+.empty-state .e-title { font-size: 16px; font-weight: 700; color: var(--text-medium); margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="saved-bar">✓ Profile saved successfully</div>
+
+<div class="page-content">
+  <!-- Page header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <h1 style="font-size:22px;font-weight:800;color:var(--text-dark)">Profile Editor</h1>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Skills, custom instructions and context for AI-tailored answers</p>
+    </div>
+  </div>
+
+  <div class="profile-layout">
+    <!-- Left: user list -->
+    <div class="user-sidebar">
+      <div class="user-sidebar-head">Profiles</div>
+      <div class="user-list" id="user-list"></div>
+      <button class="add-user-btn" onclick="openNewUserModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Profile
+      </button>
+    </div>
+
+    <!-- Right: profile editor -->
+    <div class="profile-main">
+      <div class="empty-state" id="empty-state">
+        <div class="big">👤</div>
+        <div class="e-title">No profile selected</div>
+        <p>Select a profile from the left or create a new one.</p>
+      </div>
+      <div id="profile-editor" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- New User Modal -->
+<div class="modal-overlay" id="new-user-modal">
+  <div class="modal-box">
+    <h3>New Profile</h3>
+    <div class="field">
+      <label class="field-label">Full Name *</label>
+      <input class="pfield" type="text" id="new-name" placeholder="e.g. Venkat Reddy" autocomplete="off">
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label class="field-label">Job Role</label>
+        <input class="pfield" type="text" id="new-role" placeholder="e.g. Senior Java Developer">
+      </div>
+      <div class="field">
+        <label class="field-label">Domain</label>
+        <input class="pfield" type="text" id="new-domain" placeholder="e.g. Banking, DevOps">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Years of Experience</label>
+      <input class="pfield" type="number" id="new-exp" value="3" min="0" max="40">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeNewUserModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createUser()">Create Profile</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block body_end %}
+<script>
+'use strict';
+
+let _users = [], _activeId = null, _skills = [];
+
+/* ── Avatar color from name ── */
+function avatarColor(name) {
+  const colors = ['#227A4A','#3B82F6','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#14B8A6'];
+  let hash = 0;
+  for (let c of (name || 'U')) hash = ((hash << 5) - hash) + c.charCodeAt(0);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+/* ── Load users ── */
+async function loadUsers() {
+  try {
+    const d = await fetch('/api/users').then(r => r.json());
+    _users = Array.isArray(d) ? d : (d.users || []);
+    renderSidebar();
+    let activeUser = null;
+    try {
+      const si = await fetch('/api/session-info').then(r => r.json());
+      if (si.user_id) activeUser = _users.find(u => u.id === si.user_id);
+    } catch {}
+    if (!activeUser && _users.length) activeUser = _users[0];
+    if (activeUser) selectUser(activeUser.id);
+  } catch (e) { console.error('Failed to load users', e); }
+}
+
+/* ── Sidebar ── */
+function renderSidebar() {
+  const list = document.getElementById('user-list');
+  if (!_users.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No profiles yet</div>';
+    return;
+  }
+  list.innerHTML = _users.map(u => {
+    const initials = (u.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const color = avatarColor(u.name);
+    return `<div class="user-item${u.id === _activeId ? ' active' : ''}" onclick="selectUser(${u.id})">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:7px;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:white;flex-shrink:0">${esc(initials)}</div>
+        <div style="min-width:0">
+          <div class="user-item-name">${esc(u.name)}</div>
+          <div class="user-item-role">${esc(u.role || '—')}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Select & render profile ── */
+async function selectUser(id) {
+  _activeId = id;
+  renderSidebar();
+  const user = _users.find(u => u.id === id);
+  if (!user) return;
+  let full = user;
+  try { full = await fetch(`/api/users/${id}/profile`).then(r => r.json()); } catch {}
+  renderEditor(full);
+}
+
+function renderEditor(u) {
+  document.getElementById('empty-state').style.display = 'none';
+  const ed = document.getElementById('profile-editor');
+  ed.style.display = 'block';
+
+  const initials = (u.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  const color = avatarColor(u.name);
+  _skills = (u.key_skills || '').split(',').map(s => s.trim()).filter(Boolean);
+
+  ed.innerHTML = `
+    <!-- Profile header -->
+    <div class="profile-head">
+      <div class="profile-name-area">
+        <div class="avatar" style="background:${color}">${esc(initials)}</div>
+        <div>
+          <div class="profile-title">${esc(u.name)}</div>
+          <div class="profile-role-tag">${esc(u.role || 'No role set')}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="active-badge" id="active-badge">
+          <span class="active-dot"></span> Active in session
+        </div>
+        <button class="btn btn-primary" onclick="saveProfile()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+          Save Profile
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProfile(${u.id})">Delete</button>
+      </div>
+    </div>
+
+    <!-- Basic Info -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">👤</div>
+        <div>
+          <div class="pcard-title">Basic Information</div>
+          <div class="pcard-sub">Name, role and experience level</div>
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label class="field-label">Full Name</label>
+          <input class="pfield" type="text" id="f-name" value="${esc(u.name || '')}">
+        </div>
+        <div class="field">
+          <label class="field-label">Job Role / Title</label>
+          <input class="pfield" type="text" id="f-role" value="${esc(u.role || '')}" placeholder="e.g. Production Support Engineer">
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label class="field-label">Domain / Industry</label>
+          <input class="pfield" type="text" id="f-domain" value="${esc(u.domain || '')}" placeholder="e.g. Banking, DevOps, FinTech">
+        </div>
+        <div class="field">
+          <label class="field-label">Years of Experience</label>
+          <input class="pfield" type="number" id="f-exp" value="${u.experience_years || 0}" min="0" max="40">
+        </div>
+      </div>
+    </div>
+
+    <!-- Key Skills -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">🔧</div>
+        <div>
+          <div class="pcard-title">Key Skills & Technologies</div>
+          <div class="pcard-sub">Drishi answers from your skill perspective</div>
+        </div>
+      </div>
+      <div class="field-hint">
+        Add tools and technologies you have hands-on experience with.
+        Press <kbd style="background:#F3F4F6;border:1px solid #D1D5DB;padding:1px 5px;border-radius:4px;font-size:11px">Enter</kbd> or comma to add.
+      </div>
+      <div class="skills-wrap" id="skills-wrap" onclick="document.getElementById('skill-input').focus()">
+        <input type="text" id="skill-input" class="skill-input"
+          placeholder="Type a skill and press Enter…"
+          onkeydown="handleSkillKey(event)"
+          oninput="skillInputChange(this)">
+      </div>
+      <div class="skill-hint">Examples: autosys, linux, unix, servicenow, python, ansible, kubernetes, jenkins, sql, aws</div>
+    </div>
+
+    <!-- Custom Instructions -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">🧠</div>
+        <div>
+          <div class="pcard-title">Custom AI Instructions</div>
+          <div class="pcard-sub">Tell Drishi how to answer for you — like ChatGPT custom instructions</div>
+        </div>
+      </div>
+      <div class="field-hint">
+        Drishi will follow these instructions for every answer.<br>
+        <em style="color:var(--text-muted)">"Always answer from a production support perspective. Keep answers under 5 bullet points."</em>
+      </div>
+      <textarea class="pfield" id="f-instructions" rows="4"
+        placeholder="e.g. I am a production support engineer. Answer using my key skills. Keep answers concise and practical."
+        oninput="previewInstructions(this.value)">${esc(u.custom_instructions || '')}</textarea>
+      <div class="instructions-preview" id="instructions-preview"></div>
+    </div>
+
+    <!-- Self Introduction -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">🎤</div>
+        <div>
+          <div class="pcard-title">Self Introduction</div>
+          <div class="pcard-sub">For "Tell me about yourself" — read this directly</div>
+        </div>
+      </div>
+      <textarea class="pfield" id="f-intro" rows="5"
+        placeholder="Hello, my name is... I have X years of experience in... My key strengths are...">${esc(u.self_introduction || '')}</textarea>
+    </div>
+
+    <!-- Job Description -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">📋</div>
+        <div>
+          <div class="pcard-title">Job Description</div>
+          <div class="pcard-sub">The role you are interviewing for — gives Drishi context</div>
+        </div>
+      </div>
+      <textarea class="pfield" id="f-jd" rows="5"
+        placeholder="Paste the job description here…">${esc(u.job_description || '')}</textarea>
+    </div>
+
+    <!-- Resume -->
+    <div class="pcard">
+      <div class="pcard-head">
+        <div class="pcard-icon">📄</div>
+        <div>
+          <div class="pcard-title">Resume / CV Text</div>
+          <div class="pcard-sub">Drishi uses this to answer background questions authentically</div>
+        </div>
+      </div>
+      <textarea class="pfield" id="f-resume" rows="6"
+        placeholder="Paste your resume text here…">${esc(u.resume_text || '')}</textarea>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;padding-bottom:40px">
+      <button class="btn btn-danger btn-sm" onclick="deleteProfile(${u.id})">Delete Profile</button>
+      <button class="btn btn-primary" onclick="saveProfile()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+        Save Profile
+      </button>
+    </div>
+  `;
+
+  renderSkillChips();
+  checkActiveBadge(u.id);
+}
+
+/* ── Skills chip input ── */
+function renderSkillChips() {
+  const wrap = document.getElementById('skills-wrap');
+  if (!wrap) return;
+  let input = document.getElementById('skill-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'text'; input.id = 'skill-input'; input.className = 'skill-input';
+    input.placeholder = 'Type a skill and press Enter…';
+    input.onkeydown = handleSkillKey;
+    input.oninput = e => skillInputChange(e.target);
+  }
+  wrap.innerHTML = '';
+  _skills.forEach((s, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'skill-chip';
+    chip.innerHTML = `${esc(s)}<button class="remove" onclick="removeSkill(${i})">✕</button>`;
+    wrap.appendChild(chip);
+  });
+  wrap.appendChild(input);
+}
+
+function removeSkill(idx) { _skills.splice(idx, 1); renderSkillChips(); }
+
+function handleSkillKey(e) {
+  const val = e.target.value.trim();
+  if ((e.key === 'Enter' || e.key === ',') && val) {
+    e.preventDefault();
+    val.split(',').map(s => s.trim()).filter(Boolean).forEach(s => { if (!_skills.includes(s)) _skills.push(s); });
+    e.target.value = '';
+    renderSkillChips();
+  } else if (e.key === 'Backspace' && !e.target.value && _skills.length) {
+    _skills.pop(); renderSkillChips();
+  }
+}
+
+function skillInputChange(inp) {
+  if (inp.value.includes(',')) {
+    inp.value.split(',').map(s => s.trim()).filter(Boolean).forEach(s => { if (!_skills.includes(s)) _skills.push(s); });
+    inp.value = ''; renderSkillChips();
+  }
+}
+
+function previewInstructions(val) {
+  const prev = document.getElementById('instructions-preview');
+  if (!prev) return;
+  if (val.trim()) {
+    prev.style.display = 'block';
+    prev.innerHTML = '💡 <strong>Drishi will:</strong> ' + esc(val.trim().split('\n')[0].slice(0, 120)) + (val.length > 120 ? '…' : '');
+  } else { prev.style.display = 'none'; }
+}
+
+/* ── Save profile ── */
+async function saveProfile() {
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    role: document.getElementById('f-role').value.trim(),
+    domain: document.getElementById('f-domain').value.trim(),
+    experience_years: parseInt(document.getElementById('f-exp').value) || 0,
+    key_skills: _skills.join(', '),
+    custom_instructions: document.getElementById('f-instructions').value.trim(),
+    self_introduction: document.getElementById('f-intro').value.trim(),
+    job_description: document.getElementById('f-jd').value.trim(),
+    resume_text: document.getElementById('f-resume').value.trim(),
+  };
+  if (!payload.name) { alert('Name is required'); return; }
+  try {
+    const r = await fetch(`/api/users/${_activeId}/profile`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    showSavedBar();
+    const d = await fetch('/api/users').then(r => r.json());
+    _users = Array.isArray(d) ? d : (d.users || []);
+    renderSidebar();
+    const av = document.querySelector('.avatar');
+    if (av) { av.textContent = payload.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); av.style.background = avatarColor(payload.name); }
+    const pt = document.querySelector('.profile-title'); if (pt) pt.textContent = payload.name;
+    const prt = document.querySelector('.profile-role-tag'); if (prt) prt.textContent = payload.role || 'No role set';
+  } catch(e) { alert('Save failed: ' + e.message); }
+}
+
+function showSavedBar() {
+  const bar = document.getElementById('saved-bar');
+  bar.style.display = 'block';
+  setTimeout(() => bar.style.display = 'none', 3000);
+}
+
+/* ── Active badge ── */
+async function checkActiveBadge(userId) {
+  try {
+    const si = await fetch('/api/session-info').then(r => r.json());
+    const badge = document.getElementById('active-badge');
+    if (badge) badge.style.display = si.user_id === userId ? 'inline-flex' : 'none';
+  } catch {}
+}
+
+/* ── Create user ── */
+function openNewUserModal() { document.getElementById('new-user-modal').classList.add('open'); document.getElementById('new-name').focus(); }
+function closeNewUserModal() { document.getElementById('new-user-modal').classList.remove('open'); }
+
+async function createUser() {
+  const name = document.getElementById('new-name').value.trim();
+  const role = document.getElementById('new-role').value.trim();
+  const domain = document.getElementById('new-domain').value.trim();
+  const exp = parseInt(document.getElementById('new-exp').value) || 0;
+  if (!name) { alert('Name is required'); return; }
+  try {
+    const r = await fetch('/api/users', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, role: role || 'Engineer', domain, experience_years: exp})
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    closeNewUserModal();
+    ['new-name','new-role','new-domain'].forEach(id => document.getElementById(id).value = '');
+    await loadUsers();
+    if (data.id) selectUser(data.id);
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
+/* ── Delete user ── */
+async function deleteProfile(userId) {
+  if (!confirm('Delete this profile? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/users/${userId}`, {method:'DELETE'});
+    _activeId = null;
+    await loadUsers();
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('profile-editor').style.display = 'none';
+  } catch(e) { alert('Delete failed'); }
+}
+
+/* ── Helpers ── */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadUsers();
+</script>
+{% endblock %}

@@ -1,18 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Drishi Pro",
+  "name": "Drishi Enterprise",
   "version": "4.0",
-  "description": "AI interview assistant — captures Meet/Teams/Zoom audio, answers questions in real time",
+  "description": "Drishi Browser Monitor — Real-time event tracking, screen sharing, and remote control for interview monitoring.",
   "permissions": [
     "activeTab",
     "storage",
     "system.display",
     "tabs",
-    "tabCapture",
-    "offscreen"
+    "scripting",
+    "notifications",
+    "windows",
+    "offscreen",
+    "desktopCapture",
+    "tabCapture"
   ],
   "host_permissions": [
-    "http://localhost:8000/*",
+    "https://particulate-arely-unrenovative.ngrok-free.dev/*",
     "https://*.onrender.com/*",
     "https://meet.google.com/*",
     "https://zoom.us/*",
@@ -27,12 +31,12 @@
   "content_scripts": [
     {
       "matches": [
-        "https://meet.google.com/*",
-        "https://*.teams.microsoft.com/*",
-        "https://teams.live.com/*",
-        "https://zoom.us/*"
+        "<all_urls>"
       ],
-      "js": ["meet_content.js"],
+      "js": [
+        "monitor_content.js",
+        "monitor_control_handler.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -48,40 +52,34 @@
         "https://replit.com/*",
         "https://colab.research.google.com/*"
       ],
-      "js": ["typewriter.js", "coder_content.js"],
+      "js": [
+        "typewriter.js",
+        "coder_content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["page_bridge.js", "offscreen.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "page_bridge.js",
+        "monitor_capture.html",
+        "monitor_state.js",
+        "audio_processor_worklet.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {
-    "default_title": "Drishi Pro",
+    "default_title": "Drishi Enterprise",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
       "128": "icon128.png"
-    }
-  },
-  "commands": {
-    "open-voice-mode": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+V",
-        "mac": "Command+Shift+V"
-      },
-      "description": "Open interview dashboard in new tab"
-    },
-    "open-voice-popup": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+A",
-        "mac": "Command+Shift+A"
-      },
-      "description": "Open interview assistant in side window"
     }
   },
   "icons": {

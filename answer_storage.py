@@ -32,6 +32,13 @@ MASTER_LOG_FILE = ANSWERS_DIR / "interview_master_log.jsonl"  # Permanent storag
 # Thread-safe write lock
 _write_lock = threading.Lock()
 
+# Unique ID for the current server/main.py session.
+# Generated at startup (clear_all) and embedded in current_answer.json.
+# The browser compares this to sessionStorage to detect fresh page loads vs
+# SSE reconnects — only reconnects restore the history feed.
+import uuid as _uuid
+_session_id: str = _uuid.uuid4().hex
+
 # All answers for this session (accumulates, never overwrites)
 _all_answers: List[Dict[str, Any]] = []
 
@@ -52,7 +59,7 @@ _dir_ensured = False
 
 # Throttled write state for streaming chunks
 _last_write_time: float = 0.0
-_WRITE_THROTTLE_INTERVAL = 0.08  # Write to disk at most every 80ms during streaming
+_WRITE_THROTTLE_INTERVAL = 0.03  # Write to disk at most every 30ms during streaming
 
 # mtime of current_answer.json after our last write — used to skip the expensive
 # cross-process sync read when we ourselves were the last writer.
@@ -99,18 +106,19 @@ def _write_current(force: bool = False):
                 with open(CURRENT_ANSWER_FILE, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
                     if content:
-                        disk_data = json.loads(content)
-                        if isinstance(disk_data, list):
-                            # Find answers on disk that we don't have in memory
-                            memory_questions = {a.get('question', '').strip().lower() for a in _all_answers if a.get('question')}
-                            for disk_ans in disk_data:
-                                if isinstance(disk_ans, dict) and disk_ans.get('question'):
-                                    q_lower = disk_ans['question'].strip().lower()
-                                    if q_lower not in memory_questions:
-                                        # Add disk answer to memory
-                                        _answer_index[q_lower] = len(_all_answers)
-                                        _all_answers.append(disk_ans)
-                                        memory_questions.add(q_lower)
+                        raw = json.loads(content)
+                        # Handle envelope {session_id, answers} or legacy list
+                        disk_data = raw.get('answers', []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+                        # Find answers on disk that we don't have in memory
+                        memory_questions = {a.get('question', '').strip().lower() for a in _all_answers if a.get('question')}
+                        for disk_ans in disk_data:
+                            if isinstance(disk_ans, dict) and disk_ans.get('question'):
+                                q_lower = disk_ans['question'].strip().lower()
+                                if q_lower not in memory_questions:
+                                    # Add disk answer to memory
+                                    _answer_index[q_lower] = len(_all_answers)
+                                    _all_answers.append(disk_ans)
+                                    memory_questions.add(q_lower)
             except Exception:
                 pass  # If read fails, proceed with memory state
 
@@ -119,8 +127,10 @@ def _write_current(force: bool = False):
         # If current answer is being streamed (not yet in _all_answers), add it
         if _current_answer.get('question') and not _current_answer.get('is_complete'):
             display_list.append(_current_answer)
+        # Wrap in envelope so the browser can identify the server session
+        payload = {"session_id": _session_id, "answers": display_list}
         with open(CURRENT_ANSWER_FILE, 'w', encoding='utf-8') as f:
-            json.dump(display_list, f, ensure_ascii=False)
+            json.dump(payload, f, ensure_ascii=False)
             f.flush()
             if force:
                 os.fsync(f.fileno())
@@ -161,12 +171,12 @@ def _log_permanent(data: Dict[str, Any]):
 
 def clear_all(force_clear: bool = False):
     """Clear all stored answers.
-    
+
     Args:
         force_clear: If True, delete disk files (fresh start).
                     If False, only clear memory (allows recovery on restart).
     """
-    global _current_answer, _all_answers, _answer_index, _dir_ensured
+    global _current_answer, _all_answers, _answer_index, _dir_ensured, _session_id
 
     _dir_ensured = False
     ensure_answers_dir()
@@ -181,12 +191,14 @@ def clear_all(force_clear: bool = False):
         }
         _all_answers = []
         _answer_index = {}
+        # New session ID so the browser knows to start fresh
+        _session_id = _uuid.uuid4().hex
 
         # Only delete files if explicitly requested (manual clear)
         if force_clear:
             try:
                 with open(CURRENT_ANSWER_FILE, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False)
+                    json.dump({"session_id": _session_id, "answers": []}, f, ensure_ascii=False)
 
                 # Clear history file (Session only)
                 if HISTORY_FILE.exists():
@@ -291,21 +303,22 @@ def set_complete_answer(
                 with open(CURRENT_ANSWER_FILE, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
                     if content:
-                        disk_data = json.loads(content)
-                        if isinstance(disk_data, list):
-                            # Merge disk data with memory (disk is source of truth)
-                            disk_questions = {a.get('question', '').strip().lower() for a in disk_data if a.get('question')}
-                            memory_questions = {a.get('question', '').strip().lower() for a in _all_answers}
-                            
-                            # If disk has answers we don't have in memory, use disk as base
-                            if disk_questions - memory_questions:
-                                _all_answers = [a for a in disk_data if isinstance(a, dict) and a.get('question')]
-                                # Rebuild index
-                                _answer_index = {}
-                                for i, ans in enumerate(_all_answers):
-                                    q_lower = ans.get('question', '').strip().lower()
-                                    if q_lower:
-                                        _answer_index[q_lower] = i
+                        raw = json.loads(content)
+                        # Handle envelope format {session_id, answers} or legacy list
+                        disk_data = raw.get('answers', []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+                        # Merge disk data with memory (disk is source of truth)
+                        disk_questions = {a.get('question', '').strip().lower() for a in disk_data if a.get('question')}
+                        memory_questions = {a.get('question', '').strip().lower() for a in _all_answers}
+
+                        # If disk has answers we don't have in memory, use disk as base
+                        if disk_questions - memory_questions:
+                            _all_answers = [a for a in disk_data if isinstance(a, dict) and a.get('question')]
+                            # Rebuild index
+                            _answer_index = {}
+                            for i, ans in enumerate(_all_answers):
+                                q_lower = ans.get('question', '').strip().lower()
+                                if q_lower:
+                                    _answer_index[q_lower] = i
             except Exception:
                 pass  # If read fails, proceed with memory state
 
@@ -404,10 +417,11 @@ def get_all_answers() -> list:
             # File changed, re-read
             with open(CURRENT_ANSWER_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                if isinstance(data, list):
+                # Handle envelope {session_id, answers} or legacy list
+                if isinstance(data, dict) and 'answers' in data:
+                    display_list = [a for a in data['answers'] if a.get('question')]
+                elif isinstance(data, list):
                     display_list = [a for a in data if a.get('question')]
-                elif isinstance(data, dict) and data.get('question'):
-                    display_list = [data]
 
             # Newest first for display
             display_list.reverse()
@@ -507,13 +521,15 @@ def load_history_on_startup():
                 if not content:
                     return
 
-                data = json.loads(content)
-                if isinstance(data, list):
+                raw = json.loads(content)
+                # Handle envelope {session_id, answers} or legacy list
+                data = raw.get('answers', []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+                if data:
                     with _write_lock:
                         # Filter for COMPLETE answers only (exclude partial answers from crashes)
                         _all_answers = [
-                            a for a in data 
-                            if isinstance(a, dict) 
+                            a for a in data
+                            if isinstance(a, dict)
                             and a.get('question')
                             and a.get('is_complete', True)  # Only complete answers
                         ]

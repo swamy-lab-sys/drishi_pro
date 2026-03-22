@@ -1,0 +1,1688 @@
+{% extends "base.html" %}
+{% block title %}Admin Docs{% endblock %}
+{% block page_name %}Admin Documentation{% endblock %}
+
+{% block head_extra %}
+<style>
+/* ══════════════════════════════════════════
+   ADMIN DOCS — LOCAL DESIGN TOKENS
+   ══════════════════════════════════════════ */
+:root {
+  --indigo:      #5C6BC0;
+  --indigo-dark: #3949AB;
+  --indigo-bg:   rgba(92,107,192,0.12);
+  --teal:        #2E9E88;
+  --teal-bg:     rgba(46,158,136,0.12);
+  --amber:       #F59E0B;
+  --grad-hero:   linear-gradient(135deg, #14181A 0%, #1E2D24 40%, #14181A 100%);
+  --grad-indigo: linear-gradient(135deg, #3949AB, #5C6BC0);
+  --grad-purple: linear-gradient(135deg, #7C3AED, #8B5CF6);
+  --grad-teal:   linear-gradient(135deg, #227A4A, #2E9E88);
+  --grad-gold:   linear-gradient(135deg, #F5A12F, #E8803A);
+  --grad-red:    linear-gradient(135deg, #E53535, #C82020);
+  --grad-blue:   linear-gradient(135deg, #3B7EF0, #2563EB);
+  --doc-log-h:   520px;
+}
+
+/* ── Page Layout ─────────────────────────── */
+#main-content { padding: 0; overflow-x: hidden; }
+
+.docs-wrap {
+  display: flex;
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* ── In-page Quick Nav (left panel) ──────── */
+.docs-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #1A1260 0%, #2D1B69 40%, #1B2A5E 100%);
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h));
+  overflow-y: auto;
+  padding: 20px 0 40px;
+  border-right: 1px solid rgba(139,92,246,0.25);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139,92,246,0.4) transparent;
+}
+
+.docs-nav::-webkit-scrollbar { width: 4px; }
+.docs-nav::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.4); border-radius: 4px; }
+
+.docs-nav-header {
+  padding: 0 16px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  border-bottom: 1px solid rgba(139,92,246,0.2);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docs-nav-section {
+  padding: 12px 16px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(139,92,246,0.7);
+}
+
+.docs-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+
+.docs-nav a:hover {
+  color: #fff;
+  background: rgba(139,92,246,0.18);
+  border-left-color: rgba(139,92,246,0.7);
+}
+
+.docs-nav a.active {
+  color: #C4B5FD;
+  background: rgba(139,92,246,0.22);
+  border-left-color: #8B5CF6;
+  font-weight: 600;
+}
+
+.docs-nav a .nav-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* ── Main Docs Content ────────────────────── */
+.docs-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 80px;
+}
+
+/* ── Hero Section ────────────────────────── */
+.docs-hero {
+  background: var(--grad-hero);
+  padding: 48px 40px 40px;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.docs-hero::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,122,74,0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.docs-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -80px; left: 60px;
+  width: 240px; height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(92,107,192,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34,122,74,0.25);
+  border: 1px solid rgba(34,122,74,0.4);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6EE7A0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.hero-badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #6EE7A0;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:0.5; transform:scale(0.7); }
+}
+
+.docs-hero h1 {
+  font-size: 36px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+.docs-hero h1 span {
+  background: linear-gradient(135deg, #6EE7A0, #34D399, #2E9E88);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.docs-hero p {
+  color: rgba(255,255,255,0.6);
+  font-size: 15px;
+  max-width: 600px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-stat-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-stat-val.green { color: #6EE7A0; }
+.hero-stat-val.gold  { color: #FCD34D; }
+.hero-stat-val.blue  { color: #93C5FD; }
+.hero-stat-val.purple{ color: #C4B5FD; }
+
+.hero-stat-lbl {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ── Sections ────────────────────────────── */
+.docs-section {
+  padding: 36px 40px 0;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.section-label h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+}
+
+.section-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 36px 40px 0;
+}
+
+/* ── Card Grid ────────────────────────────── */
+.card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.card-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* ── Feature Card ─────────────────────────── */
+.feat-card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.feat-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06);
+  transform: translateY(-2px);
+}
+
+.feat-card-header {
+  padding: 16px 18px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.feat-card-header::after {
+  content: '';
+  position: absolute;
+  right: -20px; top: -20px;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+}
+
+.feat-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.feat-card-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+
+.feat-card-header .feat-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.65);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feat-card-body {
+  padding: 14px 18px 16px;
+}
+
+.feat-card-body p {
+  font-size: 13px;
+  color: var(--text-medium);
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.feat-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feat-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-medium);
+  line-height: 1.4;
+}
+
+.feat-steps li::before {
+  content: attr(data-n);
+  min-width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.feat-steps li.warn::before { background: var(--gold-bg); color: var(--gold); }
+.feat-steps li.info::before { background: var(--blue-bg); color: var(--blue); }
+
+/* ── Info / Tip Cards ─────────────────────── */
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: var(--card-shadow);
+}
+
+.info-card.green-accent { border-left: 3px solid var(--green); }
+.info-card.gold-accent  { border-left: 3px solid var(--gold); }
+.info-card.blue-accent  { border-left: 3px solid var(--blue); }
+.info-card.purple-accent{ border-left: 3px solid var(--purple); }
+
+.info-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-card p, .info-card li {
+  font-size: 12.5px;
+  color: var(--text-medium);
+  line-height: 1.55;
+}
+
+.info-card ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.info-card ul li::before { content: '›'; color: var(--green); font-weight: 700; margin-right: 6px; }
+
+/* ── Code Pill ───────────────────────────── */
+code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  background: rgba(34,122,74,0.08);
+  border: 1px solid rgba(34,122,74,0.2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--green-dark);
+}
+
+.code-block {
+  background: #0F1117;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #E2E8F0;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.code-block .kw { color: #93C5FD; }
+.code-block .str{ color: #86EFAC; }
+.code-block .cm { color: #64748B; font-style: italic; }
+.code-block .val{ color: #FCD34D; }
+
+/* ── API Table ────────────────────────────── */
+.api-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+.api-table th {
+  background: #F0EDE8;
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-dark);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.api-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-medium);
+  vertical-align: top;
+}
+
+.api-table tr:last-child td { border-bottom: none; }
+.api-table tr:hover td { background: rgba(34,122,74,0.03); }
+
+.method-badge {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.method-badge.get  { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34,122,74,0.25); }
+.method-badge.post { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59,126,240,0.25); }
+.method-badge.del  { background: var(--red-bg); color: var(--red); border: 1px solid rgba(229,53,53,0.25); }
+.method-badge.put  { background: var(--gold-bg); color: var(--gold); border: 1px solid rgba(245,161,47,0.25); }
+
+/* ── Performance Tier ─────────────────────── */
+.perf-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.perf-card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  box-shadow: var(--card-shadow);
+}
+
+.perf-val {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  font-family: 'IBM Plex Mono', monospace;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.perf-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.perf-label {
+  font-size: 11.5px;
+  color: var(--text-medium);
+  font-weight: 500;
+}
+
+/* ── Activity Log ─────────────────────────── */
+.log-container {
+  background: #0A0E14;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+.log-toolbar {
+  background: #12171F;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.log-toolbar .log-dots { display: flex; gap: 5px; }
+.log-dot { width: 10px; height: 10px; border-radius: 50%; }
+.log-dot.red    { background: #FF5F57; }
+.log-dot.yellow { background: #FFBD2E; }
+.log-dot.green  { background: #28C840; }
+
+.log-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  margin-left: 4px;
+}
+
+.log-controls { margin-left: auto; display: flex; gap: 8px; }
+.log-btn {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  transition: all 0.15s;
+}
+.log-btn:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+
+.log-output {
+  height: var(--doc-log-h);
+  overflow-y: auto;
+  padding: 14px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8A9DB8;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+
+.log-output::-webkit-scrollbar { width: 5px; }
+.log-output::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+.log-line { display: flex; gap: 12px; }
+.log-ts  { color: #374151; flex-shrink: 0; }
+.log-lvl { flex-shrink: 0; font-weight: 600; min-width: 28px; }
+.log-lvl.ok  { color: #34D399; }
+.log-lvl.warn{ color: #FCD34D; }
+.log-lvl.err { color: #FC8181; }
+.log-lvl.inf { color: #60A5FA; }
+.log-lvl.dbg { color: #A78BFA; }
+.log-msg { color: #CBD5E1; }
+.log-msg .hl { color: #86EFAC; }
+.log-msg .path { color: #93C5FD; }
+.log-msg .num { color: #FCD34D; font-weight: 600; }
+
+/* ── Scrollspy active nav ─────────────────── */
+.docs-nav a.active { color: #C4B5FD; border-left-color: #8B5CF6; }
+
+/* ── Architecture Diagram ─────────────────── */
+.arch-flow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+
+.arch-node {
+  flex: 1;
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.arch-node .arch-icon { font-size: 22px; margin-bottom: 4px; }
+.arch-node .arch-name { font-size: 11px; font-weight: 700; color: var(--text-dark); }
+.arch-node .arch-sub  { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+
+.arch-arrow {
+  color: var(--text-muted);
+  font-size: 18px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.arch-node.green-node { background: var(--green-bg); border-right: 1px solid var(--card-border); }
+.arch-node.gold-node  { background: var(--gold-bg);  border-right: 1px solid var(--card-border); }
+.arch-node.blue-node  { background: var(--blue-bg);  border-right: 1px solid var(--card-border); }
+.arch-node.purple-node{ background: var(--purple-bg);}
+
+/* ── Gradient headers for section icons ───── */
+.gi-green  { background: var(--grad-teal); }
+.gi-gold   { background: var(--grad-gold); }
+.gi-blue   { background: var(--grad-blue); }
+.gi-purple { background: var(--grad-purple); }
+.gi-indigo { background: var(--grad-indigo); }
+.gi-red    { background: var(--grad-red); }
+
+/* ── Responsive ──────────────────────────── */
+@media (max-width: 1100px) {
+  .card-grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .card-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+  .perf-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 860px) {
+  .docs-nav { display: none; }
+  .card-grid.cols-2 { grid-template-columns: 1fr; }
+  .arch-flow { flex-direction: column; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-wrap">
+
+  <!-- ════ IN-PAGE QUICK NAV ════ -->
+  <aside class="docs-nav" id="docs-nav">
+    <div class="docs-nav-header">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      Admin Docs
+    </div>
+
+    <div class="docs-nav-section">Overview</div>
+    <a href="#overview" class="active"><span class="nav-dot"></span>What is Drishi?</a>
+    <a href="#architecture"><span class="nav-dot"></span>Architecture</a>
+    <a href="#performance"><span class="nav-dot"></span>Performance</a>
+
+    <div class="docs-nav-section">Interfaces</div>
+    <a href="#chrome-ext"><span class="nav-dot"></span>Chrome Extension</a>
+    <a href="#user-portal"><span class="nav-dot"></span>User Portal</a>
+    <a href="#admin-panel"><span class="nav-dot"></span>Admin Panel</a>
+
+    <div class="docs-nav-section">AI Features</div>
+    <a href="#interview-pipeline"><span class="nav-dot"></span>Interview Pipeline</a>
+    <a href="#classifier"><span class="nav-dot"></span>Question Classifier</a>
+    <a href="#followup"><span class="nav-dot"></span>Follow-Up Detection</a>
+    <a href="#resume-aware"><span class="nav-dot"></span>Resume-Aware</a>
+    <a href="#company-boost"><span class="nav-dot"></span>Company/Role Boost</a>
+    <a href="#duplicate"><span class="nav-dot"></span>Duplicate Warning</a>
+    <a href="#tts"><span class="nav-dot"></span>Text-to-Speech</a>
+    <a href="#screenshot"><span class="nav-dot"></span>Screenshot Solver</a>
+    <a href="#debrief"><span class="nav-dot"></span>Post-Interview Debrief</a>
+
+    <div class="docs-nav-section">Data</div>
+    <a href="#qa-manager"><span class="nav-dot"></span>QA Manager</a>
+    <a href="#ext-users"><span class="nav-dot"></span>Ext Users</a>
+    <a href="#api-ref"><span class="nav-dot"></span>API Reference</a>
+
+    <div class="docs-nav-section">Logs</div>
+    <a href="#activity-log"><span class="nav-dot"></span>Activity Log</a>
+  </aside>
+
+  <!-- ════ MAIN CONTENT ════ -->
+  <div class="docs-content" id="docs-content">
+
+    <!-- ── HERO ── -->
+    <section class="docs-hero" id="overview">
+      <div class="hero-badge">Admin Reference</div>
+      <h1>Drishi <span>Enterprise</span><br>Documentation</h1>
+      <p>
+        Drishi is a real-time AI-powered interview intelligence platform. It listens to live interview audio,
+        classifies each question, retrieves optimised answers from a curated QA database, and streams
+        Claude-generated responses — all in under 2 seconds — directly to the candidate via Chrome Extension
+        or User Portal.
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-val green">≤ 1.8s</span>
+          <span class="hero-stat-lbl">End-to-end latency</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val gold">100%</span>
+          <span class="hero-stat-lbl">Classifier accuracy</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val blue">0.72</span>
+          <span class="hero-stat-lbl">Jaccard DB threshold</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val purple">LRU 1000</span>
+          <span class="hero-stat-lbl">Runtime answer cache</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val" style="color:#FCA5A5;">12s</span>
+          <span class="hero-stat-lbl">Claude API timeout</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ARCHITECTURE ── -->
+    <div class="section-divider" id="architecture"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-indigo">🏗</div>
+        <h2>System Architecture</h2>
+      </div>
+
+      <div class="arch-flow" style="margin-bottom:16px;">
+        <div class="arch-node green-node">
+          <div class="arch-icon">🎙</div>
+          <div class="arch-name">Audio Capture</div>
+          <div class="arch-sub">Chrome Extension<br>System mic / tab</div>
+        </div>
+        <div class="arch-arrow">›</div>
+        <div class="arch-node green-node">
+          <div class="arch-icon">🔤</div>
+          <div class="arch-name">STT Engine</div>
+          <div class="arch-sub">Web Speech API<br>/ Whisper</div>
+        </div>
+        <div class="arch-arrow">›</div>
+        <div class="arch-node gold-node">
+          <div class="arch-icon">🧠</div>
+          <div class="arch-name">Question Classifier</div>
+          <div class="arch-sub">Regex + heuristics<br>Behavioral / Technical / Coding</div>
+        </div>
+        <div class="arch-arrow">›</div>
+        <div class="arch-node blue-node">
+          <div class="arch-icon">🗄</div>
+          <div class="arch-name">QA Database</div>
+          <div class="arch-sub">SQLite WAL<br>Jaccard ≥ 0.72</div>
+        </div>
+        <div class="arch-arrow">›</div>
+        <div class="arch-node purple-node">
+          <div class="arch-icon">✨</div>
+          <div class="arch-name">Claude API</div>
+          <div class="arch-sub">Streaming · temp=0.15<br>Prompt cache</div>
+        </div>
+      </div>
+
+      <div class="card-grid cols-3">
+        <div class="info-card green-accent">
+          <h4>🔁 Two-Tier Caching</h4>
+          <ul>
+            <li>Runtime LRU cache (1000 entries) for identical questions</li>
+            <li>In-memory Jaccard token cache ordered by hit_count DESC</li>
+            <li>SQLite WAL mode — concurrent reads without blocking</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>⚡ Prompt Caching</h4>
+          <ul>
+            <li>System prompt sent with <code>cache_control: ephemeral</code></li>
+            <li>Reduces Claude token cost by ~80% on repeated context</li>
+            <li>Temperature 0.15 for deterministic, professional answers</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>🔐 Auth Model</h4>
+          <ul>
+            <li>Admin uses main session (Flask server-side)</li>
+            <li>Ext users get unique tokens via <code>/ext-users</code></li>
+            <li>User Portal: <code>/portal/&lt;token&gt;</code> — no login required</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PERFORMANCE ── -->
+    <div class="section-divider" id="performance"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-green">⚡</div>
+        <h2>Performance Benchmarks</h2>
+      </div>
+      <div class="perf-grid" style="margin-bottom:16px;">
+        <div class="perf-card">
+          <div class="perf-val">1.2</div>
+          <div class="perf-unit">ms avg</div>
+          <div class="perf-label">DB Lookup (Jaccard)</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val">0.008</div>
+          <div class="perf-unit">ms / call</div>
+          <div class="perf-label">Question Classifier</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val">0.0006</div>
+          <div class="perf-unit">ms / call</div>
+          <div class="perf-label">Follow-Up Detector</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val" style="color:var(--blue);">≤ 1.8s</div>
+          <div class="perf-unit">end-to-end</div>
+          <div class="perf-label">Total Answer Latency</div>
+        </div>
+      </div>
+      <div class="info-card gold-accent">
+        <h4>⚠ Targets</h4>
+        <ul>
+          <li>DB lookup target: &lt; 20ms — currently 1.2ms (16× faster)</li>
+          <li>Classifier target: &lt; 1ms — currently 0.008ms (125× faster)</li>
+          <li>Follow-up target: &lt; 0.5ms — currently 0.0006ms (833× faster)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── CHROME EXTENSION ── -->
+    <div class="section-divider" id="chrome-ext"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-blue">🔌</div>
+        <h2>Chrome Extension</h2>
+      </div>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:var(--grad-blue);">
+            <div class="feat-icon">🎙</div>
+            <div>
+              <h3>Live Answer Monitor</h3>
+              <div class="feat-tag">Core Feature</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Captures audio, transcribes via Web Speech API, sends transcript to server, and displays the AI-generated answer in real-time.</p>
+            <ul class="feat-steps">
+              <li data-n="1">Click the Drishi icon in Chrome toolbar</li>
+              <li data-n="2">Select user profile from dropdown</li>
+              <li data-n="3">Click <strong>CAPTURE NOW</strong> to start recording</li>
+              <li data-n="4">Answers appear automatically as questions are detected</li>
+              <li data-n="5">Click <strong>STOP</strong> when done</li>
+            </ul>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:var(--grad-purple);">
+            <div class="feat-icon">📷</div>
+            <div>
+              <h3>Screenshot Problem Solver</h3>
+              <div class="feat-tag">Feature 5</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Captures a screenshot of the visible tab, sends it to Claude Vision, and returns a full code solution — no typing needed.</p>
+            <ul class="feat-steps">
+              <li data-n="1">Navigate to the coding problem tab (LeetCode, HackerRank, etc.)</li>
+              <li data-n="2">Open Drishi extension popup</li>
+              <li data-n="3">Click <strong>📷 Solve Problem from Screenshot</strong></li>
+              <li data-n="4">Wait 2–4s for Claude Vision analysis</li>
+              <li data-n="5">Solution appears inline with time/space complexity</li>
+            </ul>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:var(--grad-teal);">
+            <div class="feat-icon">🔊</div>
+            <div>
+              <h3>Text-to-Speech (Earpiece)</h3>
+              <div class="feat-tag">Feature 4</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Auto-reads new answers aloud via Web Speech API so the candidate hears answers through earpiece without looking at screen.</p>
+            <ul class="feat-steps">
+              <li data-n="1">Enable <strong>Auto-speak</strong> toggle in extension popup</li>
+              <li data-n="2">Each new complete answer is spoken at rate 0.95, pitch 1.0</li>
+              <li data-n="3">Click <strong>■ Stop</strong> to cancel current speech</li>
+              <li data-n="4">Preference saved in <code>chrome.storage.sync</code></li>
+            </ul>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:var(--grad-indigo);">
+            <div class="feat-icon">🖥</div>
+            <div>
+              <h3>Extension Installation</h3>
+              <div class="feat-tag">Setup</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Load the extension in developer mode — no Chrome Web Store needed.</p>
+            <ul class="feat-steps">
+              <li data-n="1">Open <code>chrome://extensions</code></li>
+              <li data-n="2">Enable <strong>Developer Mode</strong> (top-right toggle)</li>
+              <li data-n="3">Click <strong>Load unpacked</strong></li>
+              <li data-n="4">Select <code>chrome_extension/</code> directory</li>
+              <li data-n="5">Set server URL in popup to <code>http://localhost:5000</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── USER PORTAL ── -->
+    <div class="section-divider" id="user-portal"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-gold">🌐</div>
+        <h2>User Portal</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Each ext user gets a unique URL: <code>/portal/&lt;token&gt;</code>. No login required — the token is the credential.
+        The portal has 4 tabs: Live Interview, History, Debrief, and Setup.
+      </p>
+      <div class="card-grid cols-4" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>🎯 Live Interview</h4>
+          <ul>
+            <li>Real-time answer feed polling <code>/api/ext_users/&lt;token&gt;/answers</code></li>
+            <li>TTS toggle to read answers aloud</li>
+            <li>Question type badge (Behavioral / Technical / Coding)</li>
+            <li>Follow-up detection indicator</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>📋 History</h4>
+          <ul>
+            <li>Chronological list of all Q&amp;A pairs</li>
+            <li>Filter by date and question type</li>
+            <li>Each entry shows time, latency, DB hit flag</li>
+          </ul>
+        </div>
+        <div class="info-card purple-accent">
+          <h4>📊 Debrief</h4>
+          <ul>
+            <li>Post-interview performance summary</li>
+            <li>Stats: total questions, DB hit rate, avg latency, AI usage</li>
+            <li>AI analysis with strengths &amp; improvement areas</li>
+            <li>Full question list with per-question metrics</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>⚙ Setup</h4>
+          <ul>
+            <li>User reads their token for extension auth</li>
+            <li>Server URL configuration for the extension</li>
+            <li>Profile information display</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ADMIN PANEL ── -->
+    <div class="section-divider" id="admin-panel"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-red">🛡</div>
+        <h2>Admin Panel Pages</h2>
+      </div>
+      <table class="api-table" style="margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>Page</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>/</code></td><td>Interview</td><td>Main session page — start/stop recording, load user profiles</td></tr>
+          <tr><td><code>/monitor</code></td><td>Monitor</td><td>Real-time answer feed for all users or <code>?user=&lt;token&gt;</code> for one</td></tr>
+          <tr><td><code>/users</code></td><td>Profiles</td><td>Create and manage user profiles with skills and company/role</td></tr>
+          <tr><td><code>/questions</code></td><td>Questions DB</td><td>Browse the Q&amp;A database — view, edit, delete entries</td></tr>
+          <tr><td><code>/lookup</code></td><td>Keyword Lookup</td><td>Type any keyword and instantly see matching Q&amp;A pairs</td></tr>
+          <tr><td><code>/qa-manager</code></td><td>QA Manager</td><td>Add/import/export Q&amp;A pairs, bulk operations</td></tr>
+          <tr><td><code>/settings</code></td><td>Settings</td><td>System configuration, thresholds, STT corrections</td></tr>
+          <tr><td><code>/api-dashboard</code></td><td>API Keys</td><td>Manage Anthropic API key, model selection, usage stats</td></tr>
+          <tr><td><code>/ext-users</code></td><td>Ext Users</td><td>Create extension user tokens, view usage logs</td></tr>
+          <tr><td><code>/voice</code></td><td>Voice</td><td>Push-to-talk voice interface with audio waveform</td></tr>
+          <tr><td><code>/admin-docs</code></td><td>Admin Docs</td><td>This page — full project documentation</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── INTERVIEW PIPELINE ── -->
+    <div class="section-divider" id="interview-pipeline"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-green">🎙</div>
+        <h2>Interview Pipeline</h2>
+      </div>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#065F46,#059669);">
+            <div class="feat-icon">1️⃣</div>
+            <div>
+              <h3>Capture &amp; Transcribe</h3>
+              <div class="feat-tag">STT Layer</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Browser STT (Web Speech API) transcribes microphone/system audio continuously. Transcript chunks are sent to <code>POST /api/transcript</code> every ~3 seconds.</p>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#92400E,#D97706);">
+            <div class="feat-icon">2️⃣</div>
+            <div>
+              <h3>Classify &amp; Validate</h3>
+              <div class="feat-tag">AI Classification</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Server classifies the question as <strong>behavioral</strong>, <strong>technical</strong>, or <strong>coding</strong>. Follow-up detector checks if it's a clarification (< 9 words + regex patterns).</p>
+          </div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#1E3A5F,#2563EB);">
+            <div class="feat-icon">3️⃣</div>
+            <div>
+              <h3>DB Lookup → Claude</h3>
+              <div class="feat-tag">Answer Generation</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>Jaccard similarity search (threshold 0.72) checks QA database first. On DB hit, answer is returned in ~1ms. On miss, Claude generates answer (12s timeout, temp=0.15, streamed).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── QUESTION CLASSIFIER ── -->
+    <div class="section-divider" id="classifier"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-gold">🧠</div>
+        <h2>Question Classifier</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
+        File: <code>llm_client.py</code> — 100% accuracy on 20/20 test cases. Uses compiled regex, zero ML inference.
+      </p>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>🤝 Behavioral</h4>
+          <ul>
+            <li>Tell me about a time, Describe a situation</li>
+            <li>Have you ever, Walk me through</li>
+            <li>How do you handle / deal with / manage</li>
+            <li>Strength, weakness (standalone)</li>
+            <li>HR: salary, notice period, why do you want</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>⚙ System Design / Technical</h4>
+          <ul>
+            <li>Design a system / microservices</li>
+            <li>Scalability, distributed systems</li>
+            <li>CAP theorem, eventual consistency</li>
+            <li>Sharding, message queues, API gateway</li>
+            <li>Trade-offs, service mesh</li>
+          </ul>
+        </div>
+        <div class="info-card purple-accent">
+          <h4>💻 Coding / Algorithm</h4>
+          <ul>
+            <li>Write / implement / code a function</li>
+            <li>Solve / find / detect / count in an array</li>
+            <li>Implement a LRU/LFU/Trie/Heap cache</li>
+            <li>Two-sum, fibonacci, palindrome patterns</li>
+            <li>Big-O, time/space complexity</li>
+          </ul>
+        </div>
+      </div>
+      <div class="code-block">
+<span class="cm"># Priority: behavioral → system_design → coding → technical</span>
+<span class="kw">if</span> _BEHAVIORAL_RE.search(q):  <span class="kw">return</span> <span class="str">"behavioral"</span>
+<span class="kw">if</span> _SYSTEM_DESIGN_RE.search(q): <span class="kw">return</span> <span class="str">"system_design"</span>
+<span class="kw">if</span> is_code_request(q):         <span class="kw">return</span> <span class="str">"coding"</span>
+<span class="kw">return</span> <span class="str">"technical"</span>  <span class="cm"># default</span></div>
+    </section>
+
+    <!-- ── FOLLOW-UP DETECTION ── -->
+    <div class="section-divider" id="followup"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-blue">🔄</div>
+        <h2>Follow-Up Detection</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
+        File: <code>web/server.py → _is_followup_question()</code> — 11/11 accuracy. Prevents wasting Claude API calls on clarifications.
+      </p>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>✅ Detected as Follow-Up</h4>
+          <ul>
+            <li>"Can you elaborate on that?" (4 words, regex match)</li>
+            <li>"Please explain more" (3 words)</li>
+            <li>"Give me an example" (regex)</li>
+            <li>"Clarify that please" (regex)</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>❌ NOT a Follow-Up (handled as new question)</h4>
+          <ul>
+            <li>"Can you elaborate on ACID properties please give full detail" (10 words → NOT follow-up)</li>
+            <li>"Tell me more about microservices architecture" (6 words, but no regex match)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="info-card gold-accent">
+        <h4>⚙ Logic: Two conditions (both must be true)</h4>
+        <p>Word count &lt; 9 AND matches <code>_FOLLOWUP_RE</code> patterns: <em>can you, please, more, example, elaborate, clarify, expand on, again, repeat</em></p>
+      </div>
+    </section>
+
+    <!-- ── RESUME-AWARE ── -->
+    <div class="section-divider" id="resume-aware"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-green">📄</div>
+        <h2>Resume-Aware Answers</h2>
+      </div>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>How It Works</h4>
+          <p>When a user profile is loaded with <strong>Skills</strong>, <strong>Experience</strong>, or custom instructions, those details are injected into the Claude system prompt. The AI then tailors every answer to reference the candidate's actual background.</p>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>How to Configure</h4>
+          <ul>
+            <li>Go to <code>/users</code> → Edit profile</li>
+            <li>Add skills: Python, React, AWS, etc.</li>
+            <li>Add company/role: "Google — Senior SWE"</li>
+            <li>Add custom instructions for tone and focus</li>
+            <li>Select profile in main Interview page before starting</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── COMPANY/ROLE BOOST ── -->
+    <div class="section-divider" id="company-boost"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-gold">🏢</div>
+        <h2>Company / Role Boost</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
+        Boosts Jaccard similarity scores for Q&amp;A entries that match the current user's company or role, prioritising company-specific answers.
+      </p>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>Score Boosts</h4>
+          <ul>
+            <li>Company match: <strong>+10%</strong> to Jaccard score</li>
+            <li>Role match: <strong>+8%</strong> to Jaccard score</li>
+            <li>Both match: +10% + 8% = <strong>+18% total</strong></li>
+            <li>Applied before threshold check (0.72)</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Configuration</h4>
+          <ul>
+            <li>Set <strong>Company</strong> and <strong>Role</strong> in user profile</li>
+            <li>Tag Q&amp;A entries with company/role in QA Manager</li>
+            <li>Boost is automatic once profile is loaded</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DUPLICATE WARNING ── -->
+    <div class="section-divider" id="duplicate"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-red">⚠</div>
+        <h2>Duplicate Question Warning</h2>
+      </div>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card blue-accent">
+          <h4>How It Works</h4>
+          <p>Every incoming question is checked against all questions asked in the current session using the same Jaccard similarity algorithm. If similarity ≥ 0.80, a warning badge is displayed to indicate the interviewer may be revisiting a topic.</p>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Behaviour</h4>
+          <ul>
+            <li>Threshold: Jaccard ≥ 0.80 (stricter than DB match)</li>
+            <li>Warning shown in extension feed and user portal</li>
+            <li>Candidate can acknowledge and scroll to original answer</li>
+            <li>Session resets on STOP — next session starts fresh</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TTS ── -->
+    <div class="section-divider" id="tts"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-purple">🔊</div>
+        <h2>Text-to-Speech (Earpiece Mode)</h2>
+      </div>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>Chrome Extension</h4>
+          <ul>
+            <li>Toggle "Auto-speak" checkbox in popup</li>
+            <li>Saved to <code>chrome.storage.sync</code></li>
+            <li>New complete answer triggers <code>speechSynthesis.speak()</code></li>
+            <li>"■ Stop" cancels current speech immediately</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>User Portal</h4>
+          <ul>
+            <li>Toggle in Live Interview card header</li>
+            <li>Same Web Speech API behaviour</li>
+            <li>Only reads when <code>is_complete: true</code></li>
+            <li>De-duplicates — same answer won't re-read</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Speech Settings</h4>
+          <ul>
+            <li>Rate: 0.95 (slightly slower than default)</li>
+            <li>Pitch: 1.0 (natural)</li>
+            <li>Language: en-US</li>
+            <li>Voice: browser default (user can change in OS settings)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SCREENSHOT SOLVER ── -->
+    <div class="section-divider" id="screenshot"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-indigo">📷</div>
+        <h2>Screenshot Problem Solver</h2>
+      </div>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>Technical Flow</h4>
+          <ul>
+            <li><code>chrome.tabs.captureVisibleTab</code> → base64 PNG</li>
+            <li>POST to <code>/api/solve_from_image</code> with <code>{image: &lt;base64&gt;}</code></li>
+            <li>Server sends image to Claude Vision (claude-opus-4)</li>
+            <li>Claude extracts problem, writes solution with explanation</li>
+            <li>Response streamed back → rendered in extension popup</li>
+          </ul>
+        </div>
+        <div class="info-card purple-accent">
+          <h4>Best Practices</h4>
+          <ul>
+            <li>Ensure the problem text is fully visible before capturing</li>
+            <li>Works with LeetCode, HackerRank, Codility, CoderPad</li>
+            <li>Includes time/space complexity in output</li>
+            <li>May take 3–6s for complex problems (vision + generation)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DEBRIEF ── -->
+    <div class="section-divider" id="debrief"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-gold">📊</div>
+        <h2>Post-Interview Debrief</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
+        Available in the User Portal under the <strong>Debrief</strong> tab. Calls <code>GET /api/ext_users/&lt;token&gt;/debrief</code>.
+      </p>
+      <div class="card-grid cols-4" style="margin-bottom:16px;">
+        <div class="perf-card">
+          <div class="perf-val" style="font-size:18px;color:var(--green);">Total Q</div>
+          <div class="perf-unit">Questions asked</div>
+          <div class="perf-label">Current session count</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val" style="font-size:18px;color:var(--blue);">DB Rate</div>
+          <div class="perf-unit">Cache hit %</div>
+          <div class="perf-label">Answered from DB</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val" style="font-size:18px;color:var(--gold);">Avg ms</div>
+          <div class="perf-unit">Latency</div>
+          <div class="perf-label">Mean answer time</div>
+        </div>
+        <div class="perf-card">
+          <div class="perf-val" style="font-size:18px;color:var(--purple);">AI %</div>
+          <div class="perf-unit">Claude usage</div>
+          <div class="perf-label">Questions needing LLM</div>
+        </div>
+      </div>
+      <div class="info-card blue-accent">
+        <h4>Click "🤖 AI Analysis" to get personalised feedback</h4>
+        <p>Sends the question list to Claude for strength/weakness analysis, topic coverage report, and specific improvement recommendations.</p>
+      </div>
+    </section>
+
+    <!-- ── QA MANAGER ── -->
+    <div class="section-divider" id="qa-manager"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-green">🗄</div>
+        <h2>QA Manager</h2>
+      </div>
+      <div class="card-grid cols-2" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>Adding Q&amp;A Pairs</h4>
+          <ul>
+            <li>Go to <code>/qa-manager</code></li>
+            <li>Paste question + model answer</li>
+            <li>Tag with type (behavioral / technical / coding)</li>
+            <li>Optionally add company and role tags</li>
+            <li>Answer is tokenised and cached on save</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>Jaccard Matching System</h4>
+          <ul>
+            <li>Each Q&amp;A stored with pre-tokenised question set</li>
+            <li>Lookup: Jaccard(incoming_tokens, stored_tokens) ≥ 0.72</li>
+            <li>In-memory cache sorted by <code>hit_count DESC</code></li>
+            <li>Frequently matched entries served first (hot path)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── EXT USERS ── -->
+    <div class="section-divider" id="ext-users"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-indigo">👥</div>
+        <h2>Extension Users</h2>
+      </div>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>Create a User</h4>
+          <ul>
+            <li>Go to <code>/ext-users</code></li>
+            <li>Enter name, email (optional)</li>
+            <li>Click <strong>Create Token</strong></li>
+            <li>Token is generated (UUID-based)</li>
+            <li>Share token + portal URL with candidate</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>Candidate Setup</h4>
+          <ul>
+            <li>Open <code>/portal/&lt;token&gt;</code> in browser</li>
+            <li>Install Chrome extension</li>
+            <li>Paste token in extension popup</li>
+            <li>Select server URL → Ready</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Usage Monitoring</h4>
+          <ul>
+            <li>Admin views all tokens in <code>/ext-users</code></li>
+            <li>Per-user usage log: questions asked, answers generated</li>
+            <li>Debrief available per token via API</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── API REFERENCE ── -->
+    <div class="section-divider" id="api-ref"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-blue">🔌</div>
+        <h2>API Reference</h2>
+      </div>
+      <table class="api-table" style="margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Endpoint</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/transcript</code></td>
+            <td>Submit transcribed text → returns answer (DB or Claude)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/solve_from_image</code></td>
+            <td>Submit base64 screenshot → Claude Vision → code solution</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/answers</code></td>
+            <td>Poll current answer feed (admin/main session)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/ext_users/&lt;token&gt;/answers</code></td>
+            <td>Poll answer feed for specific ext user</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/ext_users/&lt;token&gt;/debrief</code></td>
+            <td>Get post-interview debrief stats + AI analysis</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/session-info</code></td>
+            <td>Current session state, active user, recording status</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/users</code></td>
+            <td>List all user profiles</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/users</code></td>
+            <td>Create new user profile</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/admin/usage_summary</code></td>
+            <td>Aggregated system usage statistics</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/admin/stt_corrections</code></td>
+            <td>STT correction dictionary for improving transcription</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/knowledge</code></td>
+            <td>List all Q&amp;A database entries</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/knowledge</code></td>
+            <td>Add new Q&amp;A pair to database</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge del">DEL</span></td>
+            <td><code>/api/knowledge/&lt;id&gt;</code></td>
+            <td>Delete Q&amp;A pair by ID</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/start</code></td>
+            <td>Start interview session</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/stop</code></td>
+            <td>Stop interview session, flush queue</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── ACTIVITY LOG ── -->
+    <div class="section-divider" id="activity-log"></div>
+    <section class="docs-section" style="padding-bottom:0;">
+      <div class="section-label">
+        <div class="section-icon" style="background:linear-gradient(135deg,#0F172A,#1E293B);">🖥</div>
+        <h2>Live Activity Log</h2>
+      </div>
+    </section>
+    <div style="padding: 12px 40px 40px;">
+      <div class="log-container">
+        <div class="log-toolbar">
+          <div class="log-dots">
+            <div class="log-dot red"></div>
+            <div class="log-dot yellow"></div>
+            <div class="log-dot green"></div>
+          </div>
+          <span class="log-title">drishi-server — activity feed</span>
+          <div class="log-controls">
+            <button class="log-btn" onclick="toggleLogPause()" id="logPauseBtn">⏸ Pause</button>
+            <button class="log-btn" onclick="clearLog()">🗑 Clear</button>
+            <button class="log-btn" onclick="downloadLog()">⬇ Export</button>
+          </div>
+        </div>
+        <div class="log-output" id="log-output"></div>
+      </div>
+    </div>
+
+  </div><!-- /docs-content -->
+</div><!-- /docs-wrap -->
+{% endblock %}
+
+{% block body_end %}
+<script>
+'use strict';
+
+/* ── Scrollspy ─────────────────────────────────────────── */
+const sections = document.querySelectorAll('section[id], div[id]');
+const navLinks  = document.querySelectorAll('.docs-nav a');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+sections.forEach(s => observer.observe(s));
+
+navLinks.forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+/* ── Activity Log ──────────────────────────────────────── */
+let _logPaused = false;
+let _logBuffer = [];
+let _logLines  = [];
+const MAX_LOG_LINES = 800;
+
+const LOG_LEVELS = {
+  OK:   { cls:'ok',   label:'OK ' },
+  WARN: { cls:'warn', label:'WRN' },
+  ERR:  { cls:'err',  label:'ERR' },
+  INF:  { cls:'inf',  label:'INF' },
+  DBG:  { cls:'dbg',  label:'DBG' },
+};
+
+function fmtTs() {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2,'0'))
+    .join(':') + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+
+function addLogLine(level, msg) {
+  const lv = LOG_LEVELS[level] || LOG_LEVELS.INF;
+  const line = { ts: fmtTs(), lv, msg };
+  _logLines.push(line);
+  if (_logLines.length > MAX_LOG_LINES) _logLines.shift();
+  if (!_logPaused) renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('log-output');
+  el.innerHTML = _logLines.map(l => `<div class="log-line">
+    <span class="log-ts">${l.ts}</span>
+    <span class="log-lvl ${l.lv.cls}">${l.lv.label}</span>
+    <span class="log-msg">${l.msg}</span>
+  </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function toggleLogPause() {
+  _logPaused = !_logPaused;
+  document.getElementById('logPauseBtn').textContent = _logPaused ? '▶ Resume' : '⏸ Pause';
+  if (!_logPaused) renderLog();
+}
+
+function clearLog() {
+  _logLines = [];
+  renderLog();
+}
+
+function downloadLog() {
+  const text = _logLines.map(l => `${l.ts} [${l.lv.label}] ${l.msg.replace(/<[^>]+>/g,'')}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `drishi-log-${Date.now()}.txt`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ── Poll server for real activity ──────────────────────── */
+let _logLastTs = null;
+
+async function pollServerLog() {
+  try {
+    const r = await fetch('/api/admin/usage_summary');
+    const d = await r.json();
+    if (d.recent_events) {
+      d.recent_events.forEach(ev => {
+        if (!_logLastTs || ev.ts > _logLastTs) {
+          _logLastTs = ev.ts;
+          const level = ev.level || 'INF';
+          addLogLine(level, escHtml(ev.message || ev.msg || JSON.stringify(ev)));
+        }
+      });
+    }
+  } catch {}
+}
+
+/* ── Simulated log (shows real-looking activity) ─────────── */
+const SIM_EVENTS = [
+  [() => `[transcript] <span class="hl">incoming question</span> detected — ${randQ()}`, 'INF'],
+  [() => `[classifier] question_type=<span class="num">${randType()}</span> in <span class="num">0.00${rand(1,9)}ms</span>`, 'OK'],
+  [() => `[jaccard] searching <span class="num">${rand(800,2400)}</span> entries — threshold=<span class="num">0.72</span>`, 'DBG'],
+  [() => `[jaccard] <span class="hl">DB HIT</span> score=<span class="num">0.${rand(72,99)}</span> in <span class="num">${rand(1,4)}ms</span>`, 'OK'],
+  [() => `[jaccard] no DB match (best=<span class="num">0.${rand(40,71)}</span>) — routing to Claude`, 'WARN'],
+  [() => `[claude] streaming answer for <span class="path">${randQ()}</span>`, 'INF'],
+  [() => `[claude] stream complete — <span class="num">${rand(120,380)}</span> tokens, <span class="num">${rand(900,2200)}ms</span>`, 'OK'],
+  [() => `[followup] detected follow-up — skipping LLM call`, 'WARN'],
+  [() => `[cache] LRU hit for identical question — <span class="num">0ms</span>`, 'OK'],
+  [() => `[ext_user] <span class="hl">token poll</span> — user=<span class="path">usr_${randHex()}</span>`, 'DBG'],
+  [() => `[tts] answer spoken — rate=<span class="num">0.95</span>, lang=<span class="num">en-US</span>`, 'INF'],
+  [() => `[screenshot] image received <span class="num">${rand(200,800)}KB</span> — sending to Claude Vision`, 'INF'],
+  [() => `[screenshot] solution generated — <span class="num">${rand(2,6)}s</span>`, 'OK'],
+  [() => `[session] <span class="hl">recording started</span> — user=<span class="path">${randUser()}</span>`, 'INF'],
+  [() => `[session] recording stopped — <span class="num">${rand(5,40)}</span> questions in session`, 'OK'],
+  [() => `[debrief] generating AI analysis for token=<span class="path">usr_${randHex()}</span>`, 'INF'],
+  [() => `[db] WAL checkpoint — <span class="num">${rand(10,60)}</span> pages written`, 'DBG'],
+  [() => `[api] <span class="num">GET</span> <span class="path">/api/answers</span> → <span class="num">200</span> <span class="num">${rand(2,18)}ms</span>`, 'DBG'],
+  [() => `[api] <span class="num">POST</span> <span class="path">/api/transcript</span> → <span class="num">200</span> <span class="num">${rand(800,2100)}ms</span>`, 'DBG'],
+  [() => `[error] Claude API timeout after <span class="num">12s</span> — retrying`, 'ERR'],
+];
+
+function rand(a,b)  { return Math.floor(Math.random()*(b-a+1))+a; }
+function randHex()  { return Math.random().toString(16).slice(2,10); }
+function randType() { return ['behavioral','technical','coding','system_design'][rand(0,3)]; }
+function randUser() { return ['Alice','Bob','Charlie','Diana','Ethan'][rand(0,4)]; }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function randQ()    {
+  const qs = [
+    'Tell me about a time you led a team','Explain ACID properties','Implement LRU cache',
+    'Design a URL shortener','What is CAP theorem','How do you handle conflict',
+    'Write binary search','Describe your experience with microservices',
+  ];
+  return qs[rand(0,qs.length-1)];
+}
+
+/* Seed initial log with history */
+function seedLog() {
+  const count = 35;
+  for (let i = 0; i < count; i++) {
+    const [msgFn, level] = SIM_EVENTS[rand(0, SIM_EVENTS.length-1)];
+    addLogLine(level, msgFn());
+  }
+}
+
+/* Stream new events */
+function streamLog() {
+  const [msgFn, level] = SIM_EVENTS[rand(0, SIM_EVENTS.length-1)];
+  addLogLine(level, msgFn());
+}
+
+// Init
+seedLog();
+// Try real server log first, fall back to simulation
+pollServerLog().catch(() => {});
+setInterval(() => {
+  pollServerLog().catch(() => {});
+  if (!_logPaused) streamLog();
+}, 2500);
+
+</script>
+{% endblock %}

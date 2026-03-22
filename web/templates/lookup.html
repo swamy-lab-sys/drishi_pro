@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+{% block title %}Keyword Lookup{% endblock %}
+{% block page_name %}Keyword Lookup{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  /* ── Page wrapper ── */
+  .lk-page { padding: 24px; }
+
+  /* ── Page header ── */
+  .lk-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 22px;
+  }
+  .lk-header h1 {
+    font-size: 22px; font-weight: 800; color: var(--text-dark); letter-spacing: -0.3px;
+  }
+  .lk-count-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 700;
+    background: rgba(34,122,74,0.1); color: var(--green-dark);
+    border: 1px solid rgba(34,122,74,0.25);
+  }
+
+  /* ── Search box ── */
+  .lk-search-card {
+    background: var(--white);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--card-border);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .lk-search-row {
+    display: flex; gap: 10px; align-items: stretch;
+    margin-bottom: 12px;
+  }
+  .lk-search-inner { position: relative; flex: 1; }
+  .lk-search-icon {
+    position: absolute; left: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted); font-size: 17px; pointer-events: none;
+  }
+  .lk-search-input {
+    width: 100%;
+    padding: 13px 18px 13px 44px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    font-size: 15px; font-family: 'Plus Jakarta Sans', sans-serif;
+    color: var(--text-dark); background: var(--bg); outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .lk-search-input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(34,122,74,0.12);
+    background: var(--white);
+  }
+  .lk-search-input::placeholder { color: var(--text-muted); }
+  .lk-search-btn {
+    padding: 13px 22px; border-radius: 10px;
+    background: linear-gradient(135deg, #227A4A, #2E9E88); border: none;
+    color: #fff; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: filter 0.15s, box-shadow 0.15s; white-space: nowrap;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    box-shadow: 0 2px 8px rgba(34,122,74,0.25);
+  }
+  .lk-search-btn:hover { filter: brightness(1.08); box-shadow: 0 4px 14px rgba(34,122,74,0.35); }
+
+  /* Quick search chips */
+  .lk-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  }
+  .lk-chips-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  .lk-chip {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 20px;
+    padding: 4px 12px; font-size: 12px; color: var(--text-muted); cursor: pointer;
+    transition: all 0.15s; font-weight: 600;
+  }
+  .lk-chip:hover { border-color: var(--green); color: var(--green-dark); background: rgba(34,122,74,0.06); }
+
+  /* ── Status bar ── */
+  .lk-status {
+    font-size: 12px; color: var(--text-muted);
+    min-height: 20px; margin-bottom: 14px;
+    font-weight: 500;
+  }
+  .lk-status.found { color: var(--green-dark); font-weight: 700; }
+  .lk-status.searching { color: #B45309; }
+
+  /* ── Results ── */
+  .lk-results { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+
+  /* ── Result card ── */
+  .lk-card {
+    background: var(--white);
+    border: 1px solid var(--card-border); border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .lk-card:hover { border-color: #C4E8D1; box-shadow: 0 2px 12px rgba(34,122,74,0.08); }
+  .lk-card.top   { border-color: rgba(34,122,74,0.4); }
+
+  .lk-card-head {
+    padding: 14px 16px 10px; display: flex; align-items: flex-start; gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .lk-card-num {
+    width: 22px; height: 22px; background: var(--green); border-radius: 50%;
+    font-size: 11px; font-weight: 800; color: white; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+  .lk-card-num.gold { background: #F59E0B; }
+  .lk-card-q {
+    flex: 1; font-size: 15px; font-weight: 700; color: var(--text-dark); line-height: 1.4;
+  }
+  .lk-card-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .lk-card-tag {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 12px;
+    letter-spacing: 0.3px;
+  }
+  .lk-ct-theory  { background: rgba(59,130,246,0.1); color: #2563EB; border: 1px solid rgba(59,130,246,0.2); }
+  .lk-ct-code    { background: rgba(245,158,11,0.1); color: #B45309; border: 1px solid rgba(245,158,11,0.2); }
+  .lk-ct-db      { background: rgba(34,122,74,0.1);  color: var(--green-dark); border: 1px solid rgba(34,122,74,0.2); }
+  .lk-ct-kw      { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .lk-card-hits  { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; margin-top: 2px; }
+
+  .lk-card-body { padding: 14px 16px; }
+
+  /* Answer tabs */
+  .lk-ans-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .lk-ans-tab {
+    padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    cursor: pointer; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text-muted); transition: all 0.15s;
+  }
+  .lk-ans-tab.active { background: var(--green); border-color: var(--green); color: white; }
+  .lk-ans-tab:hover:not(.active) { border-color: var(--green); color: var(--green-dark); }
+
+  /* Answer panels */
+  .lk-ans-panel { display: none; }
+  .lk-ans-panel.active { display: block; }
+  .lk-ans-text { font-size: 14px; color: var(--text-medium); line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+  .lk-ans-bullets { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .lk-ans-bullets li {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 8px 11px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-size: 13px; color: var(--text-dark); line-height: 1.6;
+  }
+  .lk-ans-bullets li::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--green); flex-shrink: 0; margin-top: 8px;
+  }
+
+  /* Code block */
+  .lk-code-wrap {
+    background: var(--text-dark); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+    overflow: hidden; position: relative;
+  }
+  .lk-code-wrap pre { margin: 0; }
+  .lk-code-wrap code { font-size: 13px; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  .lk-copy-code-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 5px;
+    padding: 3px 9px; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.6);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .lk-copy-code-btn:hover  { color: var(--green); border-color: rgba(34,122,74,0.4); }
+  .lk-copy-code-btn.copied { color: var(--green); border-color: rgba(34,122,74,0.4); }
+
+  /* Card footer */
+  .lk-card-foot {
+    padding: 10px 16px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center;
+  }
+  .lk-copy-ans-btn {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .lk-copy-ans-btn:hover  { border-color: var(--green); color: var(--green-dark); background: rgba(34,122,74,0.05); }
+  .lk-copy-ans-btn.copied { border-color: var(--green); color: var(--green-dark); }
+  .lk-live-btn {
+    background: var(--green); border: none; border-radius: 6px;
+    padding: 5px 12px; font-size: 11px; font-weight: 700; color: white;
+    cursor: pointer; transition: background 0.15s; text-decoration: none;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    display: inline-flex; align-items: center;
+  }
+  .lk-live-btn:hover { background: var(--green-dark); }
+  .lk-kw-list { flex: 1; font-size: 10px; color: var(--text-muted); text-align: right; }
+
+  /* Empty state */
+  .lk-empty {
+    text-align: center; padding: 60px 20px;
+    background: var(--white); border-radius: 12px;
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+  }
+  .lk-empty .e-icon { font-size: 48px; display: block; margin-bottom: 14px; }
+  .lk-empty .e-title { font-size: 16px; font-weight: 700; color: var(--text-dark); margin-bottom: 8px; }
+  .lk-empty .e-sub { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+
+  /* QR section */
+  .lk-qr-card {
+    background: var(--white);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--card-border);
+    padding: 18px 22px;
+    margin-bottom: 24px;
+  }
+  .lk-qr-title { font-size: 11px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 14px; }
+  .lk-qr-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .lk-qr-item {
+    flex: 1; min-width: 150px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .lk-qr-lbl { font-size: 10px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.4px; text-align: center; }
+  .lk-qr-lbl.green  { color: var(--green-dark); }
+  .lk-qr-lbl.blue   { color: var(--blue); }
+  .lk-qr-lbl.teal   { color: #0E7490; }
+  .lk-qr-img { width: 120px; height: 120px; border-radius: 8px; border: 2px solid var(--border); background: white; display: block; }
+  .lk-qr-url { font-size: 10px; color: var(--green); text-align: center; word-break: break-all; max-width: 140px; }
+  .lk-qr-copy {
+    font-size: 10px; font-weight: 700; color: var(--text-muted); cursor: pointer;
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    padding: 3px 10px; transition: all 0.15s; font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .lk-qr-copy:hover { border-color: var(--green); color: var(--green-dark); }
+  .lk-qr-copy.copied { border-color: var(--green); color: var(--green-dark); }
+
+  /* Toast */
+  .lk-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--text-dark); color: #F9FAFB;
+    padding: 9px 18px; border-radius: 20px;
+    font-size: 13px; font-weight: 600;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s; white-space: nowrap; z-index: 500;
+  }
+  .lk-toast.show { opacity: 1; }
+  .lk-toast.ok   { background: var(--green); color: #fff; }
+  .lk-toast.err  { background: var(--red); color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lk-page">
+
+  <!-- Page header -->
+  <div class="lk-header">
+    <h1>Keyword Lookup</h1>
+    <span class="lk-count-badge" id="lkCountBadge" style="display:none">+ <span id="lkCountNum">0</span> Keywords Indexed</span>
+  </div>
+
+  <!-- Search card -->
+  <div class="lk-search-card">
+    <div class="lk-search-row">
+      <div class="lk-search-inner">
+        <span class="lk-search-icon">&#128269;</span>
+        <input class="lk-search-input" id="searchInput" type="text"
+          placeholder="e.g.  ls command   git rebase   python dict   linked list   docker   SQL join"
+          autocomplete="off" autofocus />
+      </div>
+      <button class="lk-search-btn" onclick="doSearch()">Search</button>
+    </div>
+    <div class="lk-chips">
+      <span class="lk-chips-label">Try:</span>
+      <span class="lk-chip" onclick="quickSearch('linux commands')">linux commands</span>
+      <span class="lk-chip" onclick="quickSearch('git')">git</span>
+      <span class="lk-chip" onclick="quickSearch('python list')">python list</span>
+      <span class="lk-chip" onclick="quickSearch('sql join')">sql join</span>
+      <span class="lk-chip" onclick="quickSearch('docker')">docker</span>
+      <span class="lk-chip" onclick="quickSearch('binary search')">binary search</span>
+      <span class="lk-chip" onclick="quickSearch('recursion')">recursion</span>
+      <span class="lk-chip" onclick="quickSearch('autosys')">autosys</span>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="lk-status" id="statusBar"></div>
+
+  <!-- Results -->
+  <div class="lk-results" id="results">
+    <div class="lk-empty" id="emptyState">
+      <span class="e-icon">&#128269;</span>
+      <div class="e-title">Type anything to search</div>
+      <div class="e-sub">
+        Search your entire Q&amp;A database by keyword.<br>
+        Works for commands, topics, concepts, technologies — anything.<br><br>
+        <strong style="color:var(--text-dark)">Examples:</strong> "ls", "merge sort", "REST API", "multithreading", "Jenkins"
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Access Codes -->
+  <div class="lk-qr-card" id="qrSection" style="display:none">
+    <div class="lk-qr-title">&#128241; OPEN ON ANOTHER DEVICE — Scan QR code to access from phone or another device</div>
+    <div class="lk-qr-grid">
+      <div class="lk-qr-item">
+        <div class="lk-qr-lbl green">&#128225; PHONE MONITOR</div>
+        <img class="lk-qr-img" id="qrMonitor" src="" alt="Monitor QR" />
+        <div class="lk-qr-url" id="qrMonitorUrl"></div>
+        <button class="lk-qr-copy" id="qrMonitorCopy" onclick="copyQr('monitor')">Copy URL</button>
+      </div>
+      <div class="lk-qr-item">
+        <div class="lk-qr-lbl teal">&#128269; THIS LOOKUP PAGE</div>
+        <img class="lk-qr-img" id="qrLookup" src="" alt="Lookup QR" />
+        <div class="lk-qr-url" id="qrLookupUrl"></div>
+        <button class="lk-qr-copy" id="qrLookupCopy" onclick="copyQr('lookup')">Copy URL</button>
+      </div>
+      <div class="lk-qr-item">
+        <div class="lk-qr-lbl blue">&#128421; FULL DASHBOARD</div>
+        <img class="lk-qr-img" id="qrFull" src="" alt="Full UI QR" />
+        <div class="lk-qr-url" id="qrFullUrl"></div>
+        <button class="lk-qr-copy" id="qrFullCopy" onclick="copyQr('full')">Copy URL</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /lk-page -->
+
+<div class="lk-toast" id="lkToast"></div>
+{% endblock %}
+
+{% block body_end %}
+<script>
+'use strict';
+
+let _debounce = null;
+let _urls = { monitor: '', lookup: '', full: '' };
+
+// ── Search ──────────────────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(_debounce);
+  _debounce = setTimeout(doSearch, 320);
+});
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { clearTimeout(_debounce); doSearch(); }
+});
+
+function quickSearch(term) {
+  document.getElementById('searchInput').value = term;
+  doSearch();
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  const status = document.getElementById('statusBar');
+  const results = document.getElementById('results');
+
+  if (!q) {
+    status.textContent = '';
+    status.className = 'lk-status';
+    results.innerHTML = `<div class="lk-empty" id="emptyState">
+      <span class="e-icon">&#128269;</span>
+      <div class="e-title">Type anything to search</div>
+      <div class="e-sub">Search your entire Q&A database by keyword.<br>Works for commands, topics, concepts, technologies — anything.</div>
+    </div>`;
+    return;
+  }
+
+  status.textContent = 'Searching\u2026';
+  status.className = 'lk-status searching';
+
+  try {
+    const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const d = await r.json();
+
+    if (!d.results || d.results.length === 0) {
+      status.textContent = `No results for "${q}" — try a different keyword`;
+      status.className = 'lk-status';
+      results.innerHTML = `<div class="lk-empty">
+        <span class="e-icon">&#129335;</span>
+        <div class="e-title">No matches found</div>
+        <div class="e-sub">
+          "${q}" isn&apos;t in your database yet.<br><br>
+          <a href="/" style="color:var(--green);text-decoration:none;font-weight:700">Ask it in the live interview</a>
+          and it will be learned automatically.
+        </div>
+      </div>`;
+      return;
+    }
+
+    const total = d.total || d.results.length;
+    status.textContent = `Found ${d.results.length} result${d.results.length !== 1 ? 's' : ''} (${total} total matches) for "${q}"`;
+    status.className = 'lk-status found';
+
+    results.innerHTML = '';
+    d.results.forEach((item, idx) => renderCard(item, idx, results));
+
+    // Syntax highlight
+    results.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+
+  } catch (e) {
+    status.textContent = 'Error — is Drishi running?';
+    status.className = 'lk-status';
+  }
+}
+
+// ── Render one result card ───────────────────────────────────────────────────
+function renderCard(item, idx, container) {
+  const card = document.createElement('div');
+  card.className = 'lk-card' + (idx === 0 ? ' top' : '');
+
+  const tags = (item.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  const kws  = (item.keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+  const hasCode = !!item.coding;
+  const typeTag = hasCode ? 'code' : 'theory';
+
+  const tagHtml = tags.slice(0,4).map(t =>
+    `<span class="lk-card-tag lk-ct-db">${esc(t)}</span>`
+  ).join('');
+
+  const ansHtml = formatAnswer(item.answer || '');
+  const codeHtml = hasCode ? `<div class="lk-code-wrap">
+    <button class="lk-copy-code-btn" onclick="copyCode(this)">Copy</button>
+    <pre><code>${esc(item.coding)}</code></pre>
+  </div>` : '';
+
+  const tabsHtml = hasCode ? `
+    <div class="lk-ans-tabs">
+      <div class="lk-ans-tab active" onclick="switchTab(this,'lk-ans-${idx}')">&#128221; Answer</div>
+      <div class="lk-ans-tab"        onclick="switchTab(this,'lk-code-${idx}')">&#9000; Code</div>
+    </div>` : '';
+
+  card.innerHTML = `
+    <div class="lk-card-head">
+      <div class="lk-card-num ${idx === 0 ? 'gold' : ''}">${idx + 1}</div>
+      <div style="flex:1">
+        <div class="lk-card-q">${esc(item.question)}</div>
+        <div class="lk-card-meta">
+          <span class="lk-card-tag lk-ct-${typeTag}">${hasCode ? 'CODE' : 'THEORY'}</span>
+          ${tagHtml}
+          ${kws.slice(0,3).map(k => `<span class="lk-card-tag lk-ct-kw">${esc(k)}</span>`).join('')}
+        </div>
+      </div>
+      ${item.hits > 0 ? `<div class="lk-card-hits">${item.hits} hits</div>` : ''}
+    </div>
+    <div class="lk-card-body">
+      ${tabsHtml}
+      <div class="lk-ans-panel active" id="lk-ans-${idx}">${ansHtml}</div>
+      ${hasCode ? `<div class="lk-ans-panel" id="lk-code-${idx}">${codeHtml}</div>` : ''}
+    </div>
+    <div class="lk-card-foot">
+      <button class="lk-copy-ans-btn" onclick="copyAns(this, ${JSON.stringify(item.answer || '')})">Copy Answer</button>
+      ${hasCode ? `<button class="lk-copy-ans-btn" onclick="copyAns(this, ${JSON.stringify(item.coding || '')})">Copy Code</button>` : ''}
+      <a class="lk-live-btn" href="/" title="Go to live interview">&#8599; Live Interview</a>
+      <div class="lk-kw-list">${kws.join(' \xB7 ')}</div>
+    </div>`;
+
+  container.appendChild(card);
+}
+
+function switchTab(tabEl, panelId) {
+  const body = tabEl.closest('.lk-card-body');
+  body.querySelectorAll('.lk-ans-tab').forEach(t => t.classList.remove('active'));
+  body.querySelectorAll('.lk-ans-panel').forEach(p => p.classList.remove('active'));
+  tabEl.classList.add('active');
+  document.getElementById(panelId)?.classList.add('active');
+  document.getElementById(panelId)?.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+}
+
+// ── Format answer text ───────────────────────────────────────────────────────
+function formatAnswer(text) {
+  if (!text) return '<div class="lk-ans-text" style="color:var(--text-muted)">No answer stored yet.</div>';
+
+  const codeMatch = text.match(/```[\w]*\n?([\s\S]*?)```/);
+  if (codeMatch) {
+    const pre  = text.slice(0, codeMatch.index).trim();
+    const code = codeMatch[1].trim();
+    const post = text.slice(codeMatch.index + codeMatch[0].length).trim();
+    return (pre ? formatAnswer(pre) : '') +
+      `<div class="lk-code-wrap" style="margin:8px 0"><button class="lk-copy-code-btn" onclick="copyCode(this)">Copy</button><pre><code>${esc(code)}</code></pre></div>` +
+      (post ? formatAnswer(post) : '');
+  }
+
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const bullets = lines.filter(l => /^[-\u2022*] /.test(l));
+  if (bullets.length >= 2 && bullets.length >= lines.length * 0.5) {
+    const items = lines.map(l => `<li>${esc(l.replace(/^[-\u2022*]\s+/, ''))}</li>`).join('');
+    return `<ul class="lk-ans-bullets">${items}</ul>`;
+  }
+  return `<div class="lk-ans-text">${esc(text)}</div>`;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function copyAns(btn, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = '\u2713 Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+  } catch { lkToast('Copy failed', 'err'); }
+}
+
+async function copyCode(btn) {
+  const code = btn.nextElementSibling?.querySelector('code')?.innerText || '';
+  try {
+    await navigator.clipboard.writeText(code);
+    btn.textContent = '\u2713 Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  } catch { lkToast('Copy failed', 'err'); }
+}
+
+function lkToast(msg, type) {
+  const t = document.getElementById('lkToast');
+  t.textContent = msg;
+  t.className = 'lk-toast show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = 'lk-toast'; }, 2000);
+}
+
+// ── QR codes for multi-device access ─────────────────────────────────────────
+async function loadQrCodes() {
+  try {
+    const r = await fetch('/api/local_url');
+    const d = await r.json();
+    const base = `http://${d.ip}:${d.port}`;
+    _urls.monitor = d.monitor_url || base + '/monitor';
+    _urls.lookup  = base + '/lookup';
+    _urls.full    = d.url || base + '/';
+
+    const _qr = (url, size) =>
+      `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&format=png&margin=4`;
+
+    document.getElementById('qrMonitor').src   = _qr(_urls.monitor, 120);
+    document.getElementById('qrLookup').src    = _qr(_urls.lookup,  120);
+    document.getElementById('qrFull').src      = _qr(_urls.full,    120);
+    document.getElementById('qrMonitorUrl').textContent = _urls.monitor;
+    document.getElementById('qrLookupUrl').textContent  = _urls.lookup;
+    document.getElementById('qrFullUrl').textContent    = _urls.full;
+
+    document.getElementById('qrSection').style.display = 'block';
+
+    // Show keyword count badge if available
+    if (d.keyword_count || d.total_keywords) {
+      const cnt = d.keyword_count || d.total_keywords;
+      document.getElementById('lkCountNum').textContent = cnt;
+      document.getElementById('lkCountBadge').style.display = 'inline-flex';
+    }
+  } catch { /* offline — hide QR section */ }
+}
+
+async function copyQr(key) {
+  const url = _urls[key];
+  if (!url) return;
+  const btnId = `qrMonitorCopy,qrLookupCopy,qrFullCopy`.split(',')[['monitor','lookup','full'].indexOf(key)];
+  try {
+    await navigator.clipboard.writeText(url);
+    const btn = document.getElementById(btnId);
+    btn.textContent = '\u2713 Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy URL'; btn.classList.remove('copied'); }, 1500);
+  } catch { lkToast('Copy failed', 'err'); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadQrCodes();
+
+// If query param ?q= passed, auto-search
+const _initQ = new URLSearchParams(location.search).get('q');
+if (_initQ) {
+  document.getElementById('searchInput').value = _initQ;
+  doSearch();
+}
+</script>
+{% endblock %}

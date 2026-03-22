@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Drishi Pro - Production Pipeline
+Drishi Enterprise - Production Pipeline
 
 INTERVIEW-ONLY MODE for real interviews (YouTube/Zoom/Meet/Teams).
 
@@ -32,6 +32,7 @@ from state import PipelineState
 import config
 import answer_cache
 import qa_database
+from app.core.product import PRODUCT_NAME, product_banner
 from llm_client import (
     get_interview_answer,
     get_coding_answer,
@@ -40,13 +41,9 @@ from llm_client import (
     clear_session,
     humanize_response,
 )
+from app.services.settings_service import get_server_ip
 from resume_loader import load_resume, load_job_description
 from user_manager import is_introduction_question, build_resume_context_for_llm
-import audio_listener
-from audio_listener import (
-    record_until_silence,
-    select_audio_device_interactive,
-)
 from stt import transcribe, load_model as load_stt_model
 import output_manager
 import answer_storage
@@ -119,11 +116,6 @@ def _auto_learn_worker():
 
 def _submit_for_learning(question: str, answer: str, wants_code: bool = False):
     """Submit a Q&A pair to the async auto-learn queue (non-blocking)."""
-    # Quality pre-filter before submitting to LLM validation
-    _bullet_count = answer.count('\n-') + answer.count('\n•')
-    _word_count = len(answer.split())
-    if _word_count < 15:
-        return  # Skip trivially short answers
     try:
         _learn_queue.put_nowait((question, answer, wants_code))
     except queue.Full:
@@ -252,6 +244,17 @@ def handle_question(question_text: str) -> bool:
     # No DB lookup or LLM call needed. Pure instant response.
     if is_introduction_question(question_text):
         _active_user = state.get_selected_user()
+        # Cross-process fallback: web/server.py writes active_user.json when user is
+        # selected from the UI. Read it here so main.py picks up runtime user changes.
+        if not _active_user or not ((_active_user.get('self_introduction') or '').strip()):
+            try:
+                from app.services.user_service import _load_active_user_from_file
+                _file_user = _load_active_user_from_file()
+                if _file_user:
+                    state.set_selected_user(_file_user)
+                    _active_user = _file_user
+            except Exception:
+                pass
         if _active_user and (_active_user.get('self_introduction') or '').strip():
             _intro = _active_user['self_introduction'].strip()
             print(f"[INTRO] Returning stored intro for {_active_user.get('name', 'user')}")
@@ -339,8 +342,10 @@ def handle_question(question_text: str) -> bool:
         answer_storage.set_processing_question(question_text)
 
         # Step 3b: Check Q&A database BEFORE calling LLM
+        _active_user = state.get_selected_user()
+        _user_role = (_active_user or {}).get("role", "") if _active_user else ""
         _db_t0 = time.time()
-        db_result = qa_database.find_answer(question_text, want_code=wants_code)
+        db_result = qa_database.find_answer(question_text, want_code=wants_code, user_role=_user_role)
         _db_ms = (time.time() - _db_t0) * 1000
         if db_result:
             db_answer, db_score, db_id = db_result
@@ -365,33 +370,30 @@ def handle_question(question_text: str) -> bool:
         # Step 3c: DB miss — try intent correction before calling LLM.
         # This catches cases where STT produced a recognizable but garbled term
         # that wasn't caught by the static STT_CORRECTIONS map.
-        # Strategy:
-        #   1. Ask LLM to correct the question (cheap, 60-token call)
-        #   2. Re-run DB lookup on the corrected question
-        #   3. If still a miss, proceed to full LLM generation
         print(f"[PERF] DB lookup:  {_db_ms:.0f}ms → MISS → calling LLM")
         from question_validator import _has_tech_term as _htc
         _has_tech = _htc(question_text.lower())
         _corrected_q = question_text
-        if not _has_tech:
+        # Skip intent correction if question is long enough to be well-formed (≥8 words)
+        # or has a tech term — saves ~500ms LLM round-trip on valid DB misses
+        _q_word_count = len(question_text.split())
+        if not _has_tech and _q_word_count < 8:
             # Skip intent correction if a tech term was already detected — trust it's valid
             # and go straight to LLM (~500ms saved per tech DB-miss)
             try:
                 _corrected = correct_question_intent(question_text)
-                if not _corrected:
-                    # LLM said NOT_IT — abort LLM call, return clarification message
-                    _clarify = "Question unclear or outside scope. Please repeat the question clearly."
-                    print(f"[INTENT] NOT_IT — returning clarification")
-                    output_manager.write_answer_chunk(_clarify)
-                    output_manager.write_footer()
-                    answer_storage.set_complete_answer(question_text, _clarify, {'source': 'rejected'})
-                    return True
-                elif _corrected.lower() != question_text.lower():
+                if _corrected and _corrected.lower() != question_text.lower():
                     print(f"[INTENT] Corrected: '{question_text}' → '{_corrected}'")
                     dlog.log(f"[INTENT] '{question_text}' → '{_corrected}'", "INFO")
+                    # Auto-learn: store this correction so future STT catches it without LLM
+                    try:
+                        import stt_learner as _sl
+                        _sl.submit_correction(question_text, _corrected)
+                    except Exception:
+                        pass
                     _corrected_q = _corrected
                     # Re-check DB with corrected question
-                    _db2 = qa_database.find_answer(_corrected_q, want_code=wants_code)
+                    _db2 = qa_database.find_answer(_corrected_q, want_code=wants_code, user_role=_user_role)
                     if _db2:
                         db_answer, db_score, db_id = _db2
                         print(f"[DB] Hit after correction (score={db_score:.2f}, id={db_id})")
@@ -410,6 +412,7 @@ def handle_question(question_text: str) -> bool:
                         answer_cache.cache_answer(_corrected_q, db_answer)
                         dlog.end_request(_corrected_q, len(db_answer))
                         return True
+                    
                     # Use corrected question for LLM call
                     question_text = _corrected_q
                     # Update placeholder card so its key matches the corrected question
@@ -450,21 +453,14 @@ def handle_question(question_text: str) -> bool:
 
         state.mark_llm_end()
 
-        # Step 5: Cache answer — skip caching "unclear" responses
-        _is_unclear = (
-            "question unclear" in answer.lower()
-            or "please repeat clearly" in answer.lower()
-        ) and len(answer.split('\n')) <= 2
-        if _is_unclear:
-            # Don't cache or learn from unclear — save question as fragment for next audio
-            fragment_context.save_incomplete_context(question_text)
-            dlog.log(f"[LLM] Unclear response — saved as fragment, not cached", "WARN")
-        else:
-            answer_cache.cache_answer(question_text, answer)
-            dlog.log("Answer cached", "DEBUG")
-            # Auto-learn: submit to background worker for LLM validation + DB storage.
-            # Fully async — never blocks the main pipeline.
-            _submit_for_learning(question_text, answer, wants_code)
+        # Step 5: Cache answer and trigger background learning
+        # Always cache and submit to learning; let the validator decide if it's a quality pair.
+        answer_cache.cache_answer(question_text, answer)
+        dlog.log("Answer cached", "DEBUG")
+        
+        # Auto-learn: submit to background worker for LLM validation + DB storage.
+        # Fully async — never blocks the main pipeline.
+        _submit_for_learning(question_text, answer, wants_code)
 
         # Step 6: Finalize UI
         ui_start = time.time()
@@ -515,33 +511,48 @@ def capture_worker():
     print("\n--- Audio Capture Thread Started ---")
     dlog.log("Audio capture worker started", "INFO")
 
+    _first_capture = True          # Flush once on startup to clear stale audio
+    _last_capture_got_audio = True # Track whether last call returned audio
+
     while not should_exit:
         try:
-            # Capture using professional engine
             capture_start = time.time()
+
+            # Only flush the audio stream on startup or after a long cooldown
+            # where stale audio has built up.  Never flush between normal captures —
+            # that would discard the beginning of the next question.
+            should_flush = _first_capture or (
+                not _last_capture_got_audio and state.is_in_cooldown()
+            )
+
             audio = capture_question(
                 max_duration=config.MAX_RECORDING_DURATION,
-                silence_duration=config.SILENCE_DEFAULT,  # Used config for better pause handling
-                verbose=False
+                silence_duration=config.SILENCE_DEFAULT,
+                verbose=False,
+                flush_stream=should_flush,
             )
+            _first_capture = False
             capture_time = time.time() - capture_start
 
             if audio is not None and len(audio) >= int(16000 * MIN_AUDIO_DURATION):
-                audio_length = len(audio) / 16000  # seconds
+                _last_capture_got_audio = True
+                audio_length = len(audio) / 16000
                 dlog.log_audio_capture(capture_time, audio_length, len(audio))
                 try:
                     audio_queue.put_nowait(audio)
                 except queue.Full:
-                    # Drop oldest chunk to make room for newest
+                    # Drop oldest to make room for freshest
                     try:
                         audio_queue.get_nowait()
                     except queue.Empty:
                         pass
                     audio_queue.put_nowait(audio)
                 dlog.log_queue_status(audio_queue.qsize(), "audio_added")
-
-            # Small breath to avoid CPU spin if capture fails immediately
-            time.sleep(0.1)
+            else:
+                _last_capture_got_audio = False
+                # No speech detected — yield briefly to avoid CPU spin,
+                # but NOT 100ms; 20ms keeps us responsive.
+                time.sleep(0.02)
 
         except Exception as e:
             dlog.log_error("Capture worker error", e)
@@ -574,6 +585,7 @@ def processing_worker():
             dlog.log_queue_status(audio_queue.qsize(), "processing_audio")
 
             # 1. Transcribe
+            _pipeline_start = time.time()
             stt_start = time.time()
             state.mark_transcription_start()
             transcription, score = transcribe(audio)
@@ -621,6 +633,7 @@ def processing_worker():
             # Simple list-based buffer to ensure clean joining
             if not hasattr(processing_worker, "text_buffer"):
                 processing_worker.text_buffer = []
+                processing_worker.buffer_ts = 0.0     # timestamp of last chunk added
 
             # If the system is currently generating/in cooldown, clear any stale buffer
             # so we don't merge the incoming question with leftover fragments from before.
@@ -646,16 +659,42 @@ def processing_worker():
                 continue
 
             processing_worker.text_buffer.append(transcription)
-            last_partial_time = time.time()
+            processing_worker.buffer_ts = time.time()
+            last_partial_time = processing_worker.buffer_ts
             dlog.log(f"Buffer now has {len(processing_worker.text_buffer)} chunks", "DEBUG")
 
-            # 2. FAST PATH: finalize immediately — no aggregation window.
-            # Each audio capture is processed as-is. split_merged_questions and
-            # fragment_context handle any cross-capture merging needed.
+            # Fragment merge window: if the current buffer does NOT yet look like a
+            # complete question (no '?', very short, ends mid-phrase), wait up to
+            # 2.5s for a follow-up chunk before finalizing.
+            # This handles slow interviewers who pause mid-sentence:
+            #   "What is..."  [1s pause]  "...the difference between list and tuple?"
             current_text = " ".join(processing_worker.text_buffer).strip()
-            more_chunks_arrived = False  # Always finalize immediately
+            _looks_complete = (
+                current_text.endswith('?')
+                or len(current_text.split()) >= 6
+                or score >= 0.82
+            )
+            if not _looks_complete and len(processing_worker.text_buffer) == 1:
+                # Peek: wait up to 1.0s for the next audio chunk (was 2.5s — too slow)
+                _MERGE_WAIT = 1.0
+                _merge_start = time.time()
+                try:
+                    next_audio = audio_queue.get(timeout=_MERGE_WAIT)
+                    # Got a follow-up chunk — transcribe and add to buffer
+                    _next_text, _next_score = transcribe(next_audio)
+                    _next_text = _next_text.strip()
+                    if _next_text and len(_next_text) >= 3:
+                        processing_worker.text_buffer.append(_next_text)
+                        print(f"[PERF] Merge:   {(time.time()-_merge_start)*1000:.0f}ms (got follow-up: '{_next_text[:40]}')")
+                        dlog.log(f"Merged follow-up: '{_next_text}'", "DEBUG")
+                    audio_queue.task_done()
+                except queue.Empty:
+                    _mw = (time.time()-_merge_start)*1000
+                    print(f"[PERF] Merge:   {_mw:.0f}ms (no follow-up — finalizing)")
 
-            # 3. Time's up! Process what we have.
+            current_text = " ".join(processing_worker.text_buffer).strip()
+
+            # Finalize
             full_text = current_text
 
             if config.VERBOSE:
@@ -760,7 +799,11 @@ def processing_worker():
             dlog.log(f"Passing to handle_question: '{validated}'", "INFO")
             _t0 = time.time()
             handle_question(validated)
-            print(f"[PERF] Total answer: {(time.time()-_t0)*1000:.0f}ms")
+            _answer_ms = (time.time()-_t0)*1000
+            _pipeline_ms = (time.time()-_pipeline_start)*1000
+            print(f"[PERF] Total answer: {_answer_ms:.0f}ms")
+            print(f"[PERF] ── PIPELINE: STT→DB/LLM→UI = {_pipeline_ms:.0f}ms total ──")
+            state.record_answer_latency(_pipeline_ms)
 
             # 6. Save context for cross-source fragment merging
             fragment_context.save_context(validated, "voice")
@@ -803,7 +846,7 @@ def start(boot_start_time: float = None):
     ALWAYS SUCCEEDS - never crashes due to audio/device issues.
     """
     print("\n" + "=" * 60)
-    print("DRISHI PRO")
+    print(PRODUCT_NAME.upper())
     print("=" * 60)
     print(f"  STT Model: {config.STT_MODEL}")
     print(f"  LLM Model: {os.environ.get('LLM_MODEL_OVERRIDE', config.LLM_MODEL)}")
@@ -828,12 +871,17 @@ def start(boot_start_time: float = None):
             state.set_selected_user(_user)
             _intro_status = "✓ intro loaded" if (_user.get('self_introduction') or '').strip() else "no intro set"
             print(f"✓ Active user: {_user['name']} ({_user.get('role','')}) [{_intro_status}]")
+            try:
+                import semantic_engine
+                semantic_engine.engine.set_role_topics(_user.get('role', ''))
+            except Exception:
+                pass
         else:
             print(f"⚠ User ID {_uid} not found — no user profile active")
 
     # Log startup (to file only)
     dlog.log("=" * 60, "INFO")
-    dlog.log("DRISHI PRO STARTING", "INFO")
+    dlog.log(f"{PRODUCT_NAME.upper()} STARTING", "INFO")
     dlog.log(f"Log files: {dlog.get_log_paths()}", "INFO")
 
     # Start Web UI (Silent)
@@ -843,17 +891,16 @@ def start(boot_start_time: float = None):
             [sys.executable, "web/server.py"],
             start_new_session=True
         )
-        # Print LAN IP for mobile access
-        import socket
-        try:
-            _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            _s.connect(('10.255.255.255', 1))
-            _lan_ip = _s.getsockname()[0]
-            _s.close()
-        except Exception:
-            _lan_ip = 'localhost'
-        print(f"✓ Web UI: http://localhost:8000")
-        print(f"✓ Mobile: http://{_lan_ip}:8000  ← open on phone/tablet")
+        # Display LAN IP prominently for Extension and Mobile
+        _lan_ip = get_server_ip()
+        _public_domain = os.environ.get("NGROK_DOMAIN")
+        _server_url = f"https://{_public_domain}" if _public_domain else f"http://{_lan_ip}:{config.WEB_PORT}"
+        _mobile_url = f"https://{_public_domain}" if _public_domain else f"http://{_lan_ip}:{config.WEB_PORT}"
+        
+        print(f"✓ {product_banner()}")
+        print(f"✓ Web UI: http://localhost:{config.WEB_PORT}")
+        print(f"✓ Extension Server URL: {_server_url}")
+        print(f"✓ Mobile: {_mobile_url}  ← open on phone/tablet")
     except Exception:
         pass
 
@@ -861,14 +908,34 @@ def start(boot_start_time: float = None):
     print("Loading models...")
     import stt
     import numpy as np
-    stt.transcribe(np.zeros(16000, dtype=np.float32))
-    # Eagerly warm up Deepgram/Sarvam session so first real question is fast
     if config.STT_BACKEND == "deepgram":
         import threading as _thr
         _thr.Thread(target=stt._get_deepgram_session, daemon=True).start()
+        stt.transcribe(np.zeros(16000, dtype=np.float32))
     elif config.STT_BACKEND == "sarvam":
-        import threading as _thr
-        _thr.Thread(target=stt._get_sarvam_session, daemon=True).start()
+        # Real connectivity test — send 1s of silence to verify Sarvam API responds
+        print("  Testing Sarvam API connection...")
+        import io as _io
+        try:
+            import soundfile as _sf
+            _buf = _io.BytesIO()
+            _test_audio = np.zeros(16000, dtype=np.float32) + 0.02  # above RMS gate
+            _sf.write(_buf, _test_audio, 16000, format='WAV', subtype='PCM_16')
+            _session = stt._get_sarvam_session()
+            _resp = _session.post(
+                "https://api.sarvam.ai/speech-to-text",
+                files={"file": ("test.wav", _buf.getvalue(), "audio/wav")},
+                data={"model": "saarika:v2.5", "language_code": "en-IN",
+                      "with_timestamps": "false", "with_disfluencies": "false"},
+                timeout=8,
+            )
+            _resp.raise_for_status()
+            print("  ✓ Sarvam API: connected (saarika:v2.5)")
+        except Exception as _e:
+            print(f"  ⚠ Sarvam API failed: {_e}")
+            print("  ⚠ FALLING BACK TO LOCAL WHISPER — change STT in settings or check SARVAM_API_KEY")
+    else:
+        stt.transcribe(np.zeros(16000, dtype=np.float32))
 
     # Pre-warm DB cache (avoids 30-40ms cold-start on first question)
     try:
@@ -922,10 +989,22 @@ if __name__ == "__main__":
     if config.CLOUD_MODE:
         import subprocess as _sp
         port = int(os.environ.get("PORT", 8000))
-        print(f"[CLOUD MODE] Starting web server on port {port}")
-        print("[CLOUD MODE] Audio captured by Chrome extension via WebSocket")
-        _sp.run([
-            sys.executable, "web/server.py"
-        ])
+        print(f"[CLOUD MODE] Starting {PRODUCT_NAME} web server on port {port}")
+        print(f"[CLOUD MODE] {PRODUCT_NAME} audio captured by Chrome extension via WebSocket")
+        _sp.run([sys.executable, "web/server.py"])
+
+    elif os.environ.get("AUDIO_SOURCE") == "extension":
+        # Chrome Extension mode: extension on another laptop captures audio,
+        # does STT, and sends transcripts to /ws/audio WebSocket.
+        # The web server's _handle_ws_text() runs the same full pipeline:
+        # validate → cache → DB → LLM → answer_storage (identical to local mode).
+        # No local audio capture or STT model loading needed here.
+        import subprocess as _sp
+        port = int(os.environ.get("PORT", 8000))
+        print(f"[EXTENSION MODE] Starting {PRODUCT_NAME} web server on port {port}")
+        print(f"[EXTENSION MODE] Waiting for Chrome extension to connect and send transcripts...")
+        print(f"[EXTENSION MODE] Extension STT → /ws/audio → validate → DB/LLM → dashboard")
+        _sp.run([sys.executable, "web/server.py"])
+
     else:
         main()

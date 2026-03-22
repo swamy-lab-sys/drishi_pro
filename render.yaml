@@ -3,7 +3,7 @@ services:
     name: drishi-pro
     env: python
     buildCommand: pip install -r requirements-render.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT -c gunicorn.conf.py wsgi:app
+    startCommand: python web/server.py
     healthCheckPath: /health
     envVars:
       - key: ANTHROPIC_API_KEY
@@ -17,10 +17,8 @@ services:
       - key: CLOUD_MODE
         value: "true"
       - key: STT_BACKEND
-        value: "sarvam"
+        value: "deepgram"
       - key: LLM_MODEL_OVERRIDE
         value: "claude-haiku-4-5-20251001"
       - key: PYTHONWARNINGS
         value: "ignore"
-      - key: PYTHONUNBUFFERED
-        value: "1"

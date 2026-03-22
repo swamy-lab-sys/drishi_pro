@@ -111,9 +111,9 @@ _cooldown_end_time = 0.0
 _cooldown_lock = threading.Lock()
 
 # Cooldown duration (seconds) - tuned for fast interview pacing
-COOLDOWN_MIN = 0.3   # Very short answers — ready almost immediately
-COOLDOWN_DEFAULT = 0.8  # Normal bullet answers
-COOLDOWN_MAX = 2.0   # Code/long answers
+COOLDOWN_MIN = 0.2   # Very short answers — ready almost immediately
+COOLDOWN_DEFAULT = 0.6  # Normal bullet answers
+COOLDOWN_MAX = 1.5   # Code/long answers
 
 # Last question tracking (for deduplication within session)
 # Deque of (normalized_question, timestamp) — tracks last 5 to catch
@@ -436,6 +436,25 @@ def set_active_models(stt: str, llm: str):
         _active_llm = llm
 
 
+# ── Latency tracking (rolling avg of last 20 answers) ────────
+_latency_lock = threading.Lock()
+_latency_samples: deque = deque(maxlen=20)  # O(1) append+evict, no pop(0)
+
+
+def record_answer_latency(ms: float) -> None:
+    """Record pipeline latency for a completed answer."""
+    with _latency_lock:
+        _latency_samples.append(ms)
+
+
+def get_avg_latency_ms() -> float | None:
+    """Return rolling average latency in ms, or None if no data yet."""
+    with _latency_lock:
+        if not _latency_samples:
+            return None
+        return round(sum(_latency_samples) / len(_latency_samples))
+
+
 def get_session_info() -> dict:
     """Return summary of session state for UI header."""
     with _selected_user_lock:
@@ -446,8 +465,8 @@ def get_session_info() -> dict:
         conf = _current_confidence
     with _mode_profile_lock:
         mp = _mode_profile
-    
-    return {
+
+    result = {
         "user_name": u.get("name") if u else "None",
         "user_role": u.get("role") if u else "None",
         "user_exp": u.get("experience_years") if u else 0,
@@ -455,8 +474,12 @@ def get_session_info() -> dict:
         "llm": llm,
         "mode": mp,
         "elapsed": get_session_elapsed(),
-        "confidence": round(conf * 100)
+        "confidence": round(conf * 100),
     }
+    avg = get_avg_latency_ms()
+    if avg is not None:
+        result["avg_latency_ms"] = avg
+    return result
 
 
 # =============================================================================
