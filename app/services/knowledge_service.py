@@ -44,6 +44,12 @@ def add_qa_payload(data: dict | None) -> tuple[dict, int]:
         company=data.get("company", ""),
         role_tag=data.get("role_tag", ""),
     )
+    # Keep semantic index fresh
+    try:
+        import semantic_search
+        semantic_search.queue_new_entry(qa_id)
+    except Exception:
+        pass
     return {"id": qa_id, "status": "created"}, 201
 
 

@@ -154,6 +154,29 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
             "original_question": original_question,
         }, 200
 
+    # Priority 1b: Semantic search fallback (sentence-transformers cosine similarity)
+    if not db_result and not quick_mode:
+        try:
+            import semantic_search as _sem
+            sem_result = _sem.find_semantic_answer(question, want_code=wants_code)
+            if sem_result:
+                sem_answer, sem_score, sem_id = sem_result
+                answer_storage.set_complete_answer(
+                    question,
+                    sem_answer,
+                    {"source": f"semantic-{sem_id}", "sem_score": round(sem_score, 2)},
+                )
+                state.record_answer_latency((time.time() - _t0) * 1000)
+                return {
+                    "answer": sem_answer,
+                    "source": "semantic",
+                    "score": sem_score,
+                    "question": question,
+                    "original_question": original_question,
+                }, 200
+        except Exception:
+            pass
+
     # Priority 2: Answer cache — skipped in quick_mode (need fresh code-block answer)
     import answer_cache as _ac
     cached = None if quick_mode else _ac.get_cached_answer(question, role=user_role)

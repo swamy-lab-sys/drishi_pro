@@ -956,6 +956,13 @@ def start(boot_start_time: float = None):
         else:
             print(f"⚠ User ID {_uid} not found — no user profile active")
 
+    # Kick off semantic search index build in background (non-blocking)
+    try:
+        import semantic_search
+        semantic_search.init_async()
+    except Exception:
+        pass
+
     # Log startup (to file only)
     dlog.log("=" * 60, "INFO")
     dlog.log(f"{PRODUCT_NAME.upper()} STARTING", "INFO")
