@@ -66,21 +66,49 @@ def get_resume_text(resume_path: Path) -> str:
     return _resume_cache["text"]
 
 
+_HAS_QUESTION_RE = re.compile(
+    r"\b(what|how|why|when|where|which|who|whom|whose|explain|describe|write|"
+    r"define|tell|can|could|is|are|does|do|did)\b",
+    re.IGNORECASE,
+)
+
+
 def normalize_manual_question(raw_question: str) -> str:
-    """Expand short keyword-style manual asks into full questions."""
+    """Expand short keyword-style manual asks into full questions.
+    Also tries the DB for known keywords to return the canonical question form."""
     question = (raw_question or "").strip()
     if not question:
         return ""
 
     words = question.split()
-    has_question_word = re.search(
-        r"\b(what|how|why|when|where|which|who|whom|whose|explain|describe|write|"
-        r"define|tell|can|could|is|are|does|do|did)\b",
-        question.lower(),
-    )
+    has_question_word = _HAS_QUESTION_RE.search(question)
     if len(words) <= 3 and not has_question_word and not question.endswith("?"):
+        # Try DB lookup for well-known short keywords first
+        db_hit = qa_database.find_answer(question, want_code=False)
+        if db_hit:
+            return question  # DB knows it — pass as-is
         return f"What is {question}? Explain in detail with examples."
     return question
+
+
+def _get_intro_answer(question: str) -> str | None:
+    """Return self-introduction text for the active user, or None if not applicable."""
+    from user_manager import is_introduction_question
+    if not is_introduction_question(question):
+        return None
+    active_user = state.get_selected_user()
+    if not active_user or not (active_user.get("self_introduction") or "").strip():
+        try:
+            from app.services.user_service import _load_active_user_from_file
+            loaded = _load_active_user_from_file()
+            if loaded:
+                state.set_selected_user(loaded)
+                active_user = loaded
+        except Exception:
+            pass
+    if active_user and (active_user.get("self_introduction") or "").strip():
+        return active_user["self_introduction"].strip()
+    return None
 
 
 def ask_question_payload(data: dict | None) -> tuple[dict, int]:
@@ -95,24 +123,11 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
     if not question:
         return {"error": "question is required"}, 400
 
-    from user_manager import is_introduction_question
-
-    if is_introduction_question(question):
-        active_user = state.get_selected_user()
-        if not active_user or not (active_user.get("self_introduction") or "").strip():
-            try:
-                from app.services.user_service import _load_active_user_from_file
-                _fu = _load_active_user_from_file()
-                if _fu:
-                    state.set_selected_user(_fu)
-                    active_user = _fu
-            except Exception:
-                pass
-        if active_user and (active_user.get("self_introduction") or "").strip():
-            intro = active_user["self_introduction"].strip()
-            answer_storage.set_complete_answer(question, intro, {"source": "intro"})
-            state.record_answer_latency((time.time() - _t0) * 1000)
-            return {"answer": intro, "source": "intro"}, 200
+    intro = _get_intro_answer(question)
+    if intro:
+        answer_storage.set_complete_answer(question, intro, {"source": "intro"})
+        state.record_answer_latency((time.time() - _t0) * 1000)
+        return {"answer": intro, "source": "intro"}, 200
 
     wants_code = False
     try:
@@ -388,327 +403,46 @@ def stream_response() -> Response:
     return response
 
 
-_KEYWORD_EXPAND = {
-    "encapsulation": "What is encapsulation?",
-    "polymorphism": "What is polymorphism?",
-    "inheritance": "What is inheritance?",
-    "abstraction": "What is abstraction?",
-    "oops": "What are the four pillars of OOP?",
-    "oop": "What are the four pillars of OOP?",
-    "oops concepts": "What are the four pillars of OOP?",
-    "solid": "What are SOLID principles?",
-    "solid principles": "What are SOLID principles?",
-    "generators": "What are generators in Python?",
-    "generator": "What are generators in Python?",
-    "decorators": "What are decorators in Python?",
-    "decorator": "What are decorators in Python?",
-    "metaclass": "What is a metaclass in Python?",
-    "gil": "What is the GIL in Python?",
-    "global interpreter lock": "What is the GIL in Python?",
-    "list comprehension": "What is list comprehension in Python?",
-    "lambda": "What is a lambda function in Python?",
-    "mutable immutable": "What is the difference between mutable and immutable in Python?",
-    "args kwargs": "What are *args and **kwargs in Python?",
-    "*args **kwargs": "What are *args and **kwargs in Python?",
-    "pickling": "What is pickling in Python?",
-    "shallow deep copy": "What is the difference between shallow copy and deep copy?",
-    "iterator": "What is an iterator in Python?",
-    "context manager": "What is a context manager in Python?",
-    "palindrome": "Write a function to check if a string is a palindrome.",
-    "fibonacci": "Write a function to generate Fibonacci numbers.",
-    "fibonacci series": "Write a function to generate the Fibonacci series.",
-    "factorial": "Write a function to calculate factorial of a number.",
-    "even numbers": "Write a function to find all even numbers in a list.",
-    "odd numbers": "Write a function to find all odd numbers in a list.",
-    "prime numbers": "Write a function to find all prime numbers up to N.",
-    "prime": "Write a function to check if a number is prime.",
-    "anagram": "Write a function to check if two strings are anagrams.",
-    "reverse string": "Write a function to reverse a string.",
-    "bubble sort": "Write a bubble sort algorithm.",
-    "merge sort": "Write a merge sort algorithm.",
-    "binary search": "Write a binary search algorithm.",
-    "linked list": "Write a singly linked list implementation.",
-    "stack": "Write a stack implementation in Python.",
-    "queue": "Write a queue implementation in Python.",
-    "orm": "What is Django ORM?",
-    "django orm": "What is Django ORM?",
-    "migrations": "What are Django migrations?",
-    "django migrations": "What are Django migrations?",
-    "signals": "What are Django signals?",
-    "django signals": "What are Django signals?",
-    "middleware": "What is Django middleware?",
-    "django middleware": "What is Django middleware?",
-    "rest framework": "What is Django REST Framework?",
-    "drf": "What is Django REST Framework?",
-    "serializer": "What are serializers in DRF?",
-    "viewsets": "What are ViewSets in DRF?",
-    "authentication": "What are authentication methods in Django?",
-    "jwt": "What is JWT authentication?",
-    "celery": "What is Celery and how is it used with Django?",
-    "docker": "What is Docker and how does it work?",
-    "kubernetes": "What is Kubernetes?",
-    "k8s": "What is Kubernetes?",
-    "terraform": "What is Terraform?",
-    "ansible": "What is Ansible?",
-    "ci cd": "What is CI/CD?",
-    "cicd": "What is CI/CD?",
-    "jenkins": "What is Jenkins?",
-    "nginx": "What is Nginx?",
-    "load balancer": "What is a load balancer?",
-    "load balancing": "What is load balancing?",
-    "microservices": "What are microservices?",
-    "kafka": "What is Apache Kafka?",
-    "redis": "What is Redis?",
-    "aws": "What are the core AWS services?",
-    "s3": "What is AWS S3?",
-    "ec2": "What is AWS EC2?",
-    "lambda function": "What is AWS Lambda?",
-    "terraform script": "Write a basic Terraform configuration to create an EC2 instance.",
-    "ansible script": "Write an Ansible playbook to install and start Nginx.",
-    "ansible playbook": "Write an Ansible playbook to install and start Nginx.",
-    "dockerfile": "Write a Dockerfile for a Python Flask application.",
-    "docker compose": "Write a Docker Compose file for a web app with a database.",
-    "sql": "What is SQL and what are its key commands?",
-    "nosql": "What is NoSQL and how does it differ from SQL?",
-    "sql nosql": "What is the difference between SQL and NoSQL databases?",
-    "indexing": "What is database indexing?",
-    "caching": "What is caching and how does it improve performance?",
-    "rest api": "What is a REST API?",
-    "restful": "What is a RESTful API?",
-    "http methods": "What are HTTP methods?",
-    "status codes": "What are common HTTP status codes?",
-    "git": "What is Git and what are its core commands?",
-    "git merge rebase": "What is the difference between git merge and git rebase?",
-    "threading": "What is multithreading in Python?",
-    "multiprocessing": "What is multiprocessing in Python?",
-    "async await": "What is async/await in Python?",
-    "cors": "What is CORS?",
-    "gc": "What is garbage collection?",
-    "garbage collection": "What is garbage collection?",
-    "rest": "What is a REST API?",
-    "api": "What is an API?",
-    "mvc": "What is the MVC architecture?",
-    "mvc pattern": "What is the MVC architecture?",
-    "mvt": "What is the MVT pattern in Django?",
-    "solid": "What are SOLID principles?",
-    "dry": "What is the DRY principle?",
-    "kiss": "What is the KISS principle?",
-    "srp": "What is the Single Responsibility Principle?",
-    "closures": "What is a closure in Python?",
-    "closure": "What is a closure in Python?",
-    "memoization": "What is memoization?",
-    "recursion": "What is recursion?",
-    "hashing": "What is hashing?",
-    "hash table": "What is a hash table?",
-    "binary tree": "What is a binary tree?",
-    "normalization": "What is database normalization?",
-    "denormalization": "What is denormalization in databases?",
-    "window function": "What is a window function in SQL?",
-    "window functions": "What is a window function in SQL?",
-    "inner join": "What is an INNER JOIN in SQL?",
-    "left join": "What is a LEFT JOIN in SQL?",
-    "outer join": "What is an OUTER JOIN in SQL?",
-    "group by": "What is GROUP BY in SQL?",
-    "having": "What is HAVING in SQL?",
-    "foreign key": "What is a foreign key in SQL?",
-    "primary key": "What is a primary key in SQL?",
-    "subquery": "What is a subquery in SQL?",
-    "transaction": "What is a database transaction?",
-    "acid": "What are ACID properties in databases?",
-    "prometheus": "What is Prometheus monitoring?",
-    "grafana": "What is Grafana?",
-    "elk stack": "What is the ELK stack?",
-    "elasticsearch": "What is Elasticsearch?",
-    "rate limit": "What is rate limiting?",
-    "rate limiting": "What is rate limiting?",
-    "idempotency": "What is idempotency in APIs?",
-    "idempotent": "What is idempotency in APIs?",
-    # ── Java ──────────────────────────────────────────────────────────────────
-    "jvm": "What is the JVM (Java Virtual Machine)?",
-    "jdk": "What is the JDK?",
-    "jre": "What is the JRE?",
-    "spring boot": "What is Spring Boot?",
-    "spring": "What is the Spring Framework?",
-    "hibernate": "What is Hibernate ORM?",
-    "interface java": "What is an interface in Java?",
-    "abstract class": "What is an abstract class in Java?",
-    "generics": "What are generics in Java?",
-    "stream api": "What is the Stream API in Java?",
-    "collections": "What is the Java Collections Framework?",
-    "hashmap": "What is a HashMap in Java?",
-    "arraylist": "What is an ArrayList in Java?",
-    "linkedlist java": "What is a LinkedList in Java?",
-    "synchronized": "What is the synchronized keyword in Java?",
-    "volatile": "What is the volatile keyword in Java?",
-    "executorservice": "What is ExecutorService in Java?",
-    "thread java": "What is multithreading in Java?",
-    "threads java": "What is multithreading in Java?",
-    "maven": "What is Maven?",
-    "gradle": "What is Gradle?",
-    "spring security": "What is Spring Security?",
-    "spring mvc": "What is Spring MVC?",
-    "jpa": "What is JPA (Java Persistence API)?",
-    "exception handling java": "What is exception handling in Java?",
-    "checked unchecked": "What is the difference between checked and unchecked exceptions in Java?",
-    "garbage collector java": "How does garbage collection work in Java?",
-    "heap java": "What is the Java heap and stack?",
-    "design patterns": "What are common design patterns in Java?",
-    "singleton": "What is the Singleton design pattern?",
-    "factory pattern": "What is the Factory design pattern?",
-    "observer pattern": "What is the Observer design pattern?",
-    # ── JavaScript / Frontend ─────────────────────────────────────────────────
-    "promise": "What is a Promise in JavaScript?",
-    "promises": "What is a Promise in JavaScript?",
-    "event loop": "What is the event loop in JavaScript?",
-    "prototype": "What is prototypal inheritance in JavaScript?",
-    "hoisting": "What is hoisting in JavaScript?",
-    "scope": "What is scope in JavaScript?",
-    "closure js": "What is a closure in JavaScript?",
-    "react": "What is React?",
-    "react hooks": "What are React hooks?",
-    "hooks": "What are React hooks?",
-    "usestate": "What is useState in React?",
-    "useeffect": "What is useEffect in React?",
-    "usememo": "What is useMemo in React?",
-    "usecallback": "What is useCallback in React?",
-    "useref": "What is useRef in React?",
-    "usecontext": "What is useContext in React?",
-    "virtual dom": "What is the Virtual DOM in React?",
-    "props state": "What is the difference between props and state in React?",
-    "node js": "What is Node.js?",
-    "nodejs": "What is Node.js?",
-    "express js": "What is Express.js?",
-    "expressjs": "What is Express.js?",
-    "typescript": "What is TypeScript?",
-    "dom": "What is the DOM (Document Object Model)?",
-    "es6": "What are ES6 features in JavaScript?",
-    "arrow function": "What is an arrow function in JavaScript?",
-    "spread operator": "What is the spread operator in JavaScript?",
-    "rest operator": "What is the rest operator in JavaScript?",
-    "destructuring": "What is destructuring in JavaScript?",
-    "callback js": "What is a callback function in JavaScript?",
-    "debounce": "What is debounce in JavaScript?",
-    "throttle": "What is throttle in JavaScript?",
-    "graphql": "What is GraphQL?",
-    "webpack": "What is Webpack?",
-    "next js": "What is Next.js?",
-    "nextjs": "What is Next.js?",
-    # ── System Design ─────────────────────────────────────────────────────────
-    "cap theorem": "What is the CAP theorem?",
-    "cap": "What is the CAP theorem?",
-    "consistent hashing": "What is consistent hashing?",
-    "sharding": "What is database sharding?",
-    "replication": "What is database replication?",
-    "message queue": "What is a message queue?",
-    "cdn": "What is a CDN (Content Delivery Network)?",
-    "api gateway": "What is an API gateway?",
-    "circuit breaker": "What is the circuit breaker pattern?",
-    "saga pattern": "What is the Saga pattern in microservices?",
-    "event sourcing": "What is event sourcing?",
-    "cqrs": "What is CQRS (Command Query Responsibility Segregation)?",
-    "eventual consistency": "What is eventual consistency?",
-    "two phase commit": "What is two-phase commit?",
-    "distributed tracing": "What is distributed tracing?",
-    "service mesh": "What is a service mesh?",
-    "rate limit": "What is rate limiting?",
-    "rate limiting": "What is rate limiting?",
-    # ── SaaS ─────────────────────────────────────────────────────────────────
-    "multi tenancy": "What is multi-tenancy in SaaS?",
-    "multitenancy": "What is multi-tenancy in SaaS?",
-    "stripe": "How do you integrate Stripe for payments?",
-    "billing saas": "How does billing work in SaaS applications?",
-    "oauth": "What is OAuth 2.0?",
-    "oauth2": "What is OAuth 2.0?",
-    "rbac": "What is Role-Based Access Control (RBAC)?",
-    "webhook": "What is a webhook?",
-    "webhooks": "What is a webhook?",
-    "subscription model": "How does the subscription model work in SaaS?",
-    # ── Production Support ────────────────────────────────────────────────────
-    "incident management": "What is incident management?",
-    "rca": "What is Root Cause Analysis (RCA)?",
-    "root cause analysis": "What is Root Cause Analysis (RCA)?",
-    "sla": "What is a Service Level Agreement (SLA)?",
-    "slo": "What is a Service Level Objective (SLO)?",
-    "sre": "What is Site Reliability Engineering (SRE)?",
-    "on call": "What is on-call in production support?",
-    "runbook": "What is a runbook?",
-    "postmortem": "What is a postmortem in incident management?",
-    "monitoring": "What is monitoring in production support?",
-    "alerting": "What is alerting in production monitoring?",
-    "log analysis": "How do you perform log analysis in production?",
-    "disk space": "How do you troubleshoot disk space issues in Linux?",
-    "cpu high": "How do you troubleshoot high CPU usage in Linux?",
-    "memory leak": "What is a memory leak and how do you debug it?",
-    "process killed": "What is OOM killer in Linux?",
-    "oom": "What is the OOM killer in Linux?",
-    # ── Telecom / IMS (Tejaswini, Balaji) ────────────────────────────────────
-    "sip": "What is the SIP protocol?",
-    "sip protocol": "What is the SIP protocol?",
-    "ss7": "What is SS7 (Signaling System 7)?",
-    "diameter": "What is the Diameter protocol?",
-    "ims": "What is IMS (IP Multimedia Subsystem)?",
-    "voip": "What is VoIP?",
-    "rtp": "What is RTP (Real-time Transport Protocol)?",
-    "kamailio": "What is Kamailio?",
-    "wireshark": "How do you use Wireshark to analyze SIP calls?",
-    "call flow": "Explain the SIP call flow.",
-    "sip call flow": "Explain the SIP call flow.",
-    "register sip": "How does SIP REGISTER work?",
-    "invite sip": "How does SIP INVITE work?",
-    "hss": "What is HSS (Home Subscriber Server)?",
-    "pcrf": "What is PCRF in telecom?",
-    "4g lte": "What is 4G LTE architecture?",
-    "lte": "What is LTE?",
-    "5g": "What is 5G architecture?",
-    "cdr": "What is a CDR (Call Detail Record)?",
-    "codec": "What is a codec in VoIP?",
-    "sdp": "What is SDP (Session Description Protocol)?",
-    "nat traversal": "What is NAT traversal in VoIP?",
-    "stun turn": "What is STUN/TURN in VoIP?",
-    # ── Linux / Shell (common for Tejaswini/Balaji/DevOps) ───────────────────
-    "grep": "How do you use grep in Linux?",
-    "awk": "How do you use awk in Linux?",
-    "sed": "How do you use sed in Linux?",
-    "cron": "What is cron and how do you schedule cron jobs?",
-    "crontab": "What is cron and how do you schedule cron jobs?",
-    "systemctl": "How do you use systemctl to manage services?",
-    "journalctl": "How do you use journalctl to view logs?",
-    "netstat": "How do you use netstat to check network connections?",
-    "ps aux": "How do you use ps to check running processes?",
-    "top htop": "How do you use top/htop for system monitoring?",
-    "find linux": "How do you use the find command in Linux?",
-    "chmod": "What is chmod and how do you set file permissions?",
-    "chown": "What is chown in Linux?",
-    "ssh": "How does SSH work?",
-    "firewall": "How do you configure a firewall in Linux?",
-    "iptables": "What is iptables in Linux?",
-    "tcp ip": "What is the TCP/IP model?",
-    "dns": "How does DNS work?",
-    "http https": "What is the difference between HTTP and HTTPS?",
-}
+_EXPAND_STRIP_PREFIXES = ("explain ", "describe ", "tell me about ", "what about ", "talk about ")
 
 
 def expand_short_keyword(text: str) -> str:
-    """Expand short captured keywords into interview-ready questions."""
+    """Expand short keywords into full questions using the Q&A database.
+
+    Priority:
+    1. Long enough to be a real question (>6 words) — pass through unchanged.
+    2. Strip explain-style prefix and recurse once (e.g. 'explain decorators' → 'decorators').
+    3. DB probe: if the DB already knows this keyword, pass it as-is for the DB to answer.
+    4. Fallback: 'What is <keyword>? Explain with examples.'
+    """
     stripped = text.strip()
+    if not stripped:
+        return stripped
     if len(stripped.split()) > 6:
         return stripped
+
     key = stripped.lower().rstrip("?.! ")
-    expanded = _KEYWORD_EXPAND.get(key)
-    if expanded:
-        print(f"[CC] Keyword expanded: '{stripped}' -> '{expanded}'")
-        return expanded
-    # Strip "explain / describe / tell me about / what about" prefix and retry
-    _EXPLAIN_PREFIXES = ("explain ", "describe ", "tell me about ", "what about ", "talk about ")
-    for prefix in _EXPLAIN_PREFIXES:
+
+    for prefix in _EXPAND_STRIP_PREFIXES:
         if key.startswith(prefix):
             bare = key[len(prefix):].strip()
-            expanded = _KEYWORD_EXPAND.get(bare)
-            if expanded:
-                print(f"[CC] Keyword expanded (prefix-strip): '{stripped}' -> '{expanded}'")
-                return expanded
+            if bare and bare != key:
+                return expand_short_keyword(bare)
             break
-    return stripped
+
+    # If DB has an answer for this keyword, let it handle the full lookup
+    try:
+        if qa_database.find_answer(key, want_code=False):
+            return stripped
+    except Exception:
+        pass
+
+    if _HAS_QUESTION_RE.search(stripped) or stripped.endswith("?"):
+        return stripped
+
+    expanded = f"What is {stripped}? Explain with examples."
+    print(f"[CC] Keyword expanded: '{stripped}' → '{expanded}'")
+    return expanded
 
 
 def cc_question_payload(data: dict | None) -> tuple[dict, int]:
@@ -720,9 +454,6 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
         return {"error": "No question provided"}, 400
 
     source = data.get("source", "cc")
-
-    if not question_text:
-        return {"error": "Empty question"}, 400
 
     if (
         question_text == cc_capture_state["last_question"]
@@ -757,40 +488,24 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     if is_chat_source:
         append_chat_question(question_text, source, time.time(), "answered")
 
-    from user_manager import get_active_user_context, is_introduction_question
+    from user_manager import get_active_user_context
 
-    # Skip dedup for intro questions — intro changes when user switches
-    if not is_introduction_question(question_text):
-        existing = answer_storage.is_already_answered(question_text)
-        if existing:
-            print(f"[CC] Already answered, showing existing: {question_text[:40]}...")
-            return {
-                "status": "already_answered",
-                "question": question_text[:50],
-                "answer_preview": existing.get("answer", "")[:100],
-            }, 200
+    # Intro detection — skip dedup so user can switch profiles mid-session
+    intro = _get_intro_answer(question_text)
+    if intro:
+        answer_storage.set_complete_answer(question_text, intro, {"source": "intro"})
+        fragment_context.save_context(question_text, f"chat-{source}")
+        return {"status": "answered", "question": question_text[:50], "answer": intro, "source": "intro"}, 200
 
-    if is_introduction_question(question_text):
-        active_user = state.get_selected_user()
-        if not active_user or not (active_user.get("self_introduction") or "").strip():
-            try:
-                from app.services.user_service import _load_active_user_from_file
-                _fu = _load_active_user_from_file()
-                if _fu:
-                    state.set_selected_user(_fu)
-                    active_user = _fu
-            except Exception:
-                pass
-        if active_user and (active_user.get("self_introduction") or "").strip():
-            intro = active_user["self_introduction"].strip()
-            answer_storage.set_complete_answer(question_text, intro, {"source": "intro"})
-            fragment_context.save_context(question_text, f"chat-{source}")
-            return {
-                "status": "answered",
-                "question": question_text[:50],
-                "answer": intro,
-                "source": "intro",
-            }, 200
+    # Skip dedup check only for intro; everything else deduplicates
+    existing = answer_storage.is_already_answered(question_text)
+    if existing:
+        print(f"[CC] Already answered, showing existing: {question_text[:40]}...")
+        return {
+            "status": "already_answered",
+            "question": question_text[:50],
+            "answer_preview": existing.get("answer", "")[:100],
+        }, 200
 
     resume_summary, _user_role, jd_from_user = get_active_user_context()
     resume_text = resume_summary or get_resume_text(UPLOADED_RESUME_PATH)
@@ -819,8 +534,13 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
                 wants_code = True
                 print("[CC] Chat question -> treating as coding request")
 
-        db_result = qa_database.find_answer(question_text, want_code=wants_code,
-                                             user_role=(state.get_selected_user() or {}).get("role", ""))
+        _active = state.get_selected_user() or {}
+        _role_tag = getattr(config, "INTERVIEW_ROLE", "") or ""
+        db_result = qa_database.find_answer(
+            question_text, want_code=wants_code,
+            user_role=_active.get("role", ""),
+            role_tag=_role_tag,
+        )
         if db_result:
             answer, score, qa_id = db_result
             print(f"[CC] DB hit (score={score:.2f}, id={qa_id}) - skipping API call")
@@ -877,3 +597,133 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     except Exception as exc:
         print(f"[CC] LLM error: {exc}")
         return {"error": str(exc)}, 500
+
+
+# ── Interview Tips ──────────────────────────────────────────────────────────────
+
+_TIPS_BY_ROUND = {
+    "hr": [
+        "Use STAR format — Situation, Task, Action, Result — for every behavioral question.",
+        "Quantify your impact: 'reduced latency by 40%' beats 'improved performance'.",
+        "Research the company's tech stack and recent engineering blog posts.",
+        "Prepare 2–3 stories that show ownership, conflict resolution, and growth mindset.",
+        "Know your notice period, expected CTC, and location preference in advance.",
+        "End every STAR story with what YOU specifically did, not 'we'.",
+    ],
+    "tech": [
+        "Think out loud — interviewers value your reasoning, not just the answer.",
+        "State the time/space complexity of every algorithm you mention.",
+        "Cover edge cases first: empty input, single element, max value.",
+        "Use concrete examples from your resume — 'I used this in my last role to...'",
+        "If you don't know something, say what you DO know and how you'd find out.",
+        "DB answers arrive in <30ms — listen for the question keyword and relax.",
+    ],
+    "design": [
+        "Always clarify requirements and scale: 1K users vs 10M changes everything.",
+        "Structure: Requirements → High-level design → Deep dive → Trade-offs.",
+        "Pick one component to go deep on — distributed cache, message queue, etc.",
+        "State your assumptions explicitly before designing.",
+        "Mention consistency vs availability trade-off (CAP theorem) where relevant.",
+        "Draw the data flow: client → API gateway → service → DB → cache.",
+    ],
+    "code": [
+        "Talk through your approach before writing any code.",
+        "Start with brute force, then optimize — show you know both.",
+        "Verify with the given examples before submitting.",
+        "Handle edge cases: null input, empty arrays, integer overflow.",
+        "Use meaningful variable names — treat it like production code.",
+        "If stuck, reduce the problem: solve for N=1, then generalize.",
+    ],
+}
+
+_TIPS_BY_ROLE = {
+    "python": [
+        "Mention GIL limitations for CPU-bound tasks — use multiprocessing instead.",
+        "Know the difference between list/dict/set comprehensions and their performance.",
+        "Be ready for Django ORM N+1 problem and select_related/prefetch_related fix.",
+        "Decorator and context manager patterns are almost always asked.",
+    ],
+    "java": [
+        "Understand HashMap internals: hashCode, equals, load factor, tree buckets (Java 8+).",
+        "Be ready for ConcurrentHashMap vs synchronized HashMap comparison.",
+        "Spring Boot auto-configuration and @Bean vs @Component questions are common.",
+        "Know checked vs unchecked exceptions and when to use each.",
+    ],
+    "javascript": [
+        "Event loop, microtask queue, and Promise execution order are classic traps.",
+        "Explain 'this' binding — arrow functions vs regular functions.",
+        "React reconciliation and when to use useMemo/useCallback vs just re-render.",
+        "Know closure gotchas in loops (var vs let).",
+    ],
+    "sql": [
+        "Window functions (ROW_NUMBER, RANK, LAG/LEAD) are almost always tested.",
+        "Explain query execution plan and when an index scan vs seek is used.",
+        "Know ACID properties and isolation levels (READ COMMITTED vs SERIALIZABLE).",
+        "Be ready to optimize a slow query: check indexes, avoid SELECT *, use CTEs.",
+    ],
+    "production_support": [
+        "Always start incident response: check logs → metrics → recent deployments.",
+        "Know `top`, `htop`, `iotop`, `vmstat`, `netstat -tulpn` from memory.",
+        "OOM kill: `dmesg | grep -i 'killed process'` is your first command.",
+        "For disk full: `df -h`, then `du -sh /var/log/* | sort -h | tail -20`.",
+    ],
+    "telecom": [
+        "SIP REGISTER → 401 Unauthorized → REGISTER with auth → 200 OK flow.",
+        "Know P-CSCF, S-CSCF, I-CSCF roles in IMS architecture.",
+        "Diameter AVPs: Origin-Host, Destination-Realm, Session-Id are always checked.",
+        "For call drops: Wireshark filter `sip.Method == 'BYE' || sip.Status-Code == 503`.",
+    ],
+}
+
+
+def get_interview_tips_payload(role: str = "", round_name: str = "") -> dict:
+    """Return contextual interview tips for the current role and round."""
+    import config as _cfg
+
+    _role = (role or getattr(_cfg, "INTERVIEW_ROLE", "general") or "general").lower()
+    _round = (round_name or getattr(_cfg, "INTERVIEW_ROUND", "tech") or "tech").lower()
+
+    round_tips = _TIPS_BY_ROUND.get(_round, _TIPS_BY_ROUND["tech"])
+    role_tips = _TIPS_BY_ROLE.get(_role, [])
+
+    return {
+        "role": _role,
+        "round": _round,
+        "round_tips": round_tips,
+        "role_tips": role_tips,
+        "total": len(round_tips) + len(role_tips),
+    }
+
+
+# ── Prep Questions ──────────────────────────────────────────────────────────────
+
+def get_prep_questions_payload(role: str = "", tag: str = "", limit: int = 20) -> dict:
+    """Return top questions from the DB for the current role — for pre-interview prep."""
+    import config as _cfg
+
+    _role = (role or getattr(_cfg, "INTERVIEW_ROLE", "general") or "general").lower()
+    _tag = tag or _role
+
+    try:
+        rows = qa_database.get_all_qa(search="", tag=_tag)
+        rows.sort(key=lambda r: r.get("hit_count", 0), reverse=True)
+        questions = [
+            {
+                "id": r.get("id"),
+                "question": r.get("question", ""),
+                "tags": r.get("tags", ""),
+                "has_code": bool(r.get("answer_code")),
+                "hit_count": r.get("hit_count", 0),
+            }
+            for r in rows[:limit]
+            if r.get("question")
+        ]
+    except Exception:
+        questions = []
+
+    return {
+        "role": _role,
+        "tag_filter": _tag,
+        "count": len(questions),
+        "questions": questions,
+    }

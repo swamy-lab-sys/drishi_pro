@@ -82,10 +82,6 @@ LLM_TIMEOUT = 10.0
 # Timing & Latency
 # =============================================================================
 
-COOLDOWN_BASE = 0.3
-COOLDOWN_PER_CHAR = 0.001
-COOLDOWN_CODE_BONUS = 0.8
-COOLDOWN_DURATION = 1.5
 DEDUP_WINDOW = 5.0
 
 TARGET_SIMPLE_QUESTION_MS = 2000
