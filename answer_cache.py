@@ -205,6 +205,15 @@ def is_duplicate_question(question: str, role: str = '') -> bool:
         return key in _cache
 
 
+def invalidate_matching(predicate) -> int:
+    """Remove all cache entries whose original question matches predicate. Returns count removed."""
+    with _cache_lock:
+        to_delete = [k for k in list(_cache.keys()) if predicate(k)]
+        for k in to_delete:
+            del _cache[k]
+    return len(to_delete)
+
+
 def clear_cache() -> None:
     """Clear all cached answers (fresh start)."""
     global _hits, _misses

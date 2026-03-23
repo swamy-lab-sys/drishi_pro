@@ -133,9 +133,11 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
 
     active_user = state.get_selected_user()
     user_role = (active_user or {}).get("role", "") if active_user else ""
+    import config as _cfg
+    _role_tag = getattr(_cfg, "INTERVIEW_ROLE", "") or ""  # e.g. "python", "java", "sql"
 
     # Priority 1: DB match (instant, <5ms) — skipped in quick_mode (need guaranteed code block)
-    db_result = None if quick_mode else qa_database.find_answer(question, want_code=wants_code, user_role=user_role)
+    db_result = None if quick_mode else qa_database.find_answer(question, want_code=wants_code, user_role=user_role, role_tag=_role_tag)
     if db_result:
         db_answer, db_score, db_id = db_result
         answer_storage.set_complete_answer(
@@ -193,14 +195,14 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
                 answer = llm_client.get_coding_answer(question)
             else:
                 user_ctx = build_resume_context_for_llm()
+                # Fallback: if no active user profile, inject raw resume + JD so LLM
+                # still has persona context (avoids generic answers)
+                resume_txt = "" if user_ctx else get_resume_text(UPLOADED_RESUME_PATH)
+                jd_txt = "" if user_ctx else get_jd_text()
                 # Stream chunks to UI in real-time via answer_storage
                 raw_chunks = []
-                gen = (
-                    llm_client.get_streaming_interview_answer(question, "", "", user_ctx)
-                    if user_ctx
-                    else llm_client.get_streaming_interview_answer(
-                        question, get_resume_text(UPLOADED_RESUME_PATH), get_jd_text()
-                    )
+                gen = llm_client.get_streaming_interview_answer(
+                    question, resume_txt, jd_txt, user_ctx
                 )
                 for chunk in gen:
                     if chunk:
@@ -260,6 +262,8 @@ def stream_response() -> Response:
         last_ping = time.time()
 
         try:
+            # Tell browser to reconnect in 1s on disconnect (overrides JS exponential backoff)
+            yield "retry: 1000\n\n"
             try:
                 session_id, answers = _read_file_answers()
                 yield f"event: init\ndata: {json.dumps({'session_id': session_id, 'answers': answers})}\n\n"
@@ -346,7 +350,7 @@ def stream_response() -> Response:
                 except Exception:
                     pass
 
-                if now - last_ping >= 20:
+                if now - last_ping >= 10:  # every 10s — keeps ngrok alive (was 20s)
                     last_ping = now
                     yield "event: ping\ndata: {}\n\n"
         except GeneratorExit:
@@ -456,6 +460,208 @@ _KEYWORD_EXPAND = {
     "multiprocessing": "What is multiprocessing in Python?",
     "async await": "What is async/await in Python?",
     "cors": "What is CORS?",
+    "gc": "What is garbage collection?",
+    "garbage collection": "What is garbage collection?",
+    "rest": "What is a REST API?",
+    "api": "What is an API?",
+    "mvc": "What is the MVC architecture?",
+    "mvc pattern": "What is the MVC architecture?",
+    "mvt": "What is the MVT pattern in Django?",
+    "solid": "What are SOLID principles?",
+    "dry": "What is the DRY principle?",
+    "kiss": "What is the KISS principle?",
+    "srp": "What is the Single Responsibility Principle?",
+    "closures": "What is a closure in Python?",
+    "closure": "What is a closure in Python?",
+    "memoization": "What is memoization?",
+    "recursion": "What is recursion?",
+    "hashing": "What is hashing?",
+    "hash table": "What is a hash table?",
+    "binary tree": "What is a binary tree?",
+    "normalization": "What is database normalization?",
+    "denormalization": "What is denormalization in databases?",
+    "window function": "What is a window function in SQL?",
+    "window functions": "What is a window function in SQL?",
+    "inner join": "What is an INNER JOIN in SQL?",
+    "left join": "What is a LEFT JOIN in SQL?",
+    "outer join": "What is an OUTER JOIN in SQL?",
+    "group by": "What is GROUP BY in SQL?",
+    "having": "What is HAVING in SQL?",
+    "foreign key": "What is a foreign key in SQL?",
+    "primary key": "What is a primary key in SQL?",
+    "subquery": "What is a subquery in SQL?",
+    "transaction": "What is a database transaction?",
+    "acid": "What are ACID properties in databases?",
+    "prometheus": "What is Prometheus monitoring?",
+    "grafana": "What is Grafana?",
+    "elk stack": "What is the ELK stack?",
+    "elasticsearch": "What is Elasticsearch?",
+    "rate limit": "What is rate limiting?",
+    "rate limiting": "What is rate limiting?",
+    "idempotency": "What is idempotency in APIs?",
+    "idempotent": "What is idempotency in APIs?",
+    # ── Java ──────────────────────────────────────────────────────────────────
+    "jvm": "What is the JVM (Java Virtual Machine)?",
+    "jdk": "What is the JDK?",
+    "jre": "What is the JRE?",
+    "spring boot": "What is Spring Boot?",
+    "spring": "What is the Spring Framework?",
+    "hibernate": "What is Hibernate ORM?",
+    "interface java": "What is an interface in Java?",
+    "abstract class": "What is an abstract class in Java?",
+    "generics": "What are generics in Java?",
+    "stream api": "What is the Stream API in Java?",
+    "collections": "What is the Java Collections Framework?",
+    "hashmap": "What is a HashMap in Java?",
+    "arraylist": "What is an ArrayList in Java?",
+    "linkedlist java": "What is a LinkedList in Java?",
+    "synchronized": "What is the synchronized keyword in Java?",
+    "volatile": "What is the volatile keyword in Java?",
+    "executorservice": "What is ExecutorService in Java?",
+    "thread java": "What is multithreading in Java?",
+    "threads java": "What is multithreading in Java?",
+    "maven": "What is Maven?",
+    "gradle": "What is Gradle?",
+    "spring security": "What is Spring Security?",
+    "spring mvc": "What is Spring MVC?",
+    "jpa": "What is JPA (Java Persistence API)?",
+    "exception handling java": "What is exception handling in Java?",
+    "checked unchecked": "What is the difference between checked and unchecked exceptions in Java?",
+    "garbage collector java": "How does garbage collection work in Java?",
+    "heap java": "What is the Java heap and stack?",
+    "design patterns": "What are common design patterns in Java?",
+    "singleton": "What is the Singleton design pattern?",
+    "factory pattern": "What is the Factory design pattern?",
+    "observer pattern": "What is the Observer design pattern?",
+    # ── JavaScript / Frontend ─────────────────────────────────────────────────
+    "promise": "What is a Promise in JavaScript?",
+    "promises": "What is a Promise in JavaScript?",
+    "event loop": "What is the event loop in JavaScript?",
+    "prototype": "What is prototypal inheritance in JavaScript?",
+    "hoisting": "What is hoisting in JavaScript?",
+    "scope": "What is scope in JavaScript?",
+    "closure js": "What is a closure in JavaScript?",
+    "react": "What is React?",
+    "react hooks": "What are React hooks?",
+    "hooks": "What are React hooks?",
+    "usestate": "What is useState in React?",
+    "useeffect": "What is useEffect in React?",
+    "usememo": "What is useMemo in React?",
+    "usecallback": "What is useCallback in React?",
+    "useref": "What is useRef in React?",
+    "usecontext": "What is useContext in React?",
+    "virtual dom": "What is the Virtual DOM in React?",
+    "props state": "What is the difference between props and state in React?",
+    "node js": "What is Node.js?",
+    "nodejs": "What is Node.js?",
+    "express js": "What is Express.js?",
+    "expressjs": "What is Express.js?",
+    "typescript": "What is TypeScript?",
+    "dom": "What is the DOM (Document Object Model)?",
+    "es6": "What are ES6 features in JavaScript?",
+    "arrow function": "What is an arrow function in JavaScript?",
+    "spread operator": "What is the spread operator in JavaScript?",
+    "rest operator": "What is the rest operator in JavaScript?",
+    "destructuring": "What is destructuring in JavaScript?",
+    "callback js": "What is a callback function in JavaScript?",
+    "debounce": "What is debounce in JavaScript?",
+    "throttle": "What is throttle in JavaScript?",
+    "graphql": "What is GraphQL?",
+    "webpack": "What is Webpack?",
+    "next js": "What is Next.js?",
+    "nextjs": "What is Next.js?",
+    # ── System Design ─────────────────────────────────────────────────────────
+    "cap theorem": "What is the CAP theorem?",
+    "cap": "What is the CAP theorem?",
+    "consistent hashing": "What is consistent hashing?",
+    "sharding": "What is database sharding?",
+    "replication": "What is database replication?",
+    "message queue": "What is a message queue?",
+    "cdn": "What is a CDN (Content Delivery Network)?",
+    "api gateway": "What is an API gateway?",
+    "circuit breaker": "What is the circuit breaker pattern?",
+    "saga pattern": "What is the Saga pattern in microservices?",
+    "event sourcing": "What is event sourcing?",
+    "cqrs": "What is CQRS (Command Query Responsibility Segregation)?",
+    "eventual consistency": "What is eventual consistency?",
+    "two phase commit": "What is two-phase commit?",
+    "distributed tracing": "What is distributed tracing?",
+    "service mesh": "What is a service mesh?",
+    "rate limit": "What is rate limiting?",
+    "rate limiting": "What is rate limiting?",
+    # ── SaaS ─────────────────────────────────────────────────────────────────
+    "multi tenancy": "What is multi-tenancy in SaaS?",
+    "multitenancy": "What is multi-tenancy in SaaS?",
+    "stripe": "How do you integrate Stripe for payments?",
+    "billing saas": "How does billing work in SaaS applications?",
+    "oauth": "What is OAuth 2.0?",
+    "oauth2": "What is OAuth 2.0?",
+    "rbac": "What is Role-Based Access Control (RBAC)?",
+    "webhook": "What is a webhook?",
+    "webhooks": "What is a webhook?",
+    "subscription model": "How does the subscription model work in SaaS?",
+    # ── Production Support ────────────────────────────────────────────────────
+    "incident management": "What is incident management?",
+    "rca": "What is Root Cause Analysis (RCA)?",
+    "root cause analysis": "What is Root Cause Analysis (RCA)?",
+    "sla": "What is a Service Level Agreement (SLA)?",
+    "slo": "What is a Service Level Objective (SLO)?",
+    "sre": "What is Site Reliability Engineering (SRE)?",
+    "on call": "What is on-call in production support?",
+    "runbook": "What is a runbook?",
+    "postmortem": "What is a postmortem in incident management?",
+    "monitoring": "What is monitoring in production support?",
+    "alerting": "What is alerting in production monitoring?",
+    "log analysis": "How do you perform log analysis in production?",
+    "disk space": "How do you troubleshoot disk space issues in Linux?",
+    "cpu high": "How do you troubleshoot high CPU usage in Linux?",
+    "memory leak": "What is a memory leak and how do you debug it?",
+    "process killed": "What is OOM killer in Linux?",
+    "oom": "What is the OOM killer in Linux?",
+    # ── Telecom / IMS (Tejaswini, Balaji) ────────────────────────────────────
+    "sip": "What is the SIP protocol?",
+    "sip protocol": "What is the SIP protocol?",
+    "ss7": "What is SS7 (Signaling System 7)?",
+    "diameter": "What is the Diameter protocol?",
+    "ims": "What is IMS (IP Multimedia Subsystem)?",
+    "voip": "What is VoIP?",
+    "rtp": "What is RTP (Real-time Transport Protocol)?",
+    "kamailio": "What is Kamailio?",
+    "wireshark": "How do you use Wireshark to analyze SIP calls?",
+    "call flow": "Explain the SIP call flow.",
+    "sip call flow": "Explain the SIP call flow.",
+    "register sip": "How does SIP REGISTER work?",
+    "invite sip": "How does SIP INVITE work?",
+    "hss": "What is HSS (Home Subscriber Server)?",
+    "pcrf": "What is PCRF in telecom?",
+    "4g lte": "What is 4G LTE architecture?",
+    "lte": "What is LTE?",
+    "5g": "What is 5G architecture?",
+    "cdr": "What is a CDR (Call Detail Record)?",
+    "codec": "What is a codec in VoIP?",
+    "sdp": "What is SDP (Session Description Protocol)?",
+    "nat traversal": "What is NAT traversal in VoIP?",
+    "stun turn": "What is STUN/TURN in VoIP?",
+    # ── Linux / Shell (common for Tejaswini/Balaji/DevOps) ───────────────────
+    "grep": "How do you use grep in Linux?",
+    "awk": "How do you use awk in Linux?",
+    "sed": "How do you use sed in Linux?",
+    "cron": "What is cron and how do you schedule cron jobs?",
+    "crontab": "What is cron and how do you schedule cron jobs?",
+    "systemctl": "How do you use systemctl to manage services?",
+    "journalctl": "How do you use journalctl to view logs?",
+    "netstat": "How do you use netstat to check network connections?",
+    "ps aux": "How do you use ps to check running processes?",
+    "top htop": "How do you use top/htop for system monitoring?",
+    "find linux": "How do you use the find command in Linux?",
+    "chmod": "What is chmod and how do you set file permissions?",
+    "chown": "What is chown in Linux?",
+    "ssh": "How does SSH work?",
+    "firewall": "How do you configure a firewall in Linux?",
+    "iptables": "What is iptables in Linux?",
+    "tcp ip": "What is the TCP/IP model?",
+    "dns": "How does DNS work?",
+    "http https": "What is the difference between HTTP and HTTPS?",
 }
 
 
@@ -469,16 +675,27 @@ def expand_short_keyword(text: str) -> str:
     if expanded:
         print(f"[CC] Keyword expanded: '{stripped}' -> '{expanded}'")
         return expanded
+    # Strip "explain / describe / tell me about / what about" prefix and retry
+    _EXPLAIN_PREFIXES = ("explain ", "describe ", "tell me about ", "what about ", "talk about ")
+    for prefix in _EXPLAIN_PREFIXES:
+        if key.startswith(prefix):
+            bare = key[len(prefix):].strip()
+            expanded = _KEYWORD_EXPAND.get(bare)
+            if expanded:
+                print(f"[CC] Keyword expanded (prefix-strip): '{stripped}' -> '{expanded}'")
+                return expanded
+            break
     return stripped
 
 
 def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     """Process a question captured from Meet/Teams captions or chat."""
     data = data or {}
-    if "question" not in data:
+    # Accept both 'question' and 'text' keys (extension sends 'question', UI paste sends 'text')
+    question_text = (data.get("question") or data.get("text") or "").strip()
+    if not question_text:
         return {"error": "No question provided"}, 400
 
-    question_text = data.get("question", "").strip()
     source = data.get("source", "cc")
 
     if not question_text:
@@ -517,16 +734,18 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     if is_chat_source:
         append_chat_question(question_text, source, time.time(), "answered")
 
-    existing = answer_storage.is_already_answered(question_text)
-    if existing:
-        print(f"[CC] Already answered, showing existing: {question_text[:40]}...")
-        return {
-            "status": "already_answered",
-            "question": question_text[:50],
-            "answer_preview": existing.get("answer", "")[:100],
-        }, 200
-
     from user_manager import get_active_user_context, is_introduction_question
+
+    # Skip dedup for intro questions — intro changes when user switches
+    if not is_introduction_question(question_text):
+        existing = answer_storage.is_already_answered(question_text)
+        if existing:
+            print(f"[CC] Already answered, showing existing: {question_text[:40]}...")
+            return {
+                "status": "already_answered",
+                "question": question_text[:50],
+                "answer_preview": existing.get("answer", "")[:100],
+            }, 200
 
     if is_introduction_question(question_text):
         active_user = state.get_selected_user()

@@ -164,32 +164,18 @@ STT_MODEL="${STT_MODEL_OVERRIDE:-Systran/faster-distil-whisper-small.en}"
 LLM_MODEL="${LLM_MODEL_OVERRIDE:-claude-haiku-4-5-20251001}"
 USER_ID_OVERRIDE="${USER_ID_OVERRIDE:-}"
 
-# ── Interactive ngrok selection ───────────────────────────────────
-# Determine default option from .env
+# ── Access mode: read from .env (toggle via Settings → Launch Config) ─────────
+# USE_NGROK is already loaded from .env above. No interactive prompt —
+# change it in Settings UI or edit .env directly, then restart.
 if [ "$USE_NGROK" = "true" ]; then
-    [ -n "$NGROK_DOMAIN" ] && NGROK_DEFAULT="3" || NGROK_DEFAULT="2"
+    if [ -n "$NGROK_DOMAIN" ]; then
+        echo -e "  ${G}✓${D} Access: ngrok (fixed domain: $NGROK_DOMAIN)"
+    else
+        echo -e "  ${G}✓${D} Access: ngrok (random URL)"
+    fi
 else
-    NGROK_DEFAULT="1"
+    echo -e "  ${G}✓${D} Access: Local / LAN only  ${C}(toggle at /settings → Launch Config)${D}"
 fi
-
-echo -e "  ${W}Select access mode:${D}"
-[ "$NGROK_DEFAULT" = "1" ] && TAG1=" ${G}← current${D}" || TAG1=""
-[ "$NGROK_DEFAULT" = "2" ] && TAG2=" ${G}← current${D}" || TAG2=""
-[ "$NGROK_DEFAULT" = "3" ] && TAG3=" ${G}← current${D}" || TAG3=""
-echo -e "  [1] Local / LAN only (no ngrok)$TAG1"
-echo -e "  [2] Local + ngrok (random URL)$TAG2"
-[ -n "$NGROK_DOMAIN" ] && \
-echo -e "  [3] Local + ngrok (fixed: $NGROK_DOMAIN)$TAG3"
-
-read -r -t 10 -p "  Choose [1/2/3] (auto in 10s: $NGROK_DEFAULT): " NGROK_CHOICE || true
-NGROK_CHOICE="${NGROK_CHOICE:-$NGROK_DEFAULT}"
-
-case "$NGROK_CHOICE" in
-    1) USE_NGROK=false; NGROK_DOMAIN=""  ;;
-    2) USE_NGROK=true;  NGROK_DOMAIN=""  ;;
-    3) USE_NGROK=true                    ;;  # keeps NGROK_DOMAIN from .env
-    *) USE_NGROK=false; NGROK_DOMAIN=""  ;;
-esac
 echo ""
 
 export AUDIO_SOURCE

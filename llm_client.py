@@ -47,7 +47,7 @@ MAX_TOKENS_INTERVIEW_EXPLAIN = 180   # Concept questions: definition + code exam
 MAX_TOKENS_INTERVIEW_COMPLEX = 220   # System design / architecture questions
 MAX_TOKENS_CODING = 700       # Python/Java/JS code — bumped for multi-method Java answers
 MAX_TOKENS_CODING_INFRA = 950 # Ansible/Terraform/Dockerfile/Jenkinsfile/K8s manifests
-MAX_TOKENS_PLATFORM = 1200
+MAX_TOKENS_PLATFORM = 2500
 
 # Roles that typically answer with commands/code in bullets — need slightly more tokens
 _COMMAND_HEAVY_ROLES = {
@@ -826,22 +826,31 @@ REMEMBER: Pick variable names that come naturally in 2-3 minutes, not the "clean
 """
 
 
-PLATFORM_PROMPT = """You are an expert competitive programmer. Output WORKING Python code that passes ALL test cases.
+PLATFORM_PROMPT = """You are an expert competitive programmer. Solve the coding problem completely.
 
-INTERNAL THINKING (DO NOT OUTPUT):
-- Identify the problem type (DP, DFS, Greedy, etc.).
-- Analyze constraints (N < 10^5 implies O(N) or O(N log N)).
-- Consider edge cases (empty list, min/max values).
-- Select the OPTIMAL solution.
+LANGUAGE DETECTION (check EDITOR_CONTENT):
+- If editor has Java (class Solution, public static, int[], etc.) → output Java
+- If editor has JavaScript/TypeScript (const, let, function, =>) → output JavaScript
+- If editor has C++ (#include, vector<, auto) → output C++
+- Otherwise → output Python 3
 
-CRITICAL FORMAT RULES (FOLLOW EXACTLY):
-1. Output ONLY raw Python 3 code - absolutely NO explanations, NO "Here's the code", NO markdown
-2. The VERY FIRST LINE must be 'def' or 'class' - NO text before code
-3. Use EXACT function name from EDITOR_CONTENT
-4. MUST use 4-SPACE INDENTATION for all nested code (this is critical!)
-5. For Codewars/LeetCode: just the function definition, no main block
-6. For HackerRank/Codility: include if __name__ == '__main__'
-7. NO comments, NO print statements for debugging
+THINK BEFORE CODING (internal only, do NOT output):
+- Read constraints carefully (N<10^5 = O(N log N), N<10^3 = O(N^2) ok)
+- Identify algorithm: DP, BFS, DFS, Two-pointer, Binary search, Greedy, etc.
+- Handle ALL edge cases: empty input, single element, min/max values, duplicates
+- For HackerRank/stdin problems: read input with input()/sys.stdin, print() for output
+- Test mentally against all given examples before writing
+
+STRICT OUTPUT RULES:
+1. ONLY raw code — zero explanations, zero markdown, zero backticks
+2. FIRST CHARACTER must be the start of actual code (def/class/import/public)
+3. NO comments of any kind — no #, no //, no /* */
+4. NO debug print statements
+5. Use EXACT function/class name from EDITOR_CONTENT if provided
+6. 4-space indentation for Python; standard for Java/JS
+7. LeetCode/Codewars: function/class only, no main()
+8. HackerRank/Codility/Programiz: include stdin reading + print output
+9. Solution must pass ALL test cases including edge cases
 
 WORD-TO-NUMBER CONVERSION (parse_int, words_to_int, etc.):
 Use this EXACT pattern with PROPER INDENTATION:
@@ -1229,10 +1238,10 @@ def solve_coding_from_image(image_b64: str, media_type: str = "image/png") -> st
         return ""
 
 
-# Global conversation history (keep only last 1 — enough for follow-up context,
-# avoids growing token count that slows each successive question)
+# Global conversation history (keep last 3 pairs — covers multi-turn follow-ups
+# without bloating token count; each Q+A ≈ 60 tokens so 3 pairs ≈ 180 tokens)
 from collections import deque
-HISTORY = deque(maxlen=1)
+HISTORY = deque(maxlen=3)
 
 def get_interview_answer(question: str, resume_text: str = "", job_description: str = "",
                          include_code: bool = False, active_user_context: str = "",
@@ -1299,11 +1308,14 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
 
 _ROLE_CONTEXT = {
     "python": "INTERVIEW ROLE: Python Developer. Use Python for ALL code examples. Focus on Python idioms, Django/FastAPI, async, testing, packaging. IMPORTANT: For the personal experience bullet, reference Python/programming work only. Do NOT mention telecom, SIP, SS7, Diameter, production support, grep, awk, or non-Python tools.",
-    "java": "INTERVIEW ROLE: Java Developer. Use Java for ALL code examples. Focus on Spring Boot, JVM, multithreading, Maven/Gradle, design patterns.",
-    "javascript": "INTERVIEW ROLE: JavaScript/Node.js Developer. Use JavaScript/TypeScript for ALL code examples. Focus on React, Node.js, async/await, REST APIs.",
-    "sql": "INTERVIEW ROLE: Data/SQL Engineer. Always include SQL examples. Focus on query optimization, indexes, joins, window functions, stored procedures.",
-    "saas": "INTERVIEW ROLE: SaaS Product/Backend Engineer. Focus on multi-tenancy, subscriptions, billing, REST APIs, webhooks, scalability, and B2B product concepts.",
-    "system_design": "INTERVIEW ROLE: System Design / Senior Engineer. Focus on scalability, distributed systems, CAP theorem, load balancing, caching, microservices.",
+    "java": "INTERVIEW ROLE: Java Developer. Use Java for ALL code examples. Focus on Spring Boot, JVM, multithreading, Maven/Gradle, design patterns, Hibernate, generics, Collections framework, Stream API, Spring Security.",
+    "javascript": "INTERVIEW ROLE: JavaScript/Node.js Developer. Use JavaScript/TypeScript for ALL code examples. Focus on React, Node.js, async/await, Promises, event loop, closures, REST APIs, Express, TypeScript.",
+    "sql": "INTERVIEW ROLE: Data/SQL Engineer. Always include SQL examples. Focus on query optimization, indexes, joins, window functions, stored procedures, ACID, normalization.",
+    "saas": "INTERVIEW ROLE: SaaS Product/Backend Engineer. Focus on multi-tenancy, subscriptions, billing, REST APIs, webhooks, scalability, OAuth, RBAC, rate limiting, and B2B product concepts.",
+    "system_design": "INTERVIEW ROLE: System Design / Senior Engineer. Focus on scalability, distributed systems, CAP theorem, load balancing, caching, microservices, sharding, consistent hashing, message queues.",
+    "devops": "INTERVIEW ROLE: DevOps/Cloud Engineer. Focus on CI/CD pipelines, Docker, Kubernetes, Terraform, Ansible, monitoring (Prometheus/Grafana), Linux administration, cloud services (AWS/GCP/Azure), shell scripting.",
+    "production_support": "INTERVIEW ROLE: Production Support Engineer. Focus on incident management, root cause analysis, monitoring, log analysis (grep/awk/sed), Linux troubleshooting, SLA/SLO, ticketing systems, on-call processes.",
+    "telecom": "INTERVIEW ROLE: Telecom/IMS Support Engineer. Focus on SIP protocol, SS7, Diameter, IMS architecture, VoIP, Kamailio, Wireshark, call flow analysis, telecom troubleshooting.",
 }
 
 
@@ -1806,11 +1818,33 @@ monitoring, database, networking, coding, algorithms"""
         return None
 
 
-def get_platform_solution(problem_text: str, editor_content: str = "", url: str = "") -> str:
-    """Generate solution for coding platforms (##start mode)."""
-    dlog.log(f"[LLM] Platform solve: {url[:40]}", "DEBUG")
+def _detect_language(editor_content: str, url: str) -> str:
+    """Detect programming language from editor content and URL."""
+    ec = editor_content.strip()
+    if ec:
+        if re.search(r'\bpublic\s+(class|static|void|int|boolean)\b', ec): return "Java"
+        if re.search(r'(#include|vector<|std::|cout|cin|auto\s+\w+\s*=)', ec): return "C++"
+        if re.search(r'\b(const|let|var)\s+\w+|=>\s*\{|function\s+\w+\s*\(', ec): return "JavaScript"
+        if re.search(r'(def |import |from |class \w+:)', ec): return "Python 3"
+    # Fallback: check URL for language clues
+    url_l = url.lower()
+    if 'java' in url_l: return "Java"
+    if 'javascript' in url_l or 'js' in url_l: return "JavaScript"
+    return "Python 3"
 
-    user_content = f"URL: {url}\n\nEDITOR_CONTENT:\n{editor_content}\n\nPROBLEM_TEXT:\n{problem_text}"
+
+def get_platform_solution(problem_text: str, editor_content: str = "", url: str = "") -> str:
+    """Generate solution for coding platforms (##start / Ctrl+Alt+Enter mode)."""
+    lang = _detect_language(editor_content, url)
+    dlog.log(f"[LLM] Platform solve ({lang}): {url[:40]}", "DEBUG")
+    print(f"[CODE] Solving in {lang} | {url[:50]}")
+
+    user_content = (
+        f"LANGUAGE: {lang}\n"
+        f"URL: {url}\n\n"
+        f"EDITOR_CONTENT (use exact function/class name):\n{editor_content}\n\n"
+        f"PROBLEM:\n{problem_text}"
+    )
 
     try:
         api_start = time.time()
@@ -1858,13 +1892,31 @@ def get_platform_solution(problem_text: str, editor_content: str = "", url: str 
 
         lines = answer.split('\n')
         clean_lines = []
+        in_multiline_comment = False
         for line in lines:
             stripped = line.strip()
+            # Strip /* ... */ block comments (Java/JS/C++)
+            if '/*' in stripped:
+                in_multiline_comment = True
+            if in_multiline_comment:
+                if '*/' in stripped:
+                    in_multiline_comment = False
+                continue
+            # Strip full-line comments: # (Python), // (Java/JS/C++)
             if stripped.startswith('#') and not stripped.startswith('#!'):
                 continue
+            if stripped.startswith('//'):
+                continue
+            # Strip inline # comments (Python) — be careful not to strip strings
             if '#' in line and "'" not in line and '"' not in line:
                 line = line.split('#')[0].rstrip()
-            clean_lines.append(line)
+            # Strip inline // comments — be careful not to strip strings
+            if '//' in line and '"' not in line and "'" not in line:
+                line = line.split('//')[0].rstrip()
+            if line.strip():  # skip lines that became empty after stripping
+                clean_lines.append(line)
+            elif clean_lines:  # preserve blank lines between code blocks
+                clean_lines.append('')
 
         answer = '\n'.join(clean_lines).strip()
         dlog.log(f"[LLM] Platform done: {len(answer)} chars in {(time.time() - api_start)*1000:.0f}ms", "DEBUG")

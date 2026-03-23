@@ -59,9 +59,9 @@ _dir_ensured = False
 
 # Throttled write state for streaming chunks
 _last_write_time: float = 0.0
-_WRITE_THROTTLE_INTERVAL = 0.10  # Write to disk at most every 100ms during streaming
+_WRITE_THROTTLE_INTERVAL = 0.04  # Write to disk at most every 40ms during streaming
                                   # SSE clients get chunks via event_bus (<1ms) so
-                                  # disk writes only serve monitor/recovery — 100ms is fine
+                                  # disk writes serve reconnect recovery — 40ms gives fresher state
 
 # mtime of current_answer.json after our last write — used to skip the expensive
 # cross-process sync read when we ourselves were the last writer.

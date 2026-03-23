@@ -114,6 +114,76 @@ def load_model(model_size=None):
     return model
 
 
+# Role-specific vocabulary additions (prepended to TECH_PROMPT based on INTERVIEW_ROLE)
+_ROLE_VOCAB = {
+    "python": (
+        "Python, Django, FastAPI, DRF, Celery, asyncio, GIL, decorator, generator, "
+        "comprehension, dataclass, Pydantic, pytest, SQLAlchemy, Redis, Postgres, "
+        "shallow copy, deep copy, context manager, *args, **kwargs, f-string, "
+        "ORM, QuerySet, migration, serializer, ViewSet, JWT, REST API, "
+    ),
+    "java": (
+        "Java, Spring Boot, Maven, Gradle, JVM, JDK, JRE, Hibernate, "
+        "interface, abstract class, generics, lambda, stream API, "
+        "multithreading, synchronized, volatile, ExecutorService, "
+        "microservices, REST, JSON, Kafka, Spring Security, "
+    ),
+    "javascript": (
+        "JavaScript, TypeScript, Node.js, React, Next.js, Express, "
+        "async await, Promise, closure, prototype, event loop, "
+        "useState, useEffect, props, component, REST API, GraphQL, "
+        "npm, yarn, webpack, Babel, ESLint, Jest, "
+    ),
+    "sql": (
+        "SQL, PostgreSQL, MySQL, index, query optimization, JOIN, "
+        "GROUP BY, HAVING, window function, CTE, stored procedure, "
+        "transaction, ACID, normalization, denormalization, foreign key, "
+        "SELECT, INSERT, UPDATE, DELETE, EXPLAIN, query plan, "
+    ),
+    "saas": (
+        "SaaS, multi-tenancy, subscription, billing, Stripe, webhook, "
+        "REST API, rate limiting, authentication, OAuth, RBAC, "
+        "scalability, microservices, CQRS, event-driven, "
+    ),
+    "devops": (
+        "Docker, Kubernetes, Helm, Terraform, Ansible, Jenkins, GitLab CI, GitHub Actions, "
+        "CI/CD, pipeline, Prometheus, Grafana, ELK stack, Nginx, HAProxy, "
+        "AWS, GCP, Azure, EC2, S3, Lambda, VPC, IAM, CloudFormation, "
+        "Linux, systemd, cron, bash, shell script, monitoring, alerting, "
+    ),
+    "system_design": (
+        "load balancer, CDN, cache, Redis, Kafka, message queue, "
+        "microservices, API gateway, sharding, replication, consistent hashing, "
+        "CAP theorem, eventual consistency, distributed system, rate limiting, "
+        "horizontal scaling, vertical scaling, database index, partitioning, "
+    ),
+    "production_support": (
+        "incident, SLA, SLO, RCA, root cause, monitoring, alert, PagerDuty, "
+        "log analysis, grep, awk, sed, tail, journalctl, systemctl, "
+        "Linux, cron, disk space, CPU, memory, process, port, firewall, "
+        "ticketing, JIRA, ServiceNow, runbook, escalation, on-call, "
+    ),
+    "telecom": (
+        "SIP, SIP protocol, SS7, Diameter, IMS, VoIP, RTP, SRTP, "
+        "Kamailio, OpenSIPS, Wireshark, tshark, call flow, INVITE, REGISTER, "
+        "HSS, PCRF, PGW, SGW, MME, eNodeB, 4G LTE, 5G, EPC, "
+        "MSISDN, IMSI, IMEI, CDR, billing, trunk, codec, SDP, "
+    ),
+}
+
+def get_active_tech_prompt() -> str:
+    """Return TECH_PROMPT prefixed with role-specific vocab for the current INTERVIEW_ROLE."""
+    try:
+        import config as _c
+        role = getattr(_c, 'INTERVIEW_ROLE', 'general') or 'general'
+        role_vocab = _ROLE_VOCAB.get(role, '')
+        if role_vocab:
+            return role_vocab + TECH_PROMPT
+    except Exception:
+        pass
+    return TECH_PROMPT
+
+
 # Technical vocabulary for Whisper initial_prompt (helps bias toward correct spellings)
 TECH_PROMPT = (
     # ── Python core ─────────────────────────────────────────────────────────
@@ -444,6 +514,10 @@ _RAW_CORRECTIONS = {
     "deep coffee": "deep copy",
     "deep coffey": "deep copy",
     "shallow coffee": "shallow copy",
+    "solve copy": "shallow copy",
+    "soul copy": "shallow copy",
+    "show copy": "shallow copy",
+    "shadow copy": "shallow copy",
     # Garbage collector
     "garbage collector": "garbage collector",
     "garbase collector": "garbage collector",
@@ -983,7 +1057,7 @@ def _transcribe_local(audio_array: np.ndarray, model_override: str = None):
             # Wider padding ensures slow word starts are not clipped
             speech_pad_ms=250,
         ),
-        initial_prompt=TECH_PROMPT,
+        initial_prompt=get_active_tech_prompt(),
         language="en",
         condition_on_previous_text=False,
         repetition_penalty=1.3,
@@ -1089,7 +1163,7 @@ def _transcribe_sarvam(audio_array: np.ndarray):
                 "with_timestamps": "false",
                 "with_disfluencies": "false",
             },
-            timeout=6,
+            timeout=4,
         )
         response.raise_for_status()
         result = response.json()

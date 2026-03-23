@@ -48,10 +48,8 @@ cp .env.example .env
 ./run.sh
 ```
 
-Prompts for access mode:
-- **[1]** Local / LAN only
-- **[2]** Local + ngrok (random URL)
-- **[3]** Local + ngrok (fixed domain)
+Access mode is read from `.env` at startup — no interactive prompt.
+Toggle ngrok on/off via **Settings → Launch Config** (persisted to `.env`).
 
 Or manually:
 
@@ -189,6 +187,8 @@ Questions must be ≥6 words OR end with `?` OR have confidence ≥0.82 to pass.
 
 The validator uses an `_IT_ADJACENT` vocabulary set (400+ terms) covering Python, Java, JavaScript, SQL, Linux, DevOps, Kubernetes, Telecom (SIP/IMS/SS7), AutoSys, Django, production support, and HR/behavioral keywords. Any question containing at least one IT-adjacent term passes; all others are rejected as non-IT noise.
 
+Plural forms are handled correctly: "microservices", "services", "architectures", "communicate", "frameworks", "components" all pass without needing exact singular match.
+
 ---
 
 ## Interview Roles
@@ -308,6 +308,21 @@ Access at `http://localhost:8000/react/`.
 | `/voice` | Voice test interface |
 | `/api-dashboard` | API key status |
 | `/admin-docs` | Full project reference |
+
+---
+
+## User Switching & Intro Isolation
+
+Switch between candidate profiles instantly from the terminal bar USER dropdown or via API.
+
+```bash
+POST /api/launch_config  {"user_id_override": "4"}
+```
+
+- **Intro isolation**: "Tell me about yourself" always returns the **current** user's intro — never a cached previous user's intro
+- On switch: intro LRU entries auto-evicted, session dedup bypassed for intro questions
+- Intro is never stored in answer cache — always freshly generated from active profile
+- LLM context (skills, experience, role) updates instantly on switch
 
 ---
 
@@ -639,35 +654,46 @@ Chips in the ask bar update automatically when you switch role in the terminal b
 | `java` | interface, abstract class, generics, streams, spring boot, thread |
 | `saas` | multi-tenancy, rate limiting, jwt, webhook, idempotency, soft delete |
 
-### Keyboard shortcuts (focus mode)
+### Keyboard shortcuts
 
 | Key | Action |
 |---|---|
 | `F` | Toggle focus mode |
 | `Esc` | Exit focus mode |
-| `/` | Jump to ask input |
+| `/` | Jump to ask input (focus mode) |
 | `Tab` | Accept ghost text suggestion |
 | `Enter` | Submit ask |
-| `Ctrl+1/2/3` | Silently copy code block #1/#2/#3 to clipboard |
+| `Ctrl+Alt+1` – `Ctrl+Alt+9` | Silently fetch + auto-type code #1–9 into active coding editor |
+| `Ctrl+Alt+Enter` | Invisible solve: capture problem → generate → auto-type |
 
 ---
 
-## Code Tokens #N (Programiz Integration)
+## Code Tokens #N — Stealth Coding Mode
 
-Every code block generated in the answer feed gets a `#N` badge (invisible by default, appears on hover).
+Every code block gets an invisible `#N` index used for silent auto-typing into any coding editor.
+**Zero visible notifications to the interviewer at any point.**
 
-### How to use in Programiz
+### Triggers
 
-1. Open [programiz.com/python-programming/online-compiler](https://programiz.com/python-programming/online-compiler)
-2. In the code editor, type: `#1`
-3. Press **Enter**
-4. The Chrome extension **auto-deletes** `#1` and types the code — no visible trace for the interviewer
+| Trigger | Action |
+|---|---|
+| Type `#N` + Enter in editor | Ghost trigger: deletes text, silently auto-types code #N |
+| `Ctrl+Alt+N` (1–9) | Silent fetch + type code N without touching editor |
+| `Ctrl+Alt+Enter` | Invisible: capture problem from page → generate solution → auto-type |
+
+### Features
+
+- Supports `#1000+` — any index works for long sessions
+- Language auto-detected from editor boilerplate (Python / Java / JavaScript / C++)
+- **HackerRank**: captures all sections (statement + I/O + constraints + examples)
+- **LeetCode**: captures title + full description
+- **Programiz / CoderPad / Replit**: works via ghost trigger or `Ctrl+Alt+N`
+- All status and errors go to browser console only — nothing visible to interviewer
 
 ### Token assignment
 
-- Each `focusAsk()` call clears the session → `#1` always = latest answer
+- `focusAsk()` clears the session → `#1` always = latest answer
 - Multiple code blocks in one answer → `#1`, `#2`, `#3` in order
-- `Ctrl+1`, `Ctrl+2`, `Ctrl+3` — silent clipboard copy (no toast, badge flashes briefly)
 
 ---
 
@@ -677,8 +703,9 @@ Use your phone to read answers during the interview while your laptop handles th
 
 ### Setup
 
-1. Start server and ngrok: `./run.sh` → choose option `[2]` or `[3]`
-2. On your phone: open `https://<your-ngrok-url>/monitor`
+1. Enable ngrok: Settings → Launch Config → toggle ngrok on (or set `USE_NGROK=true` in `.env`)
+2. Restart server: `./run.sh` — ngrok URL shown in startup output
+3. On your phone: open `https://<your-ngrok-url>/monitor`
 3. That's it — answers stream live, latest on top
 
 ### Mobile features (iPhone-optimized)

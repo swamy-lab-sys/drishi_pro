@@ -362,7 +362,13 @@ def merge_with_context(new_text: str) -> tuple:
         # e.g. "recursion", "using list comprehension"
         # Guard: "difference between Tuple and List?" ends with "?" → standalone
         # Guard: starts with explicit verb (e.g. "Write a code for decorators") → standalone
-        if new_word_count < 7 and not _is_standalone_verb:
+        # Guard: starts with question word ("what is a decorator") → standalone
+        try:
+            from question_validator import QUESTION_STARTERS
+            _is_question_start = any(new_lower.startswith(s.lower()) for s in QUESTION_STARTERS)
+        except Exception:
+            _is_question_start = False
+        if new_word_count < 7 and not _is_standalone_verb and not _is_question_start:
             for kw in METHOD_KEYWORDS:
                 if kw in new_lower and not new_lower.endswith('?'):
                     needs_using = ("using" not in new_lower

@@ -69,6 +69,13 @@ def activate_user_payload(user_id: int) -> tuple[dict, int]:
         return {"error": "User not found"}, 404
     state.set_selected_user(user)
     _persist_active_user(user)
+    # Evict intro questions from answer_cache so the new user's intro is returned
+    try:
+        import answer_cache
+        from user_manager import _INTRO_PATTERNS
+        answer_cache.invalidate_matching(lambda q: any(p.search(q) for p in _INTRO_PATTERNS))
+    except Exception:
+        pass
     # Prime semantic engine topic prediction for the new role
     try:
         import semantic_engine

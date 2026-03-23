@@ -322,7 +322,7 @@ def handle_question(question_text: str) -> bool:
                 _metrics = state.finalize_metrics() or {}
                 _metrics['source'] = 'intro'
                 answer_storage.set_complete_answer(question_text, _intro, _metrics)
-                answer_cache.cache_answer(question_text, _intro)
+                # Don't cache intro in answer_cache — intro changes when user switches
                 dlog.end_request(question_text, len(_intro))
                 return True
             finally:
@@ -402,8 +402,9 @@ def handle_question(question_text: str) -> bool:
             except Exception:
                 pass
         _user_role = (_active_user or {}).get("role", "") if _active_user else ""
+        _role_tag  = getattr(config, "INTERVIEW_ROLE", "") or ""  # e.g. "python", "java", "sql"
         _db_t0 = time.time()
-        db_result = qa_database.find_answer(question_text, want_code=wants_code, user_role=_user_role)
+        db_result = qa_database.find_answer(question_text, want_code=wants_code, user_role=_user_role, role_tag=_role_tag)
         _db_ms = (time.time() - _db_t0) * 1000
         if db_result:
             db_answer, db_score, db_id = db_result
@@ -451,7 +452,7 @@ def handle_question(question_text: str) -> bool:
                         pass
                     _corrected_q = _corrected
                     # Re-check DB with corrected question
-                    _db2 = qa_database.find_answer(_corrected_q, want_code=wants_code, user_role=_user_role)
+                    _db2 = qa_database.find_answer(_corrected_q, want_code=wants_code, user_role=_user_role, role_tag=_role_tag)
                     if _db2:
                         db_answer, db_score, db_id = _db2
                         print(f"[DB] Hit after correction (score={db_score:.2f}, id={db_id})")
@@ -1018,6 +1019,23 @@ def start(boot_start_time: float = None):
         qa_database.find_answer("what is python", want_code=False)
     except Exception:
         pass
+
+    # Pre-warm LLM prompt cache (avoids ~500ms cold-cache penalty on first real question)
+    # Runs in a background thread so it doesn't delay startup.
+    def _prewarm_llm():
+        try:
+            import threading as _th
+            from llm_client import get_streaming_interview_answer
+            from user_manager import build_resume_context_for_llm
+            _ctx = build_resume_context_for_llm()
+            # Consume the generator fully to warm the cache
+            for _ in get_streaming_interview_answer("what is python", active_user_context=_ctx):
+                pass
+            print("  [LLM] Prompt cache warmed")
+        except Exception:
+            pass
+    _th = __import__('threading')
+    _th.Thread(target=_prewarm_llm, daemon=True, name="llm-prewarm").start()
 
     # Update state with active model names (shown in /api/session-info)
     _stt_info = stt.get_model_info()

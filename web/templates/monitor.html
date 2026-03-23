@@ -3,6 +3,7 @@
 {% block page_name %}Monitor{% endblock %}
 
 {% block head_extra %}
+  <script src="/static/js/drishi-stream.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
@@ -354,7 +355,13 @@
 {% endblock %}
 
 {% block content %}
-<div style="display:flex;flex-direction:column;height:calc(100vh - var(--header-h));overflow:hidden;">
+<!-- MIRROR NOTICE — shown only on monitor.html so user knows which page they're on -->
+<div style="background:#1e3a5f;color:#93c5fd;font-size:11px;font-family:monospace;padding:4px 12px;letter-spacing:0.05em;display:flex;align-items:center;gap:8px;">
+  <span style="font-size:14px;">📱</span>
+  <strong>MONITOR VIEW</strong>
+  <span style="opacity:0.7;">— 2nd screen / phone mirror. Use <a href="/" style="color:#60a5fa;">localhost:8000</a> as your main screen.</span>
+</div>
+<div style="display:flex;flex-direction:column;height:calc(100vh - var(--header-h) - 28px);overflow:hidden;">
 
   <!-- ── Terminal state bar ── -->
   <div id="terminal-bar">
@@ -419,7 +426,7 @@
   /* ── State ── */
   let _answers = [];
   let _sessionId = null;
-  let _es = null, _reconnectDelay = 1500, _reconnectTimer = null;
+  let _es = null, _reconnectDelay = 1500, _reconnectTimer = null;  // _es unused with DrishiStream but kept for compat
   let _stateTimer = null, _trTimer = null;
   let _chunkPending = new Set(), _chunkRaf = null;
   let _mode = localStorage.getItem('drishi_mon_mode') || 'bullet';
@@ -460,30 +467,25 @@
     conn.style.color = s.connCls;
   }
 
-  /* ── SSE ── */
+  /* ── SSE via shared DrishiStream (BroadcastChannel leader election) ── */
   function connect() {
-    if (_es) { try { _es.close(); } catch (_) {} }
     setState('connecting');
 
-    _es = new EventSource('/api/stream');
-
-    _es.addEventListener('init', e => {
+    DrishiStream.on('init', rawData => {
       try {
-        const p = JSON.parse(e.data);
+        const p = JSON.parse(rawData);
         const arr = Array.isArray(p) ? p : (p.answers || []);
         if (!Array.isArray(p) && p.session_id) _sessionId = p.session_id;
-        // Reverse so newest is at index 0
         _answers = arr.slice().reverse();
         rebuildFeed();
         setState('listening');
-        _reconnectDelay = 1500;
         updateLatency();
       } catch (_) {}
     });
 
-    _es.addEventListener('answer', e => {
+    DrishiStream.on('answer', rawData => {
       try {
-        const item = JSON.parse(e.data);
+        const item = JSON.parse(rawData);
         upsert(item);
         upsertCardDOM(item);
         setState('ready');
@@ -493,18 +495,18 @@
       } catch (_) {}
     });
 
-    _es.addEventListener('question', e => {
+    DrishiStream.on('question', rawData => {
       try {
-        const item = JSON.parse(e.data);
+        const item = JSON.parse(rawData);
         upsert(item);
         upsertCardDOM(item);
         setState('generating');
       } catch (_) {}
     });
 
-    _es.addEventListener('chunk', e => {
+    DrishiStream.on('chunk', rawData => {
       try {
-        const d = JSON.parse(e.data);
+        const d = JSON.parse(rawData);
         if (!d.question) return;
         const qnorm = d.question.toLowerCase().trim();
         const idx = _answers.findIndex(a => (a.question||'').toLowerCase().trim() === qnorm);
@@ -528,25 +530,18 @@
       } catch (_) {}
     });
 
-    _es.addEventListener('transcribing', e => {
+    DrishiStream.on('transcribing', rawData => {
       try {
-        const d = JSON.parse(e.data);
+        const d = JSON.parse(rawData);
         showTranscribing(d.text || '');
         setState('transcribing');
       } catch (_) {}
     });
 
-    _es.addEventListener('ping', () => {});
+    DrishiStream.on('ping', () => { setState('listening'); });
+    DrishiStream.on('_reconnecting', () => { setState('offline'); });
 
-    _es.onerror = () => {
-      setState('offline');
-      _es.close(); _es = null;
-      clearTimeout(_reconnectTimer);
-      _reconnectTimer = setTimeout(() => {
-        _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000);
-        connect();
-      }, _reconnectDelay);
-    };
+    DrishiStream.start();
   }
 
   /* ── Answer store ── */
@@ -575,13 +570,22 @@
       feed.replaceChild(newEl, existingCard);
       wireButtons(newEl);
     } else {
-      // New card at front — shift all existing indices up by 1
+      // New card at front — preserve scroll position so old answers stay visible
+      const wrap = document.getElementById('feed-wrap');
+      const prevScrollTop = wrap ? wrap.scrollTop : 0;
+      const prevHeight = feed.scrollHeight;
+
       feed.querySelectorAll('.qa-card').forEach(c => {
         c.dataset.qidx = parseInt(c.dataset.qidx, 10) + 1;
       });
       const el = buildCard(item, 0);
       feed.insertBefore(el, feed.firstChild);
       wireButtons(el);
+
+      // Anchor scroll: if user has scrolled down, compensate for the new card height
+      if (wrap && prevScrollTop > 0) {
+        wrap.scrollTop = prevScrollTop + (feed.scrollHeight - prevHeight);
+      }
     }
   }
 

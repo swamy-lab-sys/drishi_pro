@@ -94,7 +94,6 @@
         triggerPollInterval = null;
       }
       goIdle();
-      showPageNotification('⟳ Extension reloaded — please refresh this tab to re-enable #N typing', 'warn', 6000);
     }
     return true;
   }
@@ -105,23 +104,18 @@
     const old = document.getElementById('__iva_notify__');
     if (old) old.remove();
 
-    const colors = {
-      info: { bg: '#1e3a5f', border: '#3b82f6', text: '#93c5fd' },
-      ok: { bg: '#14532d', border: '#22c55e', text: '#86efac' },
-      warn: { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
-      error: { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
-    };
-    const c = colors[type] || colors.info;
-
     const el = document.createElement('div');
     el.id = '__iva_notify__';
+    // Bottom-left, small and subtle — safe during screen-share/interviews
     el.style.cssText = `
-      position: fixed; top: 18px; right: 18px; z-index: 2147483647;
-      background: ${c.bg}; border: 1.5px solid ${c.border}; color: ${c.text};
-      padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      pointer-events: none; transition: opacity 0.3s;
+      position: fixed; bottom: 14px; left: 14px; z-index: 2147483647;
+      background: rgba(30,30,30,0.88); border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.7);
+      padding: 5px 11px; border-radius: 6px; font-size: 11px; font-weight: 500;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+      max-width: 260px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      pointer-events: auto; transition: opacity 0.3s; opacity: 0.85;
+      letter-spacing: 0.01em;
     `;
     el.textContent = msg;
     document.body.appendChild(el);
@@ -131,8 +125,6 @@
       setTimeout(() => el.remove(), 350);
     }, duration);
 
-    // Make it click-away if needed (re-enable pointer-events)
-    el.style.pointerEvents = 'auto';
     el.addEventListener('click', () => {
       clearTimeout(hide);
       el.remove();
@@ -636,19 +628,64 @@
   }
 
   function extractProblemText() {
+    const host = window.location.hostname;
+
+    // HackerRank — combine all sections into one text block
+    if (host.includes('hackerrank.com')) {
+      const hrSections = [
+        '.challenge_problem_statement_body',
+        '.challenge_input_format_body',
+        '.challenge_output_format_body',
+        '.challenge_constraints_body',
+        '.challenge_sample_input_body',
+        '.challenge_sample_output_body',
+        '.challenge_explanation_body',
+      ];
+      const parts = [];
+      const titleEl = document.querySelector('.challenge-page-label-inner, h1[class*="title"]');
+      if (titleEl) parts.push('PROBLEM: ' + titleEl.innerText.trim());
+      for (const sel of hrSections) {
+        const el = document.querySelector(sel);
+        if (el && el.innerText.trim()) {
+          const label = sel.replace('.challenge_', '').replace('_body', '').replace(/_/g, ' ').toUpperCase();
+          parts.push(label + ':\n' + el.innerText.trim());
+        }
+      }
+      if (parts.length > 1) return parts.join('\n\n').slice(0, 12000);
+    }
+
+    // LeetCode — get problem + examples
+    if (host.includes('leetcode.com')) {
+      const lcEl = document.querySelector('[data-track-load="description_content"]')
+                || document.querySelector('.question-content');
+      if (lcEl && lcEl.innerText.length > 100) {
+        const title = document.querySelector('.text-title-large, .question-title, h1');
+        const titleText = title ? 'PROBLEM: ' + title.innerText.trim() + '\n\n' : '';
+        return titleText + filterNoiseFromText(lcEl.innerText.slice(0, 12000));
+      }
+    }
+
     // 1. Try common specific selectors for platforms
     const specificSelectors = [
       // LeetCode
-      '.content__u3I1',
       '[data-track-load="description_content"]',
+      '.content__u3I1',
       '.question-content',
 
-      // HackerRank
+      // HackerRank — grab all sections combined
       '.challenge_problem_statement_body',
       '.challenge_input_format_body',
       '.challenge_constraints_body',
       '.problem-statement-container',
       '.challenge-body-html',
+
+      // Programiz
+      '.problem-description',
+      '[class*="problem-description"]',
+      '.coding-problem',
+      '[class*="coding-problem"]',
+      '.problem-statement',
+      '#problem',
 
       // Codewars
       '#description',
@@ -662,15 +699,12 @@
       '[data-testid="task-description"]',
 
       // CodeSignal
-      '.task-description',
       '.markdown-body',
       '[class*="TaskDescription"]',
       '[class*="task-description"]',
 
       // Generic
       '[class*="question-content"]',
-      '[class*="problem-description"]',
-      '.problem-statement',
       '#problem_statement'
     ];
 
@@ -826,27 +860,15 @@
     return { captured: true, platform, caption: currentCaption };
   }
 
-  // Ctrl+Alt+Q shortcut for force capture
+  // Ctrl+Alt+Q shortcut for force capture — silent, no UI
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'q') {
       e.preventDefault();
       forceCaptureNow().then(result => {
-        if (result.captured) {
-          showToast('Captured! Check dashboard.');
-        } else {
-          showToast('Not on a meeting page');
-        }
+        console.log(LOG, result.captured ? 'Captured' : 'Not on meeting page');
       });
     }
   });
-
-  function showToast(msg) {
-    const toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4f46e5;color:#fff;padding:12px 20px;border-radius:8px;font-family:sans-serif;font-size:14px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
 
   // ═══════════════════════════════════════════════
   // CC CAPTION CAPTURE
@@ -1856,13 +1878,12 @@
 
     // Guard: orphaned extension (reloaded in background)
     if (checkOrphaned()) {
-      showPageNotification('⟳ Extension reloaded — refresh this tab to use #N triggers', 'warn', 5000);
+      console.warn(LOG, 'Extension context invalid');
       return;
     }
 
     setState('TYPING');
     controlState = 'running';
-    showPageNotification(`⏳ Loading code #${index}…`, 'info', 2500);
 
     let data = null;
     try {
@@ -1888,13 +1909,7 @@
     } catch (e) {
       console.error(LOG, `❌ Fetch error: ${e.message}`);
 
-      if (e.message === 'orphaned' || e.message.includes('Extension context')) {
-        showPageNotification('⟳ Extension reloaded — refresh this tab', 'warn', 5000);
-      } else if (e.message.includes('Failed to fetch') || e.message.includes('Network') || e.message.includes('ERR_CONNECTION')) {
-        showPageNotification('🔴 Server offline — start Drishi Enterprise first', 'error', 5000);
-      } else {
-        showPageNotification(`⚠ Could not load #${index}: ${e.message}`, 'warn', 4000);
-      }
+      // All errors: console only — no visible UI during interview
 
       setState('IDLE');
       controlState = 'stopped';
@@ -1906,15 +1921,10 @@
       const reason = data ? data.error : 'No response';
       console.warn(LOG, `❌ Answer #${index} not found: ${reason}`);
 
-      if (reason && reason.toLowerCase().includes('no questions')) {
-        showPageNotification(`📭 No code for #${index} yet — ask a question in Meet Chat first`, 'warn', 5000);
-      } else if (reason && reason.toLowerCase().includes('out of bounds')) {
-        // Parse how many are available
+      // Silent — console only. No popup during interview (interviewer could see it).
+      if (reason && reason.toLowerCase().includes('out of bounds')) {
         const m = reason.match(/\(1-(\d+)\)/);
-        const avail = m ? m[1] : '?';
-        showPageNotification(`📋 Only ${avail} code${avail === '1' ? '' : 's'} available — use #1 to #${avail}`, 'warn', 5000);
-      } else {
-        showPageNotification(`❌ Code #${index} not found: ${reason || 'unknown'}`, 'error', 4000);
+        console.warn(LOG, `#${index} out of bounds. Available: 1-${m ? m[1] : '?'}`);
       }
 
       setState('IDLE');
@@ -1928,7 +1938,7 @@
     // Clear editor explicitly
     await clearEditor();
 
-    showPageNotification(`▶ Typing code #${data.index} — Ctrl+Alt+P to pause`, 'ok', 3000);
+    // Silent start — no popup during screen share
 
     typewriter = new Typewriter(currentWpm);
     let rawCode = data.code || "";
@@ -1947,7 +1957,7 @@
 
     if (completed) {
       console.log(LOG, `✅ SUCCESS: Typed answer #${data.index}`);
-      showPageNotification(`✓ Done typing code #${data.index}`, 'ok', 2000);
+      console.log(LOG, `✅ Done typing #${data.index}`);
     }
     // If not completed (aborted/stopped), goIdle() was already called externally
 
@@ -2232,10 +2242,31 @@
   // Listen for keyboard shortcuts
   // Global keyboard shortcut listener
   document.addEventListener('keydown', async (e) => {
-    // Toggle shortcuts (Ctrl+Alt+A / Ctrl+Alt+S)
+    // Shortcuts — all silent, no visible UI change
     if (e.ctrlKey && e.altKey) {
       try {
-        switch (e.key.toLowerCase()) {
+        const k = e.key.toLowerCase();
+
+        // Ctrl+Alt+1 through Ctrl+Alt+9 — fetch code by index (fully invisible)
+        if (/^[1-9]$/.test(e.key)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = parseInt(e.key, 10);
+          console.log(LOG, `⚡ Ctrl+Alt+${idx}: fetch #${idx}`);
+          if (state === 'IDLE') fetchSolutionByIndex(idx, `#${idx}`);
+          return;
+        }
+
+        // Ctrl+Alt+Enter — invisible solve mode (no text typed in editor)
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log(LOG, '⚡ Ctrl+Alt+Enter: solve mode');
+          if (state === 'IDLE') goSolveMode();
+          return;
+        }
+
+        switch (k) {
           case 'a': // START/RESUME
             e.preventDefault();
             console.log(LOG, '⚡ Ctrl+Alt+A: START/RESUME');
@@ -2258,8 +2289,7 @@
             break;
         }
       } catch (err) {
-        console.error(LOG, 'Shortcut failed (likely refresh needed):', err);
-        // Silently fail - no popup during interview
+        console.error(LOG, 'Shortcut failed:', err);
       }
     }
   });
@@ -2406,45 +2436,18 @@
       console.log(LOG, '🎯 Coding platform detected:', window.location.hostname);
     }
 
+    // Poll only for ##start (solve mode) — #N fetching is now keyboard-shortcut-only
     triggerPollInterval = setInterval(async () => {
-      // 1. Check for context invalidation and STOP if disconnected
       if (checkOrphaned()) return;
-
-      // Respect PAUSE state (Ctrl+Alt+P)
-      if (state === 'PAUSED') {
-        return;
-      }
-
       if (state !== 'IDLE') return;
-
       try {
         const content = await getEditorContent();
         if (!content) return;
-
-        // Check for triggers
-
-        // 1. Priority: ##start (Solve Mode)
         if (content.includes('##start')) {
-          console.log(LOG, "🚀 Trigger '##start' detected!");
-          // Clear it immediately to prevent double triggers
-          // (Actually goSolveMode handles clearing)
+          console.log(LOG, "Trigger '##start' detected via poll");
           goSolveMode();
-          return;
         }
-
-        // 2. Specific Answer Request: #1, #2 (Strict: Must be on its own line)
-        // Matches: "#1", "  #1  ", "#12"
-        // Does NOT match: "Item #1", "Comments #123"
-        const numberMatch = content.match(/(?:^|\n)\s*#(\d+)\s*(?:$|\n)/);
-        if (numberMatch) {
-          const index = parseInt(numberMatch[1], 10);
-          console.log(LOG, `🚀 Trigger '#${index}' detected!`);
-          fetchSolutionByIndex(index, numberMatch[0].trim());
-          return;
-        }
-      } catch (e) {
-        // Ignore errors during polling
-      }
+      } catch (e) { /* ignore */ }
     }, 1000);
   }
 

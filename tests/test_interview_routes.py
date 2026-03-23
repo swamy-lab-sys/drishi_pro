@@ -18,7 +18,7 @@ def client():
 def test_api_ask_uses_db(monkeypatch, client):
     called = {}
 
-    def fake_find(question, want_code=False, user_role=None):
+    def fake_find(question, want_code=False, user_role=None, role_tag=None, **kwargs):
         called["question"] = question
         return ("db-answer", 0.9, 12)
 

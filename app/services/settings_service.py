@@ -70,6 +70,7 @@ def update_launch_config(data: dict) -> dict:
             os.environ["AUDIO_SOURCE"] = val
             _persist_env("AUDIO_SOURCE", val)
             changed["audio_source"] = val
+            print(f"[SETTINGS] Audio source → {val}")
 
     if "use_ngrok" in data:
         val = bool(data["use_ngrok"])
@@ -77,6 +78,7 @@ def update_launch_config(data: dict) -> dict:
         os.environ["USE_NGROK"] = "true" if val else "false"
         _persist_env("USE_NGROK", "true" if val else "false")
         changed["use_ngrok"] = val
+        print(f"[SETTINGS] ngrok → {'enabled' if val else 'disabled'} (takes effect on next restart)")
 
     if "llm_model" in data:
         model_map = {
@@ -96,6 +98,7 @@ def update_launch_config(data: dict) -> dict:
             except Exception:
                 pass
             changed["llm_model"] = val
+            print(f"[SETTINGS] LLM model → {val}")
 
     if "user_id_override" in data:
         val = str(data["user_id_override"]).strip()
@@ -107,10 +110,13 @@ def update_launch_config(data: dict) -> dict:
         if val:
             try:
                 from app.services.user_service import activate_user_payload
-                activate_user_payload(int(val))
+                result, _ = activate_user_payload(int(val))
+                print(f"[SETTINGS] Active user → {result.get('name', val)} (id={val})")
             except Exception:
                 pass
 
+    if changed:
+        print(f"[SETTINGS] Launch config applied: {changed}")
     return {"updated": changed}
 
 
@@ -126,6 +132,7 @@ def update_audio_settings(data: dict) -> dict:
             config.SILENCE_DEFAULT = val
             changed["silence_duration"] = val
             _persist_env("SILENCE_DEFAULT", str(val))
+            print(f"[SETTINGS] Silence duration → {val}s")
 
     if "max_duration" in data:
         val = float(data["max_duration"])
@@ -133,6 +140,7 @@ def update_audio_settings(data: dict) -> dict:
             config.MAX_RECORDING_DURATION = val
             changed["max_duration"] = val
             _persist_env("MAX_RECORDING_DURATION", str(val))
+            print(f"[SETTINGS] Max recording duration → {val}s")
 
     if "stt_backend" in data:
         backend = data["stt_backend"].lower().strip()
@@ -142,6 +150,7 @@ def update_audio_settings(data: dict) -> dict:
             os.environ["STT_BACKEND"] = backend
             changed["stt_backend"] = backend
             _persist_env("STT_BACKEND", backend)
+            print(f"[SETTINGS] STT backend → {backend}")
             # Default Sarvam to en-IN for fastest response (skip auto-detect overhead)
             if backend == "sarvam" and not os.environ.get("SARVAM_LANGUAGE"):
                 config.SARVAM_LANGUAGE = "en-IN"
@@ -176,6 +185,7 @@ def update_audio_settings(data: dict) -> dict:
             except Exception:
                 pass
             changed["stt_model"] = model
+            print(f"[SETTINGS] STT model → {model}")
 
     if "coding_language" in data:
         lang = data["coding_language"].lower().strip()
@@ -185,7 +195,10 @@ def update_audio_settings(data: dict) -> dict:
             os.environ["CODING_LANGUAGE"] = lang
             _persist_env("CODING_LANGUAGE", lang)
             changed["coding_language"] = lang
+            print(f"[SETTINGS] Coding language → {lang}")
 
+    if changed:
+        print(f"[SETTINGS] Applied: {changed}")
     return {"updated": changed}
 
 
@@ -196,6 +209,9 @@ _ROLE_LANG_MAP = {
     "sql": "sql",
     "saas": "python",
     "system_design": "python",
+    "devops": "bash",
+    "production_support": "bash",
+    "telecom": "bash",
     "general": "python",
 }
 
@@ -206,7 +222,8 @@ def get_interview_role_payload() -> dict:
 
 def update_interview_role(role: str) -> dict:
     """Set the interview role — updates coding language default and LLM context."""
-    allowed = {"general", "python", "java", "javascript", "sql", "saas", "system_design"}
+    allowed = {"general", "python", "java", "javascript", "sql", "saas", "system_design",
+               "devops", "production_support", "telecom"}
     role = role.lower().strip()
     if role not in allowed:
         return {"error": f"Unknown role: {role}"}
@@ -218,6 +235,7 @@ def update_interview_role(role: str) -> dict:
     config.CODING_LANGUAGE = lang
     os.environ["CODING_LANGUAGE"] = lang
     _persist_env("CODING_LANGUAGE", lang)
+    print(f"[SETTINGS] Interview role → {role}  |  coding language → {lang}")
     return {"updated": {"interview_role": role, "coding_language": lang}}
 
 

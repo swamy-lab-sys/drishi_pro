@@ -1257,7 +1257,6 @@ def monitor_websocket(ws):
                     print(f"[WS] Protocol Error: {e}")
                 break
             if data is None:
-                print("[WS] Connection closed normally")
                 break
 
             try:
@@ -1273,14 +1272,16 @@ def monitor_websocket(ws):
                     role = 'agent'
                     reg = _monitor_manager.register_agent(ws, session_id)
                     client_id = reg.get('client_id')
-                    print(f"[WS] AGENT_CONNECT: session={session_id}, agent_id={client_id}")
+                    if config.VERBOSE:
+                        print(f"[WS] AGENT_CONNECT: session={session_id}, agent_id={client_id}")
                     ws.send(json.dumps(reg))
                     continue
 
                 if payload_type == 'register':
                     role = payload.get('role', 'viewer')
                     session_id = payload.get('session_id') or payload.get('sessionId') or 'default'
-                    print(f"[WS] REGISTER: role={role}, session={session_id}")
+                    if config.VERBOSE:
+                        print(f"[WS] REGISTER: role={role}, session={session_id}")
                     if role == 'sender':
                         reg = _monitor_manager.register_sender(ws, session_id)
                         # Persist active session so agent_host.py can auto-detect it
@@ -1335,7 +1336,8 @@ def monitor_websocket(ws):
                         ws.send(json.dumps({'type': 'error', 'message': 'Register as viewer first.'}))
                         continue
                     provided_secret = payload.get('secret')
-                    print(f"[WS] CONTROL_REQUEST: session={session_id}, viewer={client_id}, key={provided_secret}")
+                    if config.VERBOSE:
+                        print(f"[WS] CONTROL_REQUEST: session={session_id}, viewer={client_id}, key={provided_secret}")
                     request_control(_monitor_manager, session_id, client_id, payload)
                     continue
 
@@ -1352,7 +1354,8 @@ def monitor_websocket(ws):
                         continue
                     viewer_id_resp = payload.get('viewer_id')
                     approved_resp = bool(payload.get('approved'))
-                    print(f"[WS] CONTROL_RESPONSE: session={session_id}, viewer={viewer_id_resp}, approved={approved_resp}")
+                    if config.VERBOSE:
+                        print(f"[WS] CONTROL_RESPONSE: session={session_id}, viewer={viewer_id_resp}, approved={approved_resp}")
                     respond_control(
                         _monitor_manager, session_id,
                         viewer_id_resp, approved_resp

@@ -6,6 +6,7 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
+import config
 from monitor_manager import MonitorManager
 
 COMMAND_WINDOW_SECONDS = 1.0
@@ -232,9 +233,10 @@ def handle_control_command(manager: MonitorManager, session_id: str,
 
     # Priority 1: Native Agent (System-wide control like VSCode)
     if manager.agent_connected(session_id):
-        print(f"[WS] CONTROL_CMD→agent: session={session_id}, action={action}")
+        if config.VERBOSE and action not in ("mouse_move",):
+            print(f"[WS] CONTROL_CMD→agent: session={session_id}, action={action}")
         manager.send_to_agent(session_id, command_payload)
-    # Priority 2: Browser Extension (Browser-only fallback)
     else:
-        print(f"[WS] CONTROL_CMD→extension: session={session_id}, action={action} (no agent connected)")
+        if config.VERBOSE and action not in ("mouse_move",):
+            print(f"[WS] CONTROL_CMD→extension: session={session_id}, action={action} (no agent connected)")
         manager.send_to_sender(session_id, command_payload)

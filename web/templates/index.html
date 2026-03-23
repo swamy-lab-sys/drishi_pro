@@ -853,6 +853,12 @@
 {% endblock %}
 
 {% block content %}
+<!-- MAIN SCREEN NOTICE — top banner so user always knows which page this is -->
+<div style="background:#14532d;color:#86efac;font-size:11px;font-family:monospace;padding:3px 12px;letter-spacing:0.05em;display:flex;align-items:center;gap:8px;">
+  <span style="font-size:13px;">🖥️</span>
+  <strong>MAIN SCREEN</strong>
+  <span style="opacity:0.7;">— your private view. Phone/2nd screen: <a href="/monitor" target="_blank" style="color:#4ade80;">/monitor</a></span>
+</div>
 <div class="page-content" style="padding: 0;">
 
   <!-- Terminal Selector Bar -->
@@ -888,12 +894,15 @@
 
     <div class="tb-group">
       <span class="tb-label">ROLE</span>
-      <button class="tb-chip active" id="tbr-general" onclick="tbSetRole('general')">gen</button>
-      <button class="tb-chip" id="tbr-python"  onclick="tbSetRole('python')">py</button>
-      <button class="tb-chip" id="tbr-java"    onclick="tbSetRole('java')">java</button>
-      <button class="tb-chip" id="tbr-javascript" onclick="tbSetRole('javascript')">js</button>
-      <button class="tb-chip" id="tbr-sql"     onclick="tbSetRole('sql')">sql</button>
-      <button class="tb-chip" id="tbr-saas"    onclick="tbSetRole('saas')">saas</button>
+      <button class="tb-chip active" id="tbr-general"            onclick="tbSetRole('general')">gen</button>
+      <button class="tb-chip" id="tbr-python"                   onclick="tbSetRole('python')">py</button>
+      <button class="tb-chip" id="tbr-java"                     onclick="tbSetRole('java')">java</button>
+      <button class="tb-chip" id="tbr-javascript"               onclick="tbSetRole('javascript')">js</button>
+      <button class="tb-chip" id="tbr-sql"                      onclick="tbSetRole('sql')">sql</button>
+      <button class="tb-chip" id="tbr-saas"                     onclick="tbSetRole('saas')">saas</button>
+      <button class="tb-chip" id="tbr-devops"                   onclick="tbSetRole('devops')">devops</button>
+      <button class="tb-chip" id="tbr-production_support"       onclick="tbSetRole('production_support')">prod</button>
+      <button class="tb-chip" id="tbr-telecom"                  onclick="tbSetRole('telecom')">telecom</button>
     </div>
 
     <div class="tb-latency" id="tb-latency">avg &nbsp;<span id="tb-lat-val">—</span>ms</div>
@@ -1023,10 +1032,10 @@
         <input type="checkbox" id="db-only-chk"> db only
       </label>
     </span>
-    <span class="kbd-hint">Ctrl+Enter</span>
+    <span class="kbd-hint" title="Ctrl+Enter to ask · Ctrl+Alt+A to send clipboard · Paste anywhere to auto-send">Ctrl+Enter &nbsp;|&nbsp; Ctrl+Alt+A</span>
     <button id="lookup-btn" onclick="openLookup()" title="Search database">Search</button>
     <button id="ask-btn" onclick="askQ()">Ask</button>
-    <button id="capture-btn" onclick="sendCaptureText()" title="Send typed text as if captured by extension" style="display:none">Capture</button>
+    <button id="capture-btn" onclick="sendCaptureText()" title="Send typed text as chat question (or use Ctrl+Alt+A for clipboard)" style="display:none">Capture</button>
   </div>
 </div>
 
@@ -1791,17 +1800,14 @@ function setLiveBadge(state) {
   }
 }
 
-let _sseRetry = 500;
 let _sseConnectedOnce = false;
 
 function startStream() {
-  const es = new EventSource('/api/stream');
   setLiveBadge('reconnect');
 
-  es.addEventListener('init', e => {
+  DrishiStream.on('init', rawData => {
     setLiveBadge('live');
-    _sseRetry = 1000;
-    let payload; try { payload = JSON.parse(e.data); } catch { return; }
+    let payload; try { payload = JSON.parse(rawData); } catch { return; }
     const serverSid = payload && !Array.isArray(payload) ? payload.session_id : null;
     const answers = payload && !Array.isArray(payload) ? (payload.answers || []) : (Array.isArray(payload) ? payload : []);
     const storedSid = sessionStorage.getItem('drishi_sid');
@@ -1816,39 +1822,36 @@ function startStream() {
     }
   });
 
-  es.addEventListener('question', e => {
-    let d; try { d = JSON.parse(e.data); } catch { return; }
+  DrishiStream.on('question', rawData => {
+    let d; try { d = JSON.parse(rawData); } catch { return; }
     if (!d.question) return;
     const key = cardKey(d.question);
     if (!cards.has(key)) makeCard({ question: d.question, answer: '', is_complete: false, _thinking: true });
   });
 
-  es.addEventListener('chunk', e => {
-    let d; try { d = JSON.parse(e.data); } catch { return; }
+  DrishiStream.on('chunk', rawData => {
+    let d; try { d = JSON.parse(rawData); } catch { return; }
     updateChunk(d.q, d.c);
   });
 
-  es.addEventListener('answer', e => {
-    let ans; try { ans = JSON.parse(e.data); } catch { return; }
+  DrishiStream.on('answer', rawData => {
+    let ans; try { ans = JSON.parse(rawData); } catch { return; }
     completeCard(ans);
   });
 
-  es.addEventListener('transcribing', e => {
-    let d; try { d = JSON.parse(e.data); } catch { return; }
+  DrishiStream.on('transcribing', rawData => {
+    let d; try { d = JSON.parse(rawData); } catch { return; }
     const sl = document.getElementById('stt-live');
     const bl = document.getElementById('bar-label');
     if (sl) sl.textContent = d.text ? '🎤 ' + d.text : '';
     if (bl) bl.textContent = d.text ? '🎤 ' + d.text : 'Auto Listening';
   });
 
-  es.addEventListener('ping', () => { setLiveBadge('live'); _sseRetry = 500; });
+  DrishiStream.on('ping', () => { setLiveBadge('live'); });
 
-  es.onerror = () => {
-    setLiveBadge('reconnect');
-    es.close();
-    setTimeout(startStream, _sseRetry);
-    _sseRetry = Math.min(_sseRetry * 2, 8000);
-  };
+  DrishiStream.on('_reconnecting', () => { setLiveBadge('reconnect'); });
+
+  DrishiStream.start();
 }
 
 // ── Ask question ──────────────────────────────────────────────────────────────
@@ -1891,6 +1894,15 @@ document.addEventListener('keydown', e => {
   if (e.key === '/' && document.activeElement.id !== 'ask-input') {
     e.preventDefault();
     document.getElementById('ask-input').focus();
+  }
+  // Ctrl+Alt+A — read clipboard and send as chat question (works from any app window)
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    navigator.clipboard.readText().then(text => {
+      text = (text || '').trim();
+      if (!text) { toast('Clipboard is empty'); return; }
+      sendQuestionViaCc(text, 'paste');
+    }).catch(() => toast('Allow clipboard access in browser to use Ctrl+Alt+A'));
   }
 });
 
@@ -2087,7 +2099,7 @@ function tbSetUser(val) {
   }).catch(() => {});
 }
 
-const _TB_ROLES = ['general','python','java','javascript','sql','saas'];
+const _TB_ROLES = ['general','python','java','javascript','sql','saas','devops','production_support','telecom'];
 function _tbClearRole() { _TB_ROLES.forEach(r => { const el = document.getElementById('tbr-' + r); if (el) el.classList.remove('active'); }); }
 function tbSetRole(role) {
   _tbClearRole();
@@ -2098,7 +2110,7 @@ function tbSetRole(role) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ role })
   }).then(() => {
-    const labels = { general:'General', python:'Python', java:'Java', javascript:'JavaScript', sql:'SQL', saas:'SaaS' };
+    const labels = { general:'General', python:'Python', java:'Java', javascript:'JavaScript', sql:'SQL', saas:'SaaS', devops:'DevOps', production_support:'Prod Support', telecom:'Telecom' };
     showToast('Role → ' + (labels[role] || role));
     updateFocusChips(role);
   }).catch(() => {});
@@ -2106,12 +2118,15 @@ function tbSetRole(role) {
 
 // ── Role-aware focus chips ──────────────────────────────────────────────────
 const _ROLE_CHIPS = {
-  general:    ['decorator','palindrome','fibonacci','generator','singleton','closure'],
-  python:     ['decorator','generator','*args/**kwargs','list comprehension','asyncio','dataclass'],
-  java:       ['interface','abstract class','generics','streams','spring boot','thread'],
-  javascript: ['promise','closure','async/await','prototype','event loop','arrow function'],
-  sql:        ['inner join','group by','index','subquery','window function','explain'],
-  saas:       ['multi-tenancy','rate limiting','jwt','webhook','idempotency','soft delete'],
+  general:            ['decorator','palindrome','fibonacci','generator','singleton','closure'],
+  python:             ['decorator','generator','*args/**kwargs','list comprehension','asyncio','dataclass'],
+  java:               ['interface','abstract class','generics','stream api','spring boot','synchronized'],
+  javascript:         ['promise','closure','async/await','prototype','event loop','arrow function'],
+  sql:                ['inner join','group by','index','subquery','window function','explain'],
+  saas:               ['multi-tenancy','rate limiting','jwt','webhook','oauth','rbac'],
+  devops:             ['docker','kubernetes','ci cd','terraform','ansible','prometheus'],
+  production_support: ['incident management','rca','sla','log analysis','monitoring','on call'],
+  telecom:            ['sip','ss7','diameter','ims','voip','call flow'],
 };
 function updateFocusChips(role) {
   const hints = document.getElementById('focus-ask-hints');
@@ -2251,23 +2266,19 @@ if (joinInput) {
 }
 
 async function shareRemote() {
-  // Get session_id — prefer SSE-provided value in sessionStorage, fall back to API
-  let sid = sessionStorage.getItem('drishi_sid');
-  if (!sid) {
-    try {
-      const info = await fetch('/api/session-info').then(r => r.json());
-      sid = info.session_id;
-      if (sid) sessionStorage.setItem('drishi_sid', sid);
-    } catch (_) {}
-  }
-  if (!sid) { toast('Session not ready yet — try again in a moment'); return; }
-  const url = `${location.origin}/v/${sid}/12`;
+  // Prefer server IP (for LAN access from phone/2nd screen)
+  let monitorUrl = `${location.origin}/monitor`;
   try {
-    await navigator.clipboard.writeText(url);
-    toast('Remote viewer link copied! Share it with your phone or second screen.');
+    const ip = await fetch('/api/ip').then(r => r.json()).then(d => d.ip).catch(() => null);
+    if (ip && ip !== '127.0.0.1') {
+      monitorUrl = `http://${ip}:${location.port || 8000}/monitor`;
+    }
+  } catch (_) {}
+  try {
+    await navigator.clipboard.writeText(monitorUrl);
+    toast('Monitor link copied! Open on your phone or 2nd screen: ' + monitorUrl);
   } catch (_) {
-    // Fallback: open in new tab
-    window.open(url, '_blank');
+    window.open(monitorUrl, '_blank');
   }
 }
 
@@ -2552,24 +2563,48 @@ function toggleAdminMode() {
   toast(isAdmin ? 'Admin mode ON — sharing & capture controls visible' : 'Admin mode OFF');
 }
 
-// ── Extension Capture shortcut ────────────────────────────────────────────────
-// Sends the current ask-input text via the /api/cc_question endpoint
-// (same path used by the Chrome extension), so you can inject text manually
-// without needing the extension popup open.
-async function sendCaptureText() {
-  const inp = document.getElementById('ask-input');
-  const text = (inp.value || '').trim();
-  if (!text) { toast('Type a question first'); return; }
+// ── Chat question via /api/cc_question ────────────────────────────────────────
+// Shared function used by paste-detect, Ctrl+Alt+A shortcut, and Capture button.
+async function sendQuestionViaCc(text, source) {
+  source = source || 'paste';
+  text = (text || '').trim();
+  if (text.length < 4) { toast('Too short to process'); return; }
+  toast('\u23F3 Processing: ' + text.slice(0, 50) + (text.length > 50 ? '\u2026' : ''), 2000);
   try {
     const r = await fetch('/api/cc_question', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ question: text, source })
     });
-    if (r.ok) { inp.value = ''; toast('Captured — processing...'); }
-    else toast('Capture failed');
-  } catch (e) { toast('Capture error'); }
+    const d = await r.json();
+    if (!r.ok) { toast('Error: ' + (d.error || r.status)); return; }
+    if (d.status === 'duplicate')  { toast('Already processing this question'); return; }
+    if (d.status === 'rejected')   { toast('Skipped — ' + (d.reason || 'not a question')); return; }
+    if (d.status === 'already_answered') { toast('Already answered — check above'); return; }
+    toast('\u2713 Captured — answer incoming\u2026', 2500);
+  } catch (e) { toast('Network error — is server running?'); }
 }
+
+// Sends current ask-input text as a captured question (Capture button).
+async function sendCaptureText() {
+  const inp = document.getElementById('ask-input');
+  const text = (inp.value || '').trim();
+  if (!text) { toast('Type a question first'); return; }
+  inp.value = '';
+  await sendQuestionViaCc(text, 'paste');
+}
+
+// ── Global paste → auto-send as chat question ─────────────────────────────────
+// When the user pastes text while NOT focused on an input/textarea,
+// it is automatically sent to /api/cc_question so the answer loads without any button press.
+document.addEventListener('paste', e => {
+  const tgt = e.target;
+  if (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable) return;
+  const text = ((e.clipboardData || window.clipboardData) || {getData: () => ''}).getData('text').trim();
+  if (!text || text.length < 4) return;
+  e.preventDefault();
+  sendQuestionViaCc(text, 'paste');
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
@@ -2590,4 +2625,5 @@ window.addEventListener('load', () => {
   document.getElementById('ask-input').focus();
 });
 </script>
+<script src="/static/js/drishi-stream.js"></script>
 {% endblock %}

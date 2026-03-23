@@ -35,7 +35,7 @@ from typing import Optional, Tuple, List, Dict
 import db_backend as _pgb
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MATCH_THRESHOLD = 0.65
+MATCH_THRESHOLD = 0.60
 _lock = threading.Lock()
 
 # Batch hit-count update queue — avoids spawning a thread per DB hit

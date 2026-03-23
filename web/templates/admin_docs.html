@@ -689,6 +689,7 @@ code {
     <a href="#debrief"><span class="nav-dot"></span>Post-Interview Debrief</a>
 
     <div class="docs-nav-section">Data</div>
+    <a href="#user-switching"><span class="nav-dot"></span>User Switching</a>
     <a href="#qa-manager"><span class="nav-dot"></span>QA Manager</a>
     <a href="#ext-users"><span class="nav-dot"></span>Ext Users</a>
     <a href="#api-ref"><span class="nav-dot"></span>API Reference</a>
@@ -1022,6 +1023,25 @@ code {
             </ul>
           </div>
         </div>
+        <div class="feat-card">
+          <div class="feat-card-header" style="background:linear-gradient(135deg,#111827,#1f2937);">
+            <div class="feat-icon">🥷</div>
+            <div>
+              <h3>Stealth Coding Mode</h3>
+              <div class="feat-tag">Zero Visible Activity</div>
+            </div>
+          </div>
+          <div class="feat-card-body">
+            <p>All coding assistance happens silently in the background. The interviewer sees no popups, toasts, or notifications at any point.</p>
+            <ul class="feat-steps">
+              <li data-n="1">Type <code>#N</code> + Enter → text deleted silently, code typed in</li>
+              <li data-n="2"><kbd>Ctrl+Alt+N</kbd> → silent fetch &amp; type without touching editor</li>
+              <li data-n="3"><kbd>Ctrl+Alt+Enter</kbd> → invisible: capture → solve → type</li>
+              <li data-n="4">All errors and status go to <code>browser console</code> only</li>
+              <li data-n="5">Monitor answers on phone via <code>/monitor</code> over ngrok</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1197,17 +1217,21 @@ code {
           <div class="feat-card-header" style="background:linear-gradient(135deg,#3730a3,#6d28d9);">
             <div class="feat-icon">🔢</div>
             <div>
-              <h3>Code Tokens #N</h3>
-              <div class="feat-tag">Programiz Integration</div>
+              <h3>Code Tokens #N — Stealth Mode</h3>
+              <div class="feat-tag">LeetCode · HackerRank · Programiz</div>
             </div>
           </div>
           <div class="feat-card-body">
-            <p>Every code block gets an invisible <code>#N</code> badge. Hover to see it. Used with Chrome extension for auto-typing.</p>
+            <p>Every code block gets an invisible <code>#N</code> index. Used with Chrome extension for silent auto-typing — <strong>zero visible notifications to interviewer</strong>.</p>
             <ul>
-              <li>Type <code>#1</code> + Enter in Programiz → extension deletes <code>#1</code> and auto-types the code</li>
-              <li><code>Ctrl+1</code> / <code>Ctrl+2</code> / <code>Ctrl+3</code> — silent clipboard copy (no toast)</li>
-              <li><code>#1</code> always = latest answer (session cleared on each Ask)</li>
-              <li>Multiple code blocks in one answer → <code>#1</code>, <code>#2</code>, <code>#3</code></li>
+              <li><strong>Ghost trigger</strong>: type <code>#N</code> + Enter in any coding editor → extension silently deletes text and auto-types the code</li>
+              <li><strong>Ctrl+Alt+1–9</strong> — silent fetch &amp; type code #1–9 (no text in editor, no popups)</li>
+              <li><strong>Ctrl+Alt+Enter</strong> — invisible solve mode: captures problem from page, generates solution, auto-types into editor</li>
+              <li>Supports <code>#1000+</code> — any index works for long sessions</li>
+              <li>Language auto-detected from editor boilerplate (Python / Java / JS / C++)</li>
+              <li>HackerRank: captures all sections (statement + I/O + constraints)</li>
+              <li>LeetCode: captures title + full description</li>
+              <li>All activity console-only — nothing visible to interviewer</li>
             </ul>
           </div>
         </div>
@@ -1218,12 +1242,13 @@ code {
           <tr><th>Keyboard Shortcut</th><th>Action</th></tr>
         </thead>
         <tbody>
-          <tr><td><kbd>F</kbd></td><td>Toggle focus mode</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Toggle focus mode (main dashboard)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>Exit focus mode</td></tr>
           <tr><td><kbd>/</kbd></td><td>Jump to ask input (focus mode only)</td></tr>
           <tr><td><kbd>Tab</kbd></td><td>Accept ghost text autocomplete suggestion</td></tr>
           <tr><td><kbd>Enter</kbd></td><td>Submit ask</td></tr>
-          <tr><td><kbd>Ctrl+1</kbd> / <kbd>Ctrl+2</kbd> / <kbd>Ctrl+3</kbd></td><td>Silent copy code block #1/#2/#3 to clipboard</td></tr>
+          <tr><td><kbd>Ctrl+Alt+1</kbd> – <kbd>Ctrl+Alt+9</kbd></td><td>Silently fetch &amp; type code #1–9 into active coding editor</td></tr>
+          <tr><td><kbd>Ctrl+Alt+Enter</kbd></td><td>Invisible solve mode: capture problem → generate → auto-type (no UI changes)</td></tr>
         </tbody>
       </table>
     </section>
@@ -1287,8 +1312,9 @@ code {
         <h2>Question Classifier</h2>
       </div>
       <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;">
-        File: <code>question_validator.py</code> — 100% accuracy on 57/57 test cases. Uses compiled regex + vocabulary sets, zero ML inference.
+        File: <code>question_validator.py</code> — Uses compiled regex + vocabulary sets, zero ML inference.
         Rejects non-IT noise (chemistry, food, politics), garbled STT output, and filler speech before it reaches the LLM.
+        Plural forms (microservices, services, architectures, communicate) are handled correctly.
       </p>
       <div class="card-grid cols-3" style="margin-bottom:16px;">
         <div class="info-card green-accent">
@@ -1299,6 +1325,7 @@ code {
             <li>Telecom: SIP, IMS, SS7, Diameter, VoLTE</li>
             <li>AutoSys, production support, ITSM</li>
             <li>HR/behavioral: "tell me about yourself"</li>
+            <li>Plurals: "microservices", "services", "architectures"</li>
           </ul>
         </div>
         <div class="info-card blue-accent">
@@ -1309,6 +1336,7 @@ code {
             <li>Covers: Python keywords, Bash, Linux, K8s</li>
             <li>SQL, Django, Flask, Java, JS, telecom, HR</li>
             <li>DevOps, SRE, AutoSys, ITSM vocabulary</li>
+            <li>Plurals: services, containers, frameworks, etc.</li>
           </ul>
         </div>
         <div class="info-card red-accent" style="border-color:rgba(239,68,68,0.4);">
@@ -1546,6 +1574,49 @@ code {
       <div class="info-card blue-accent">
         <h4>Click "🤖 AI Analysis" to get personalised feedback</h4>
         <p>Sends the question list to Claude for strength/weakness analysis, topic coverage report, and specific improvement recommendations.</p>
+      </div>
+    </section>
+
+    <!-- ── USER SWITCHING ── -->
+    <div class="section-divider" id="user-switching"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-indigo">👤</div>
+        <h2>Multi-User &amp; Intro Isolation</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Switch between candidate profiles instantly from the terminal bar USER dropdown or via
+        <code>POST /api/launch_config {"user_id_override": "N"}</code>.
+        Each user has their own introduction, resume context, and Q&amp;A personalisation.
+      </p>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>How to Switch Users</h4>
+          <ul>
+            <li>Terminal bar → USER dropdown → select name</li>
+            <li>Or <code>/users</code> → Activate button</li>
+            <li>Active user shown in terminal bar instantly</li>
+            <li>All new answers use the new user's context</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>Intro Isolation</h4>
+          <ul>
+            <li>"Tell me about yourself" always returns <em>current</em> user's intro</li>
+            <li>Intro is never cached in LRU — always fresh</li>
+            <li>On user switch: intro LRU entries evicted automatically</li>
+            <li>Session dedup check skipped for intro questions</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Resume-Aware Context</h4>
+          <ul>
+            <li>Each user has skills, experience, role, company fields</li>
+            <li>LLM system prompt injected with active user's profile</li>
+            <li>Switching users updates LLM context immediately</li>
+            <li>Manage profiles at <code>/users</code></li>
+          </ul>
+        </div>
       </div>
     </section>
 

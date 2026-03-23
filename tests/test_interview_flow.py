@@ -112,9 +112,11 @@ def test_stream_response_yields_init(monkeypatch, tmp_path):
 
     response = interview_service.stream_response()
     stream_iter = iter(response.response)
-    first_event = next(stream_iter)
-    assert "event: init" in first_event
-    data_line = [line for line in first_event.splitlines() if line.startswith("data:")][0]
+    # First chunk is the SSE retry directive, second is the init event
+    first_chunk = next(stream_iter)
+    init_event = first_chunk if "event: init" in first_chunk else next(stream_iter)
+    assert "event: init" in init_event
+    data_line = [line for line in init_event.splitlines() if line.startswith("data:")][0]
     payload = json.loads(data_line.split("data: ", 1)[1])
     assert payload["session_id"] == "sid"
     assert payload["answers"][0]["question"] == "lambda"

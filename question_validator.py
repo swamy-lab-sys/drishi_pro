@@ -1263,7 +1263,7 @@ YOUTUBE_PATTERNS = [
     r"(miss|sir|anna|bro|brother|ma'?am)[.!,]?\s*$",  # ends with just a name/title
     r"^(hello|hi|hey)[.,]?\s*(miss|sir|anna|bro|ma'?am)",
     r"i('ll| will) (speak|talk|chat) with (you|her|him|them)",
-    r"(please |kindly )?(hold on|wait|one moment|just a moment|just a second|one second|bear with)",
+    r"(please |kindly )?(hold on|\bwait\b|one moment|just a moment|just a second|one second|bear with)",
     # TV / screen-sharing noise from translated side conversations
     r"^(did you |do you |can you )?(see|show|watch|put).{0,20}(on the |to the |in the )?(tv|screen|monitor|display)",
     r"^do you have (a |the )?tv\b",
@@ -1403,11 +1403,23 @@ TECH_TERMS = {
     "autoscaling", "auto scaling", "deep copy", "shallow copy",
     "multithreading", "multiprocessing", "lambda function", "context manager",
     "metaclass", "metaclasses",
-    "exception", "error", "try", "except", "loop", "recursion",
-    "lambda", "closure", "scope", "variable", "module", "package",
+    "exception", "error", "try", "except", "loop", "recursion", "memoization",
+    "lambda", "closure", "scope", "variable", "module", "package", "hashing",
+    "mvc", "mvt", "mvvm", "dry", "solid", "srp", "kiss", "yagni", "orm",
+    "cdn", "kamailio", "opensips", "wireshark", "sip", "voip", "ims", "rtp",
+    "normalization", "denormalization", "sharding", "replication", "idempotency",
+    "rate limiting", "rate limit", "consistent hashing", "message queue",
+    "api gateway", "circuit breaker", "service mesh", "event sourcing",
+    "inner join", "outer join", "window function", "stored procedure",
+    "spring boot", "jvm", "generics", "hashmap", "arraylist",
+    "hashmap", "arraylist", "generics", "synchronized", "executorservice",
+    "usestate", "useeffect", "usememo", "usecallback", "webpack", "typescript",
+    "prometheus", "grafana", "terraform", "ansible", "helm", "kubectl",
+    "elasticsearch", "kibana", "logstash", "prometheus", "grafana",
+    "transaction", "subquery", "normalization", "denormalization",
     "import", "virtual", "environment", "pip", "pytest", "unittest",
     "serializer", "middleware", "authentication", "authorization",
-    "cache", "redis", "celery", "microservice", "monolith",
+    "cache", "redis", "celery", "microservice", "microservices", "monolith",
     "deployment", "container", "pod", "helm", "terraform",
     "branch", "merge", "commit", "pull request", "cicd",
     "agile", "scrum", "sprint", "devops", "cloud",
@@ -1982,6 +1994,14 @@ _IT_ADJACENT = frozenset({
     # Telecom
     'call', 'signaling', 'registration', 'session', 'flow', 'trace',
     'fault', 'alarm', 'monitoring', 'kpi', 'metrics',
+    # Common plurals/variants not in TECH_TERMS_SINGLE (exact match fails for plurals)
+    'services', 'microservices', 'containers', 'databases', 'instances',
+    'architecture', 'architectures', 'communicate', 'communication', 'communications',
+    'components', 'endpoints', 'requests', 'responses', 'events',
+    'patterns', 'principles', 'approaches', 'strategies', 'mechanisms',
+    'frameworks', 'libraries', 'dependencies', 'modules', 'classes',
+    'objects', 'functions', 'methods', 'variables', 'parameters',
+    'algorithms', 'structures', 'concepts', 'features', 'techniques',
 })
 
 

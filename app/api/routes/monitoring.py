@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, send_from_directory
+from flask import Blueprint, jsonify, redirect, send_from_directory
 
 monitoring_bp = Blueprint("monitoring", __name__)
 
@@ -26,10 +26,8 @@ def monitor_viewer(filename: str = "index.html"):
 @monitoring_bp.route("/v/<session_id>")
 @monitoring_bp.route("/v/<session_id>/<key>")
 def viewer_shortlink(session_id: str, key: str = ""):
-    """Short URL for the monitor viewer — /v/<session_id>[/<key>]."""
-    if not MONITOR_VIEWER_DIR.exists():
-        return "Monitor viewer not installed", 404
-    return send_from_directory(MONITOR_VIEWER_DIR, "index.html")
+    """Short URL — redirects to the live monitor page."""
+    return redirect("/monitor")
 
 
 @monitoring_bp.route("/api/session/predictions")
