@@ -12,6 +12,7 @@ from app.services.interview_service import (
     stream_response,
 )
 
+
 interview_bp = Blueprint("interview", __name__)
 
 
@@ -42,8 +43,7 @@ def interview_tips():
       - round: override current round (optional)
     """
     role = request.args.get("role", "").strip()
-    round_name = request.args.get("round", "").strip()
-    return jsonify(get_interview_tips_payload(role=role, round_name=round_name))
+    return jsonify(get_interview_tips_payload(role=role))
 
 
 @interview_bp.route("/api/prep_questions")

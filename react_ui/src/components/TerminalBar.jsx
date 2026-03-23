@@ -29,12 +29,15 @@ const STT_OPTS = [
 
 // ── ROLE options ──────────────────────────────────────────────────────────────
 const ROLE_OPTS = [
-  { label: 'gen',  role: 'general' },
-  { label: 'py',   role: 'python' },
-  { label: 'java', role: 'java' },
-  { label: 'js',   role: 'javascript' },
-  { label: 'sql',  role: 'sql' },
-  { label: 'saas', role: 'saas' },
+  { label: 'gen',    role: 'general' },
+  { label: 'py',     role: 'python' },
+  { label: 'java',   role: 'java' },
+  { label: 'js',     role: 'javascript' },
+  { label: 'sql',    role: 'sql' },
+  { label: 'saas',   role: 'saas' },
+  { label: 'devops', role: 'devops' },
+  { label: 'prod',   role: 'production_support' },
+  { label: 'telecom',role: 'telecom' },
 ]
 
 // ── ChipGroup ─────────────────────────────────────────────────────────────────

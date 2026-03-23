@@ -248,22 +248,6 @@ def update_interview_role(role: str) -> dict:
     return {"updated": {"interview_role": role, "coding_language": lang}}
 
 
-def get_interview_round_payload() -> dict:
-    return {"round": config.INTERVIEW_ROUND}
-
-
-def update_interview_round(round_name: str) -> dict:
-    """Set interview round — adjusts LLM token budget, temperature, answer style."""
-    allowed = {"tech", "hr", "design", "code"}
-    round_name = round_name.lower().strip()
-    if round_name not in allowed:
-        return {"error": f"Unknown round: {round_name}. Allowed: {sorted(allowed)}"}
-    config.INTERVIEW_ROUND = round_name
-    os.environ["INTERVIEW_ROUND"] = round_name
-    _persist_env("INTERVIEW_ROUND", round_name)
-    print(f"[SETTINGS] Interview round → {round_name}")
-    return {"updated": {"interview_round": round_name}}
-
 
 def save_job_description_payload(data: dict) -> tuple[dict, int]:
     if not data or "text" not in data:

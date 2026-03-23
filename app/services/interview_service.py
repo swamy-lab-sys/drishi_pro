@@ -606,40 +606,14 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
 
 # ── Interview Tips ──────────────────────────────────────────────────────────────
 
-_TIPS_BY_ROUND = {
-    "hr": [
-        "Use STAR format — Situation, Task, Action, Result — for every behavioral question.",
-        "Quantify your impact: 'reduced latency by 40%' beats 'improved performance'.",
-        "Research the company's tech stack and recent engineering blog posts.",
-        "Prepare 2–3 stories that show ownership, conflict resolution, and growth mindset.",
-        "Know your notice period, expected CTC, and location preference in advance.",
-        "End every STAR story with what YOU specifically did, not 'we'.",
-    ],
-    "tech": [
-        "Think out loud — interviewers value your reasoning, not just the answer.",
-        "State the time/space complexity of every algorithm you mention.",
-        "Cover edge cases first: empty input, single element, max value.",
-        "Use concrete examples from your resume — 'I used this in my last role to...'",
-        "If you don't know something, say what you DO know and how you'd find out.",
-        "DB answers arrive in <30ms — listen for the question keyword and relax.",
-    ],
-    "design": [
-        "Always clarify requirements and scale: 1K users vs 10M changes everything.",
-        "Structure: Requirements → High-level design → Deep dive → Trade-offs.",
-        "Pick one component to go deep on — distributed cache, message queue, etc.",
-        "State your assumptions explicitly before designing.",
-        "Mention consistency vs availability trade-off (CAP theorem) where relevant.",
-        "Draw the data flow: client → API gateway → service → DB → cache.",
-    ],
-    "code": [
-        "Talk through your approach before writing any code.",
-        "Start with brute force, then optimize — show you know both.",
-        "Verify with the given examples before submitting.",
-        "Handle edge cases: null input, empty arrays, integer overflow.",
-        "Use meaningful variable names — treat it like production code.",
-        "If stuck, reduce the problem: solve for N=1, then generalize.",
-    ],
-}
+_GENERAL_TIPS = [
+    "Think out loud — interviewers value your reasoning, not just the answer.",
+    "Use concrete examples from your resume — 'I used this in my last role to...'",
+    "Cover edge cases first: empty input, single element, max value.",
+    "If you don't know something, say what you DO know and how you'd find out.",
+    "DB answers arrive in <30ms — listen for the question keyword and relax.",
+    "Quantify your impact: 'reduced latency by 40%' beats 'improved performance'.",
+]
 
 _TIPS_BY_ROLE = {
     "python": [
@@ -681,22 +655,18 @@ _TIPS_BY_ROLE = {
 }
 
 
-def get_interview_tips_payload(role: str = "", round_name: str = "") -> dict:
-    """Return contextual interview tips for the current role and round."""
+def get_interview_tips_payload(role: str = "") -> dict:
+    """Return contextual interview tips for the current role."""
     import config as _cfg
 
     _role = (role or getattr(_cfg, "INTERVIEW_ROLE", "general") or "general").lower()
-    _round = (round_name or getattr(_cfg, "INTERVIEW_ROUND", "tech") or "tech").lower()
-
-    round_tips = _TIPS_BY_ROUND.get(_round, _TIPS_BY_ROUND["tech"])
     role_tips = _TIPS_BY_ROLE.get(_role, [])
+    tips = _GENERAL_TIPS + role_tips
 
     return {
         "role": _role,
-        "round": _round,
-        "round_tips": round_tips,
-        "role_tips": role_tips,
-        "total": len(round_tips) + len(role_tips),
+        "tips": tips,
+        "total": len(tips),
     }
 
 

@@ -58,7 +58,7 @@ class RuntimeConfig:
     interview_debug: bool
     verbose: bool
     enable_monitoring: bool
-    interview_round: str
+
     elevenlabs_api_key: str
     elevenlabs_voice_id: str
     elevenlabs_enabled: bool
@@ -85,7 +85,7 @@ def load_runtime_config() -> RuntimeConfig:
         interview_debug=_get_bool("INTERVIEW_DEBUG", False),
         verbose=_get_bool("VERBOSE", False),
         enable_monitoring=_get_bool("ENABLE_MONITORING", True),
-        interview_round=os.environ.get("INTERVIEW_ROUND", "tech"),
+
         elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", ""),
         elevenlabs_voice_id=os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM"),
         elevenlabs_enabled=_get_bool("ELEVENLABS_ENABLED", False),

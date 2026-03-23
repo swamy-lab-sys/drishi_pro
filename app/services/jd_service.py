@@ -173,13 +173,6 @@ def configure_from_jd(jd_text: str) -> dict[str, Any]:
     except Exception as exc:
         print(f"[JD] apply role failed: {exc}")
 
-    # Apply round hint
-    try:
-        from app.services.settings_service import update_interview_round
-        update_interview_round(analysis["round_hint"])
-        applied["interview_round"] = analysis["round_hint"]
-    except Exception as exc:
-        print(f"[JD] apply round failed: {exc}")
 
     # Kick off Q&A seeding in background
     t = threading.Thread(

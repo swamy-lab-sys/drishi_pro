@@ -80,33 +80,8 @@ def _is_explain_question(question: str) -> bool:
     q = question.lower().strip()
     return any(q.startswith(p) for p in _EXPLAIN_PREFIXES)
 
-# Interview round parameters — override token budget and temperature
-_ROUND_PARAMS = {
-    "hr":     {"max_tokens": 80,  "temperature": 0.30,
-               "style": "Answer conversationally in first person. No bullet points. Use STAR method for behavioral questions. Keep under 80 words."},
-    "tech":   {"max_tokens": None, "temperature": None, "style": None},  # default logic
-    "design": {"max_tokens": 500, "temperature": 0.20,
-               "style": "Structure your answer: 1) Architecture overview, 2) Key design decision with trade-off, 3) Scalability approach. Each point up to 40 words."},
-    "code":   {"max_tokens": 700, "temperature": 0.15, "style": None},   # uses coding prompt
-}
-
-
-def _get_round_params() -> dict:
-    """Return current round parameters from config."""
-    try:
-        import config as _cfg
-        return _ROUND_PARAMS.get(getattr(_cfg, 'INTERVIEW_ROUND', 'tech'), _ROUND_PARAMS['tech'])
-    except Exception:
-        return _ROUND_PARAMS['tech']
-
-
 def _get_interview_token_budget(active_user_context: str = "", question: str = "") -> int:
-    """Return the right token budget for interview answers based on round and question type."""
-    # Round override takes priority
-    rp = _get_round_params()
-    if rp.get("max_tokens") is not None:
-        return rp["max_tokens"]
-
+    """Return the right token budget for interview answers based on question type."""
     if not question:
         return MAX_TOKENS_INTERVIEW
 
@@ -726,11 +701,6 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
     except Exception:
         pass
 
-    # Inject interview round style hint (HR/TECH/DESIGN/CODE)
-    _rp = _get_round_params()
-    if _rp.get("style"):
-        system_prompt += f"\n\nANSWER STYLE: {_rp['style']}"
-
     if active_user_context:
         # Rich context from user_manager (role + style hint + resume summary + JD + exp filter)
         system_prompt += f"\n\n{active_user_context}"
@@ -768,8 +738,7 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
     system_block = [{"type": "text", "text": system_prompt,
                      "cache_control": {"type": "ephemeral"}}]
 
-    _stream_rp = _get_round_params()
-    _stream_temp = _stream_rp.get("temperature") or TEMP_INTERVIEW
+    _stream_temp = TEMP_INTERVIEW
 
     full_answer = "-"
     try:

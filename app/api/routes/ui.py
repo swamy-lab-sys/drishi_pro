@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from flask import Blueprint, render_template, send_from_directory
+from flask import Blueprint, redirect, render_template, send_from_directory
 
 ui_bp = Blueprint("ui", __name__)
 
@@ -20,8 +20,8 @@ def _react_index():
 
 @ui_bp.route("/")
 def index():
-    """Serve main page."""
-    return render_template("index.html")
+    """Redirect root to React SPA."""
+    return redirect("/react/")
 
 
 @ui_bp.route("/users")
@@ -142,6 +142,34 @@ def react_ext_users():
     """React Ext Users page (SPA)."""
     if not _REACT_BUILD.exists():
         return "React build not found. Run: cd react_ui && npm run build", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/profiles")
+def react_profiles():
+    if not _REACT_BUILD.exists():
+        return "React build not found.", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/questions")
+def react_questions():
+    if not _REACT_BUILD.exists():
+        return "React build not found.", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/lookup")
+def react_lookup():
+    if not _REACT_BUILD.exists():
+        return "React build not found.", 404
+    return _react_index()
+
+
+@ui_bp.route("/react/api-keys")
+def react_api_keys():
+    if not _REACT_BUILD.exists():
+        return "React build not found.", 404
     return _react_index()
 
 
