@@ -236,25 +236,39 @@ rm -f ~/.drishi/current_answer.json ~/.drishi/history.json 2>/dev/null || true
 echo -e "  ${G}✓${D} Fresh session ready"
 
 # ═══════════════════════════════════════════════════════════════════
-#  STEP 10 — ngrok (only if needed)
+#  STEP 10 — Tunnel (Cloudflare preferred, ngrok fallback)
 # ═══════════════════════════════════════════════════════════════════
 NGROK_URL=""
 NGROK_PID=""
 
 if [ "$USE_NGROK" = "true" ]; then
-    if ! command -v ngrok &>/dev/null; then
+    # ── Try Cloudflare Tunnel first (free, no auth, stable, no 1-tunnel limit)
+    if command -v cloudflared &>/dev/null; then
         echo ""
-        echo -e "${Y}  ngrok not found — install it for global access:${D}"
-        echo "  1. https://ngrok.com/download  (free account)"
-        echo "  2. ngrok config add-authtoken YOUR_TOKEN"
-        echo "  3. Re-run this script"
+        echo -e "  Starting Cloudflare tunnel..."
+        pkill -x cloudflared 2>/dev/null || true; sleep 0.3
+        rm -f /tmp/cloudflared.log
+        cloudflared tunnel --url "http://localhost:$WEB_PORT" \
+            --logfile /tmp/cloudflared.log 2>&1 &
+        NGROK_PID=$!
+        # Wait up to 16s for trycloudflare.com URL
+        for _i in 1 2 3 4 5 6 7 8; do
+            sleep 2
+            NGROK_URL=$(grep -oE 'https://[a-z0-9\-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || echo "")
+            [ -n "$NGROK_URL" ] && break
+        done
+        if [ -n "$NGROK_URL" ]; then
+            echo -e "  ${G}✓${D} Cloudflare tunnel active"
+        else
+            echo -e "  ${Y}⚠${D} Cloudflare URL unavailable — trying ngrok..."
+            pkill -x cloudflared 2>/dev/null || true
+            NGROK_URL=""
+        fi
+
+    # ── Fall back to ngrok if cloudflared not installed
+    elif command -v ngrok &>/dev/null; then
         echo ""
-        echo -e "  ${Y}Continuing without ngrok (LAN access only)...${D}"
-        USE_NGROK=false
-    else
-        echo ""
-        echo -e "  Starting ngrok tunnel..."
-        # Kill any stale ngrok process (free tier: only 1 tunnel allowed)
+        echo -e "  Starting ngrok tunnel (tip: install cloudflared for better tunnels)..."
         pkill -x ngrok 2>/dev/null || true; sleep 0.5
         if [ -n "$NGROK_DOMAIN" ]; then
             ngrok http --url="$NGROK_DOMAIN" --request-header-add "ngrok-skip-browser-warning: true" "$WEB_PORT" --log=stdout > /tmp/ngrok.log 2>&1 &
@@ -262,12 +276,10 @@ if [ "$USE_NGROK" = "true" ]; then
             ngrok http --request-header-add "ngrok-skip-browser-warning: true" "$WEB_PORT" --log=stdout > /tmp/ngrok.log 2>&1 &
         fi
         NGROK_PID=$!
-
-        # Wait for URL (up to 10s) — use Python urllib (avoids libssl crash from curl)
         for _i in 1 2 3 4 5; do
             sleep 2
             NGROK_URL=$(python3 -c "
-import urllib.request, json, sys
+import urllib.request, json
 try:
     with urllib.request.urlopen('http://localhost:4040/api/tunnels', timeout=3) as r:
         d = json.load(r)
@@ -277,12 +289,18 @@ except: print('')
 " 2>/dev/null || echo "")
             [ -n "$NGROK_URL" ] && break
         done
-
         if [ -n "$NGROK_URL" ]; then
             echo -e "  ${G}✓${D} ngrok tunnel active"
         else
             echo -e "  ${Y}⚠${D} ngrok URL unavailable — using LAN only"
         fi
+
+    else
+        echo ""
+        echo -e "${Y}  No tunnel tool found. Install one for global access:${D}"
+        echo "  • Cloudflare (recommended, free): https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+        echo "  • ngrok (free tier): https://ngrok.com/download"
+        USE_NGROK=false
     fi
 fi
 

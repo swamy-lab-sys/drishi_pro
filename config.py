@@ -155,6 +155,16 @@ USER_ID_OVERRIDE = os.environ.get("USER_ID_OVERRIDE", "")
 # Interview role — sets coding language default and adds role context to LLM prompt
 # Options: general, python, java, javascript, sql, saas, system_design
 INTERVIEW_ROLE = os.environ.get("INTERVIEW_ROLE", "general")
+# Interview round — controls LLM token budget, temperature, and answer style
+# Options: tech (default), hr, design, code
+INTERVIEW_ROUND = os.environ.get("INTERVIEW_ROUND", "tech")
+# ElevenLabs TTS earpiece mode
+ELEVENLABS_ENABLED = os.environ.get("ELEVENLABS_ENABLED", "false").lower() in ("1", "true", "yes")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+# Redis + Celery (async LLM tasks)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CELERY_ENABLED = os.environ.get("CELERY_ENABLED", "false").lower() in ("1", "true", "yes")
 
 
 def runtime_profile() -> dict:

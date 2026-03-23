@@ -905,6 +905,15 @@
       <button class="tb-chip" id="tbr-telecom"                  onclick="tbSetRole('telecom')">telecom</button>
     </div>
 
+    <div class="tb-sep">|</div>
+    <div class="tb-group">
+      <span class="tb-label">ROUND</span>
+      <button class="tb-chip" id="tbrnd-hr"     onclick="tbSetRound('hr')">HR</button>
+      <button class="tb-chip active" id="tbrnd-tech"   onclick="tbSetRound('tech')">TECH</button>
+      <button class="tb-chip" id="tbrnd-design" onclick="tbSetRound('design')">DESIGN</button>
+      <button class="tb-chip" id="tbrnd-code"   onclick="tbSetRound('code')">CODE</button>
+    </div>
+
     <div class="tb-latency" id="tb-latency">avg &nbsp;<span id="tb-lat-val">—</span>ms</div>
   </div>
 
@@ -2116,6 +2125,26 @@ function tbSetRole(role) {
   }).catch(() => {});
 }
 
+function _tbClearRound() {
+  ['hr','tech','design','code'].forEach(r => {
+    const c = document.getElementById('tbrnd-' + r);
+    if (c) c.classList.remove('active');
+  });
+}
+function tbSetRound(round) {
+  _tbClearRound();
+  const chip = document.getElementById('tbrnd-' + round);
+  if (chip) chip.classList.add('active');
+  fetch('/api/interview_round', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ round })
+  }).then(() => {
+    const labels = { hr:'HR', tech:'Tech', design:'Design', code:'Code' };
+    showToast('Round → ' + (labels[round] || round));
+  }).catch(() => {});
+}
+
 // ── Role-aware focus chips ──────────────────────────────────────────────────
 const _ROLE_CHIPS = {
   general:            ['decorator','palindrome','fibonacci','generator','singleton','closure'],
@@ -2163,6 +2192,15 @@ async function _tbInit() {
     const roleChip = document.getElementById('tbr-' + currentRole);
     if (roleChip) roleChip.classList.add('active');
     updateFocusChips(currentRole);
+  } catch {}
+
+  // Load current round chip
+  try {
+    const rnd = await fetch('/api/interview_round').then(r => r.json());
+    const currentRound = rnd.round || 'tech';
+    _tbClearRound();
+    const rndChip = document.getElementById('tbrnd-' + currentRound);
+    if (rndChip) rndChip.classList.add('active');
   } catch {}
 
   // Load users into select

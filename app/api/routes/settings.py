@@ -10,12 +10,14 @@ import config
 from app.services.settings_service import (
     get_audio_settings_payload,
     get_interview_role_payload,
+    get_interview_round_payload,
     get_job_description_payload,
     get_launch_config_payload,
     get_server_ip_payload,
     save_job_description_payload,
     update_audio_settings,
     update_interview_role,
+    update_interview_round,
     update_launch_config,
 )
 
@@ -153,6 +155,23 @@ def set_interview_role():
     data = request.get_json() or {}
     role = data.get("role", "").strip()
     result = update_interview_role(role)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@settings_bp.route("/api/interview_round", methods=["GET"])
+def get_interview_round():
+    """Return the current interview round (tech, hr, design, code)."""
+    return jsonify(get_interview_round_payload())
+
+
+@settings_bp.route("/api/interview_round", methods=["POST"])
+def set_interview_round():
+    """Set the interview round — changes LLM token budget, temperature, answer style."""
+    data = request.get_json() or {}
+    round_name = data.get("round", "").strip()
+    result = update_interview_round(round_name)
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result)
