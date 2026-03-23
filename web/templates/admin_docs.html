@@ -1893,6 +1893,16 @@ code {
             <td>Analyze JD text → apply role/round settings → seed ~20 Q&amp;A pairs in background. Body: <code>{"text":"..."}</code></td>
           </tr>
           <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/interview_tips</code></td>
+            <td>Live interview tips for the current role + round. Params: <code>role</code>, <code>round</code> (both optional — fall back to active session values). Returns 10 actionable tips.</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/prep_questions</code></td>
+            <td>Top N likely questions for the current role from the DB, sorted by hit count (most-asked first). Params: <code>role</code>, <code>tag</code>, <code>limit</code> (default 20, max 50). Great for pre-interview practice.</td>
+          </tr>
+          <tr>
             <td><span class="method-badge get">WS</span></td>
             <td><code>/ws/tts</code></td>
             <td>ElevenLabs TTS WebSocket. Send <code>{"text":"..."}</code> → receive binary MP3 chunks → <code>{"event":"done"}</code></td>

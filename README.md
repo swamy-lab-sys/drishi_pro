@@ -463,7 +463,7 @@ Drishi/
 │
 ├── app/
 │   ├── api/routes/          ← Flask blueprint handlers
-│   │   ├── interview.py     ← POST /api/ask, GET /api/stream
+│   │   ├── interview.py     ← POST /api/ask, GET /api/stream, /api/interview_tips, /api/prep_questions
 │   │   ├── settings.py      ← audio_settings, launch_config, interview_role, interview_round, jd_configure
 │   │   ├── users.py         ← CRUD /api/users
 │   │   ├── knowledge.py     ← CRUD /api/qa, /api/save_to_db
@@ -521,6 +521,15 @@ POST /api/ask              {"question":"...", "db_only":false}
 
 GET  /api/stream           SSE — events: question_started, chunk, answer, error
 POST /api/cc_question      {"text":"..."} — Chrome extension text injection
+
+GET  /api/interview_tips   ?role=python&round=tech
+                           → {role, round, tips: [...10 live interview tips]}
+                           Roles: general|python|java|javascript|sql|saas|devops|production_support|telecom
+                           Rounds: tech|hr|design|code
+
+GET  /api/prep_questions   ?role=python&tag=django&limit=20
+                           → {role, tag_filter, count, questions: [{id, question, tags, has_code, hit_count}]}
+                           Sorted by hit_count (most-asked first). Default limit=20, max=50.
 
 GET  /api/get_answer_by_index?index=N   → code block #N (flat index across all answers)
                                            {"found":true, "index":1, "total":2, "question":"...", "code":"..."}
