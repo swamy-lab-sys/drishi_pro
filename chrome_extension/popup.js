@@ -344,7 +344,7 @@ function setOnline(online) {
   serverOnline = online;
   const dot = document.getElementById('dot');
   const txt = document.getElementById('statusTxt');
-  dot.classList.toggle('offline', !online);
+  dot.classList.toggle('off', !online);
   txt.textContent = online ? 'Server Online' : 'Server Offline';
 }
 
@@ -465,19 +465,19 @@ async function fetchLatestAnswer() {
   } catch (_) { }
   btn.textContent = '↻ Refresh slots';
   document.getElementById('apContent').innerHTML =
-    '<div class="ap-empty">🔴 Server offline</div>';
+    '<span class="slot-empty">🔴 Server offline</span>';
 }
 
 function showLatestAnswer(answers) {
   const el = document.getElementById('apContent');
   if (!answers || answers.length === 0) {
-    el.innerHTML = '<div class="ap-empty">No questions yet — waiting for interview</div>';
+    el.innerHTML = '<span class="slot-empty">No questions yet — waiting for interview</span>';
     return;
   }
 
   const completed = [...answers].reverse().filter(a => a.is_complete && a.answer);
   if (completed.length === 0) {
-    el.innerHTML = '<div class="ap-empty">No completed answers yet</div>';
+    el.innerHTML = '<span class="slot-empty">No completed answers yet</span>';
     return;
   }
 
@@ -486,14 +486,14 @@ function showLatestAnswer(answers) {
     const q = (a.question || '').slice(0, 46) + (a.question && a.question.length > 46 ? '…' : '');
     const hasCode = a.answer.includes('def ') || a.answer.includes('```');
     const icon = hasCode ? '⌨' : '💬';
-    return `<div class="slot-row" title="${escHtml(a.question || '')}">
+    return `<div class="slot-row" title="${esc(a.question || '')}">
       <span class="slot-num">#${slotNum}</span>
       <span class="slot-icon">${icon}</span>
-      <span class="slot-q">${escHtml(q)}</span>
+      <span class="slot-q">${esc(q)}</span>
     </div>`;
   }).join('');
 
-  el.innerHTML = `<div class="slots-hint">Type <kbd>#1</kbd>…<kbd>#${completed.length}</kbd> in Programiz to auto-type:</div>${items}`;
+  el.innerHTML = `<div class="slot-hint">Type <kbd>#1</kbd>…<kbd>#${completed.length}</kbd> in Programiz to auto-type:</div>${items}`;
 }
 
 function initWpmSlider() {
@@ -584,9 +584,6 @@ function showToast(msg, type = '') {
   setTimeout(() => { t.className = 'toast'; }, 2000);
 }
 
-function escHtml(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AUDIO STREAM TAB CONTROLS

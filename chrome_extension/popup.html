@@ -1,1115 +1,416 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
-  <title>Drishi Enterprise</title>
+  <title>Drishi</title>
   <style>
-    *,
-    *::before,
-    *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      width: 420px;
+      width: 380px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0d1117;
-      color: #e2e8f0;
+      background: #f8fafc;
+      color: #1e293b;
       font-size: 13px;
     }
 
     /* ── Header ── */
     .header {
-      background: linear-gradient(135deg, #1a1d2e 0%, #141827 100%);
-      padding: 11px 14px;
-      border-bottom: 1px solid #252840;
+      background: #fff;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
       display: flex;
       align-items: center;
       gap: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
     }
+    .logo { font-size: 18px; }
+    .title { font-size: 14px; font-weight: 700; color: #6366f1; flex: 1; letter-spacing: -.2px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 5px #22c55e; flex-shrink: 0; }
+    .dot.off { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
+    .status-txt { font-size: 10px; font-weight: 600; color: #94a3b8; white-space: nowrap; }
 
-    .logo {
-      font-size: 18px;
+    #headerUser { display: none; align-items: center; gap: 4px; }
+    #headerUser.visible { display: flex !important; }
+    .user-chip {
+      display: flex; align-items: center; gap: 4px;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      border-radius: 20px; padding: 2px 8px;
     }
-
-    .title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #818cf8;
-      flex: 1;
-      letter-spacing: -0.2px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #4ade80;
-      box-shadow: 0 0 6px #4ade80;
-      flex-shrink: 0;
-    }
-
-    .status-dot.offline {
-      background: #f87171;
-      box-shadow: 0 0 6px #f87171;
-    }
-
-    .status-txt {
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      white-space: nowrap;
-    }
+    #headerUserName { font-size: 10px; font-weight: 700; color: #6366f1; max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #btnLogout { background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; }
+    #btnLogout:hover { color: #ef4444; }
 
     /* ── Tabs ── */
-    .tabs {
-      display: flex;
-      border-bottom: 1px solid #252840;
-    }
-
+    .tabs { display: flex; background: #fff; border-bottom: 2px solid #f1f5f9; }
     .tab-btn {
-      flex: 1;
-      padding: 9px 0;
-      font-size: 12px;
-      font-weight: 700;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #475569;
-      border-bottom: 2px solid transparent;
-      transition: all 0.15s;
+      flex: 1; padding: 9px 0; font-size: 12px; font-weight: 600;
+      background: none; border: none; cursor: pointer;
+      color: #94a3b8; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: all .15s;
     }
+    .tab-btn:hover { color: #475569; }
+    .tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
 
-    .tab-btn:hover {
-      color: #94a3b8;
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Sections ── */
+    .section {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      background: #fff;
     }
+    .section:last-child { border-bottom: none; }
+    .sec-label { font-size: 10px; font-weight: 700; color: #94a3b8; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 7px; }
 
-    .tab-btn.active {
-      color: #818cf8;
-      border-bottom-color: #818cf8;
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 8px 12px; border-radius: 7px; font-size: 12px; font-weight: 600;
+      cursor: pointer; border: 1px solid transparent; transition: all .15s; text-align: center;
     }
+    .btn-primary { background: #6366f1; color: white; border-color: #6366f1; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-primary:disabled { background: #c7d2fe; border-color: #c7d2fe; cursor: default; }
+    .btn-green { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+    .btn-green:hover { background: #15803d; color: white; border-color: #15803d; }
+    .btn-green.streaming { background: #15803d; color: white; border-color: #15803d; }
+    .btn-red { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+    .btn-red:hover { background: #dc2626; color: white; border-color: #dc2626; }
+    .btn-outline { background: white; border: 1px solid #e2e8f0; color: #475569; }
+    .btn-outline:hover { border-color: #6366f1; color: #6366f1; }
+    .btn-outline.copied { border-color: #22c55e; color: #15803d; }
+    .btn-sm { padding: 5px 10px; font-size: 11px; }
+    .btn-full { width: 100%; }
+    .btn-row { display: flex; gap: 6px; }
 
-    /* ── Tab panels ── */
-    .tab-panel {
-      display: none;
+    /* ── Inputs ── */
+    .input {
+      width: 100%; background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 7px; padding: 8px 10px; color: #1e293b; font-size: 12px;
+      outline: none; box-sizing: border-box; transition: border-color .15s;
     }
+    .input:focus { border-color: #6366f1; background: #fff; }
+    .input-sm { padding: 6px 9px; font-size: 11px; }
+    .input-label { font-size: 11px; font-weight: 600; color: #64748b; display: block; margin-bottom: 4px; }
+    .field { margin-bottom: 10px; }
+    .status-line { font-size: 11px; font-weight: 600; min-height: 16px; }
 
-    .tab-panel.active {
-      display: block;
-    }
+    /* ── QR cards ── */
+    .qr-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .qr-card { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 6px; }
+    .qr-lbl { font-size: 9px; font-weight: 700; color: #64748b; letter-spacing: .4px; }
+    .qr-img { width: 96px; height: 96px; border-radius: 5px; border: 1px solid #e2e8f0; background: white; }
+    .url-strip { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 10px; color: #6366f1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* ── Footer ── */
-    .footer {
-      padding: 9px 12px;
-      display: flex;
-      gap: 6px;
-    }
+    /* ── User portal card ── */
+    .portal-card { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border: 1px solid #c4b5fd; border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; }
+    .portal-card-name { font-size: 13px; font-weight: 700; color: #4f46e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .portal-card-role { font-size: 10px; color: #7c3aed; margin-top: 1px; }
+    .portal-token-chip { font-size: 9px; font-weight: 700; color: #6366f1; background: white; border: 1px solid #c4b5fd; border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
 
-    .fb {
-      flex: 1;
-      padding: 8px 6px;
-      border: 1px solid #252840;
-      border-radius: 7px;
-      background: #141827;
-      color: #94a3b8;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-
-    .fb:hover {
-      border-color: #818cf8;
-      color: #c7d2fe;
-      background: #1a1d2e;
-    }
-
-    .fb.primary {
-      background: #818cf8;
-      border-color: #818cf8;
-      color: white;
-      font-weight: 700;
-    }
-
-    .fb.primary:hover {
-      background: #6366f1;
-    }
-
-    .fb.green {
-      background: #065f4644;
-      border-color: #065f46;
-      color: #4ade80;
-    }
-
-    .fb.green:hover {
-      background: #065f46;
-      color: white;
-    }
-
-    /* ── Shortcuts ── */
-    .shortcuts {
-      padding: 7px 12px 10px;
-      border-top: 1px solid #252840;
-    }
-
-    .sc-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 11px;
-      color: #475569;
-      padding: 2px 0;
-    }
-
-    kbd {
-      background: #1a1d2e;
-      border: 1px solid #252840;
-      border-radius: 3px;
-      padding: 1px 6px;
-      font-family: monospace;
-      font-size: 10px;
-      color: #818cf8;
-    }
-
-    /* ── Code Typer tab ── */
-    .answer-preview {
-      background: #141827;
-      border-bottom: 1px solid #252840;
-      padding: 8px 12px;
-      min-height: 50px;
-      max-height: 160px;
-      overflow-y: auto;
-    }
-
-    .answer-preview::-webkit-scrollbar {
-      width: 3px;
-    }
-
-    .answer-preview::-webkit-scrollbar-thumb {
-      background: #252840;
-      border-radius: 2px;
-    }
-
-    .ap-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: #475569;
-      letter-spacing: 0.5px;
+    /* ── Capture button ── */
+    .capture-btn {
+      width: 100%; padding: 10px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white; font-size: 12px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      box-shadow: 0 2px 8px rgba(109,40,217,.2); transition: opacity .15s;
       margin-bottom: 5px;
     }
-
-    .ap-text {
-      font-size: 11px;
-      color: #94a3b8;
-      line-height: 1.5;
-      font-family: 'JetBrains Mono', monospace;
-      max-height: 60px;
-      overflow: hidden;
-    }
-
-    .ap-empty {
-      font-size: 11px;
-      color: #334155;
-      font-style: italic;
-    }
-
-    .ap-fetch {
-      margin-top: 6px;
-      font-size: 10px;
-      font-weight: 600;
-      color: #818cf8;
-      cursor: pointer;
-      background: none;
-      border: none;
-      padding: 0;
-      text-align: left;
-    }
-
-    .ap-fetch:hover {
-      text-decoration: underline;
-    }
-
-    .slots-hint {
-      font-size: 10px;
-      color: #475569;
-      margin-bottom: 5px;
-    }
-
-    .slots-hint kbd {
-      background: #1a1d2e;
-      border: 1px solid #252840;
-      border-radius: 3px;
-      padding: 0 4px;
-      font-size: 9px;
-      color: #818cf8;
-    }
-
-    .slot-row {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 4px 6px;
-      border-radius: 5px;
-      margin-bottom: 2px;
-      background: #0d1117;
-      border: 1px solid #252840;
-      cursor: default;
-    }
-
-    .slot-row:hover {
-      border-color: #818cf844;
-    }
-
-    .slot-num {
-      font-size: 10px;
-      font-weight: 800;
-      color: #818cf8;
-      min-width: 22px;
-    }
-
-    .slot-icon {
-      font-size: 11px;
-    }
-
-    .slot-q {
-      font-size: 10px;
-      color: #94a3b8;
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .state-bar {
-      padding: 7px 12px;
-      background: #0d1117;
-      border-bottom: 1px solid #252840;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-    }
-
-    .state-icon {
-      font-size: 14px;
-    }
-
-    .state-txt {
-      font-size: 12px;
-      font-weight: 600;
-      color: #64748b;
-      flex: 1;
-    }
-
-    .state-txt.active {
-      color: #4ade80;
-    }
-
-    .state-txt.paused {
-      color: #f59e0b;
-    }
-
-    .wpm-row {
-      padding: 10px 12px;
-      border-bottom: 1px solid #252840;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .wpm-lbl {
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      white-space: nowrap;
-    }
-
-    input[type="range"] {
-      flex: 1;
-      accent-color: #818cf8;
-      cursor: pointer;
-      height: 4px;
-    }
-
-    .wpm-val {
-      font-size: 12px;
-      font-weight: 700;
-      color: #818cf8;
-      min-width: 55px;
-      text-align: right;
-    }
-
-    .actions {
-      padding: 10px 12px;
-      display: flex;
-      gap: 6px;
-    }
-
-    .ab {
-      flex: 1;
-      padding: 9px 6px;
-      border: 1px solid transparent;
-      border-radius: 7px;
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s;
-    }
-
-    .ab-start {
-      background: #065f46;
-      border-color: #065f46;
-      color: #4ade80;
-    }
-
-    .ab-start:hover {
-      background: #047857;
-    }
-
-    .ab-start:disabled {
-      background: #1a2e26;
-      color: #334155;
-      cursor: default;
-    }
-
-    .ab-pause {
-      background: #78350f44;
-      border-color: #78350f;
-      color: #f59e0b;
-    }
-
-    .ab-pause:hover {
-      background: #78350f;
-    }
-
-    .ab-stop {
-      background: #7f1d1d44;
-      border-color: #7f1d1d;
-      color: #f87171;
-    }
-
-    .ab-stop:hover {
-      background: #7f1d1d;
-    }
-
-    .coder-shortcuts {
-      padding: 8px 12px 11px;
-      border-top: 1px solid #252840;
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1a1d2e;
-      border: 1px solid #252840;
-      border-radius: 6px;
-      padding: 6px 14px;
-      font-size: 11px;
-      font-weight: 600;
-      color: #e2e8f0;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.2s;
-      white-space: nowrap;
-    }
-
-    .toast.show {
-      opacity: 1;
-    }
-
-    .toast.ok {
-      border-color: #065f46;
-      color: #4ade80;
-    }
-
-    .toast.err {
-      border-color: #7f1d1d;
-      color: #f87171;
-    }
-
-    /* ── Monitor Tab ── */
-    .qr-grid {
-      display: flex;
-      gap: 8px;
-      padding: 10px 12px 6px;
-    }
-
-    .qr-card {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-      background: #141827;
-      border: 1px solid #252840;
-      border-radius: 8px;
-      padding: 8px 6px;
-    }
-
-    .qr-card-label {
-      font-size: 9px;
-      font-weight: 800;
-      letter-spacing: 0.4px;
-      color: #64748b;
-      text-align: center;
-    }
-
-    .qr-card-label.accent {
-      color: #818cf8;
-    }
-
-    .qr-card-label.green {
-      color: #4ade80;
-    }
-
-    .qr-card-img {
-      width: 108px;
-      height: 108px;
-      border-radius: 6px;
-      border: 2px solid #252840;
-      background: white;
-      display: block;
-    }
-
-    .qr-card-hint {
-      font-size: 9px;
-      color: #334155;
-      text-align: center;
-      line-height: 1.4;
-    }
-
-    .qr-card-copy {
-      font-size: 9px;
-      font-weight: 700;
-      color: #475569;
-      cursor: pointer;
-      background: none;
-      border: 1px solid #252840;
-      border-radius: 4px;
-      padding: 2px 8px;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-
-    .qr-card-copy:hover {
-      border-color: #818cf8;
-      color: #818cf8;
-    }
-
-    .qr-card-copy.copied {
-      border-color: #4ade80;
-      color: #4ade80;
-    }
-
-    .qr-url-strip {
-      margin: 0 12px 8px;
-      padding: 5px 9px;
-      background: #0d1117;
-      border: 1px solid #252840;
-      border-radius: 6px;
-      font-size: 10px;
-      color: #818cf8;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .monitor-header {
-      padding: 7px 12px 4px;
-      border-top: 1px solid #252840;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .monitor-live-badge {
-      font-size: 9px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: #14532d44;
-      color: #4ade80;
-      border: 1px solid #14532d;
-      animation: pulse-green 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse-green {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: 0.55;
-      }
-    }
-
-    .monitor-title {
-      font-size: 11px;
-      font-weight: 700;
-      color: #64748b;
-      flex: 1;
-    }
-
-    .monitor-count {
-      font-size: 10px;
-      color: #475569;
-    }
-
-    .monitor-feed {
-      max-height: 180px;
-      overflow-y: auto;
-      padding: 6px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .monitor-feed::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    .monitor-feed::-webkit-scrollbar-thumb {
-      background: #252840;
-      border-radius: 2px;
-    }
-
-    /* Q&A card in feed */
-    .qa-card {
-      background: #141827;
-      border: 1px solid #252840;
-      border-radius: 8px;
-      padding: 9px 11px;
-      position: relative;
-    }
-
-    .card-top {
-      display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-
-    .src-badge {
-      font-size: 9px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-
-    .src-badge.db {
-      background: #14532d44;
-      color: #4ade80;
-      border: 1px solid #14532d;
-    }
-
-    .src-badge.api {
-      background: #1e3a5f44;
-      color: #60a5fa;
-      border: 1px solid #1e3a5f;
-    }
-
-    .src-badge.gen {
-      background: #78350f44;
-      color: #f59e0b;
-      border: 1px solid #78350f;
-    }
-
-    .q-text {
-      font-size: 11px;
-      color: #94a3b8;
-      font-weight: 600;
-      flex: 1;
-      line-height: 1.45;
-    }
-
-    .copy-btn {
-      flex-shrink: 0;
-      background: none;
-      border: 1px solid #252840;
-      color: #475569;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 10px;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .copy-btn:hover {
-      border-color: #818cf8;
-      color: #818cf8;
-    }
-
-    .copy-btn.copied {
-      border-color: #4ade80;
-      color: #4ade80;
-    }
-
-    .ans-text {
-      font-size: 12px;
-      color: #cbd5e1;
-      line-height: 1.6;
-    }
-
-    .ans-bullets {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .ans-bullets li {
-      display: flex;
-      gap: 7px;
-      align-items: flex-start;
-      padding: 5px 8px;
-      border-radius: 5px;
-      background: #1a1d2e;
-      border: 1px solid #252840;
-    }
-
-    .ans-bullets li::before {
-      content: '';
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: #818cf8;
-      flex-shrink: 0;
-      margin-top: 5px;
-    }
-
-    .ans-code {
-      background: #0a0e1a;
-      border: 1px solid #252840;
-      border-radius: 5px;
-      padding: 8px 10px;
-      font-size: 11px;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      color: #a5f3fc;
-      line-height: 1.5;
-      overflow-x: auto;
-      white-space: pre;
-      max-height: 120px;
-      overflow-y: auto;
-    }
-
-    .thinking {
-      color: #f59e0b;
-      font-size: 11px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .thinking::after {
-      content: '';
-      width: 14px;
-      height: 14px;
-      border: 2px solid #f59e0b33;
-      border-top-color: #f59e0b;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      display: inline-block;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .how-steps {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-
-    .how-step {
-      display: flex;
-      gap: 9px;
-      align-items: flex-start;
-      background: #141827;
-      border: 1px solid #252840;
-      border-radius: 7px;
-      padding: 8px 10px;
-    }
-
-    .how-num {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: #818cf8;
-      color: white;
-      font-size: 10px;
-      font-weight: 800;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .how-body {
-      flex: 1;
-    }
-
-    .how-title {
-      font-size: 11px;
-      font-weight: 700;
-      color: #e2e8f0;
-      margin-bottom: 2px;
-    }
-
-    .how-desc {
-      font-size: 10px;
-      color: #64748b;
-      line-height: 1.5;
-    }
-
-    /* ── Login screen ── */
-    #loginScreen input:focus {
-      border-color: #818cf8 !important;
-    }
+    .capture-btn:hover { opacity: .9; }
+    .capture-btn:disabled { opacity: .6; cursor: default; }
+
+    /* ── Toggle row ── */
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
+    .toggle-lbl { font-size: 11px; color: #475569; font-weight: 600; flex: 1; }
+    input[type="checkbox"] { accent-color: #6366f1; width: 14px; height: 14px; cursor: pointer; }
+
+    /* ── Code typer ── */
+    .slots-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; max-height: 160px; overflow-y: auto; padding: 4px; margin-bottom: 6px; }
+    .slots-box::-webkit-scrollbar { width: 3px; }
+    .slots-box::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+    .slot-empty { font-size: 11px; color: #94a3b8; padding: 8px; display: block; }
+    .slot-hint { font-size: 10px; color: #94a3b8; margin-bottom: 4px; }
+    .slot-hint kbd { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 3px; padding: 0 4px; font-size: 9px; color: #6366f1; }
+    .slot-row { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 5px; margin-bottom: 2px; background: white; border: 1px solid #f1f5f9; }
+    .slot-num { font-size: 10px; font-weight: 800; color: #6366f1; min-width: 20px; }
+    .slot-q { font-size: 10px; color: #64748b; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .state-bar { display: flex; align-items: center; gap: 7px; padding: 7px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; margin-bottom: 8px; }
+    .state-txt { font-size: 12px; font-weight: 600; color: #94a3b8; flex: 1; }
+    .state-txt.active { color: #15803d; }
+    .state-txt.paused { color: #d97706; }
+
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .slider-lbl { font-size: 11px; font-weight: 600; color: #64748b; white-space: nowrap; }
+    input[type="range"] { flex: 1; accent-color: #6366f1; height: 4px; cursor: pointer; }
+    .slider-val { font-size: 12px; font-weight: 700; color: #6366f1; min-width: 52px; text-align: right; }
+
+    .ab { flex: 1; padding: 9px 6px; border-radius: 7px; font-size: 11px; font-weight: 700; cursor: pointer; text-align: center; border: 1px solid transparent; transition: all .15s; }
+    .ab-start { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+    .ab-start:hover { background: #15803d; color: white; }
+    .ab-start:disabled { background: #f0fdf4; color: #86efac; cursor: default; }
+    .ab-pause { background: #fef9c3; color: #a16207; border-color: #fef08a; }
+    .ab-pause:hover { background: #a16207; color: white; }
+    .ab-stop { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+    .ab-stop:hover { background: #dc2626; color: white; }
+
+    .shortcuts { padding: 4px 0; }
+    .sc-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8; padding: 3px 0; }
+    kbd { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 3px; padding: 1px 5px; font-family: monospace; font-size: 10px; color: #6366f1; }
+
+    /* ── Monitor section ── */
+    .mon-url-row { display: flex; align-items: center; gap: 5px; }
+    .mon-url { flex: 1; font-size: 10px; color: #6366f1; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 5px; padding: 5px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Toast ── */
+    .toast { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: #1e293b; border-radius: 6px; padding: 6px 14px; font-size: 11px; font-weight: 600; color: white; pointer-events: none; opacity: 0; transition: opacity .2s; white-space: nowrap; z-index: 9999; }
+    .toast.show { opacity: 1; }
+    .toast.ok { background: #15803d; }
+    .toast.err { background: #dc2626; }
+
+    /* ── Login ── */
+    #loginScreen { position: fixed; inset: 0; background: #f8fafc; z-index: 1000; display: flex; flex-direction: column; }
+    #loginScreen.hiding { animation: slideUp .22s ease-in forwards; }
+    @keyframes slideUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-12px); opacity: 0; } }
     #loginBtn:hover { opacity: .88; }
     #loginBtn:active { opacity: .75; }
     #loginBtn:disabled { opacity: .45; cursor: default; }
-
-    /* Slide-out login screen */
-    #loginScreen.hiding {
-      animation: slideUp .22s ease-in forwards;
-    }
-    @keyframes slideUp {
-      from { transform: translateY(0); opacity: 1; }
-      to   { transform: translateY(-12px); opacity: 0; }
-    }
-
-    /* Header user chip */
-    #headerUser { display: none; }
-    #headerUser.visible { display: flex !important; }
+    #loginToken:focus { border-color: #6366f1 !important; }
   </style>
 </head>
-
 <body>
 
-  <!-- ══════════════════════════════════════════════════════════
-       LOGIN SCREEN — shown until session validated
-       Rendered instantly (no loader blocking first paint)
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="loginScreen" style="
-    position:fixed;inset:0;background:#0d1117;z-index:1000;
-    display:flex;flex-direction:column;overflow:hidden;">
-
-    <!-- Login Header -->
-    <div style="background:linear-gradient(135deg,#1a1d2e,#141827);padding:18px 20px 14px;border-bottom:1px solid #252840;text-align:center;">
-      <div style="font-size:26px;margin-bottom:6px;">🎙</div>
-      <div style="font-size:16px;font-weight:800;color:#818cf8;letter-spacing:-.3px;">Drishi</div>
-      <div style="font-size:11px;color:#475569;margin-top:2px;">AI Interview Assistant</div>
+<!-- ── Login Screen ── -->
+<div id="loginScreen">
+  <div style="background:#fff;padding:20px;text-align:center;border-bottom:1px solid #e2e8f0;">
+    <div style="font-size:28px;margin-bottom:6px;">🎙</div>
+    <div style="font-size:16px;font-weight:800;color:#6366f1;">Drishi</div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">AI Interview Assistant</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px;">
+    <div style="font-size:18px;font-weight:800;color:#1e293b;text-align:center;margin-bottom:4px;">Welcome Back</div>
+    <div style="font-size:11px;color:#94a3b8;text-align:center;margin-bottom:20px;">Enter your token to sign in</div>
+    <div style="margin-bottom:8px;">
+      <label class="input-label">USER TOKEN</label>
+      <input id="loginToken" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Your personal token (from admin)"
+        style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+               padding:9px 12px;color:#1e293b;font-size:13px;outline:none;box-sizing:border-box;transition:border-color .15s;" />
     </div>
-
-    <!-- Login Body -->
-    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 20px 14px;">
-      <div style="font-size:18px;font-weight:800;color:#e2e8f0;text-align:center;margin-bottom:4px;">Welcome Back</div>
-      <div style="font-size:11px;color:#475569;text-align:center;margin-bottom:20px;">Enter your token to sign in</div>
-
-      <!-- User Token (only field needed) -->
-      <div style="margin-bottom:8px;">
-        <label style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;display:block;margin-bottom:5px;">USER TOKEN</label>
-        <input id="loginToken" type="password" autocomplete="off" spellcheck="false"
-          placeholder="Your personal token (from admin)"
-          style="width:100%;background:#141827;border:1px solid #252840;border-radius:8px;
-                 padding:9px 12px;color:#e2e8f0;font-size:13px;outline:none;
-                 box-sizing:border-box;transition:border-color .15s;"
-          onfocus="this.style.borderColor='#818cf8'" onblur="this.style.borderColor='#252840'" />
-      </div>
-      <!-- Server URL info (configured once in Settings) -->
-      <div id="loginServerHint" style="margin-bottom:8px;padding:7px 10px;background:#0a0e1a;border:1px solid #1e293b;border-radius:6px;font-size:10px;color:#475569;text-align:center;">
-        Server: <span id="loginServerUrl" style="color:#818cf8;font-weight:700;">not configured</span>
-        &nbsp;·&nbsp;
-        <span onclick="document.getElementById('loginScreen').style.display='none';document.getElementById('tabSettings').click();"
-          style="color:#60a5fa;cursor:pointer;text-decoration:underline;">Configure in Settings</span>
-      </div>
-
-      <!-- Inline error -->
-      <div id="loginError" style="min-height:20px;margin-bottom:10px;font-size:11px;font-weight:600;color:#f87171;text-align:center;opacity:0;transition:opacity .2s;"></div>
-
-      <!-- Login button -->
-      <button id="loginBtn" onclick="doLogin()"
-        style="width:100%;background:linear-gradient(135deg,#818cf8,#6366f1);border:none;
-               border-radius:9px;padding:12px;color:white;font-size:13px;font-weight:700;
-               cursor:pointer;transition:opacity .15s;letter-spacing:-.1px;">
-        Sign In
-      </button>
-
-      <div style="margin-top:14px;text-align:center;font-size:10px;color:#334155;">
-        Don't have a token? Contact your admin
-      </div>
+    <div style="margin-bottom:10px;padding:7px 10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;font-size:10px;color:#64748b;text-align:center;">
+      Server: <span id="loginServerUrl" style="color:#6366f1;font-weight:700;">not configured</span>
+      &nbsp;·&nbsp;
+      <span onclick="document.getElementById('loginScreen').style.display='none';document.getElementById('tabSettings').click();"
+        style="color:#6366f1;cursor:pointer;text-decoration:underline;">Configure</span>
+    </div>
+    <div id="loginError" style="min-height:18px;margin-bottom:8px;font-size:11px;font-weight:600;color:#ef4444;text-align:center;opacity:0;transition:opacity .2s;"></div>
+    <button id="loginBtn" onclick="doLogin()"
+      style="width:100%;background:#6366f1;border:none;border-radius:9px;padding:12px;
+             color:white;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;">
+      Sign In
+    </button>
+    <div style="margin-top:12px;text-align:center;font-size:10px;color:#94a3b8;">
+      Don't have a token? Contact your admin
     </div>
   </div>
+</div>
 
-  <!-- ══════════════════════════════════════════════════════════
-       SESSION-EXPIRED TOAST (non-blocking inline message)
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="sessionExpiredBanner" style="
-    display:none;position:fixed;top:0;left:0;right:0;z-index:999;
-    background:#7f1d1d;padding:7px 14px;font-size:11px;font-weight:700;
-    color:#fca5a5;text-align:center;border-bottom:1px solid #991b1b;">
-    Session expired. Please sign in again.
-  </div>
-
-  <!-- Header -->
-  <div class="header">
-    <div class="logo">🎙</div>
-    <div class="title" id="headerTitle">Drishi Enterprise</div>
-    <div class="status-dot" id="dot"></div>
-    <div class="status-txt" id="statusTxt">Checking...</div>
-    <!-- User chip (shown after login) -->
-    <div id="headerUser" style="display:none;align-items:center;gap:5px;margin-left:4px;">
-      <div style="background:#818cf811;border:1px solid #818cf833;border-radius:12px;
-                  padding:2px 8px;display:flex;align-items:center;gap:4px;">
-        <span style="font-size:9px;">👤</span>
-        <span id="headerUserName" style="font-size:10px;font-weight:700;color:#c7d2fe;
-              max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-      </div>
-      <button id="btnLogout" title="Sign out"
-        style="background:none;border:1px solid #334155;border-radius:5px;
-               padding:2px 6px;font-size:9px;font-weight:700;color:#475569;
-               cursor:pointer;transition:all .15s;white-space:nowrap;"
-        onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'"
-        onmouseout="this.style.borderColor='#334155';this.style.color='#475569'">
-        ⎋ Out
-      </button>
+<!-- ── Header ── -->
+<div class="header">
+  <div class="logo">🎙</div>
+  <div class="title">Drishi</div>
+  <div class="dot" id="dot"></div>
+  <div class="status-txt" id="statusTxt">Checking...</div>
+  <div id="headerUser">
+    <div class="user-chip">
+      <span id="headerUserName"></span>
+      <button id="btnLogout" title="Sign out">×</button>
     </div>
   </div>
+</div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" id="tabMonitor">📡 Monitor</button>
-    <button class="tab-btn" id="tabCoder">⌨ Code Typer</button>
-    <button class="tab-btn" id="tabSettings">⚙ Settings</button>
-  </div>
+<!-- ── Tabs ── -->
+<div class="tabs">
+  <button class="tab-btn active" id="tabMonitor">📡 Monitor</button>
+  <button class="tab-btn" id="tabCoder">⌨ Coder</button>
+  <button class="tab-btn" id="tabSettings">⚙ Settings</button>
+</div>
 
-  <!-- ── Monitor Tab (Default) ── -->
-  <div class="tab-panel active" id="panelMonitor">
+<!-- ══════════════════════════════════════════
+     MONITOR TAB
+═══════════════════════════════════════════ -->
+<div class="tab-panel active" id="panelMonitor">
 
-    <div class="qr-grid">
+  <!-- QR codes -->
+  <div class="section">
+    <div class="sec-label">Quick Access</div>
+    <div class="qr-row">
       <div class="qr-card">
-        <div class="qr-card-label green">📡 PHONE MONITOR</div>
-        <img class="qr-card-img" id="monitorQrImg" src="" alt="Monitor QR" />
-        <div class="qr-card-hint">Scan → watch live<br>answers on phone</div>
-        <button class="qr-card-copy" id="monitorCopyBtn">Copy URL</button>
+        <div class="qr-lbl">📱 PHONE MONITOR</div>
+        <img class="qr-img" id="monitorQrImg" src="" alt="Monitor QR" />
+        <button class="btn btn-outline btn-sm" id="monitorCopyBtn">Copy URL</button>
       </div>
       <div class="qr-card">
-        <div class="qr-card-label accent">🖥 FULL DASHBOARD</div>
-        <img class="qr-card-img" id="fullUiQrImg" src="" alt="Full UI QR" />
-        <div class="qr-card-hint">Scan → open full<br>Drishi interface</div>
-        <button class="qr-card-copy" id="fullUiCopyBtn">Copy URL</button>
+        <div class="qr-lbl">🖥 FULL DASHBOARD</div>
+        <img class="qr-img" id="fullUiQrImg" src="" alt="Full UI QR" />
+        <button class="btn btn-outline btn-sm" id="fullUiCopyBtn">Copy URL</button>
       </div>
     </div>
+    <div class="url-strip" id="monitorUrl">Connecting…</div>
+  </div>
 
-    <div class="qr-url-strip" id="monitorUrl">Connecting…</div>
-
-    <!-- ── User Portal Card ── -->
-    <div id="portalCard" style="margin:8px 12px;padding:10px 12px;background:#0d1117;border:1px solid #818cf833;border-radius:9px;display:none;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#818cf8,#6366f1);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">👤</div>
+  <!-- User Portal -->
+  <div id="portalCard" class="section" style="display:none;">
+    <div class="portal-card">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:30px;height:30px;border-radius:50%;background:#6366f1;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0;">👤</div>
         <div style="flex:1;min-width:0;">
-          <div id="portalUserName" style="font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Loading...</div>
-          <div id="portalUserRole" style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+          <div id="portalUserName" class="portal-card-name">Loading...</div>
+          <div id="portalUserRole" class="portal-card-role"></div>
         </div>
-        <div id="portalTokenChip" style="font-size:9px;font-weight:700;color:#818cf8;background:#818cf811;border:1px solid #818cf833;border-radius:4px;padding:2px 6px;white-space:nowrap;"></div>
+        <span id="portalTokenChip" class="portal-token-chip"></span>
       </div>
-      <a id="portalLink" href="#" target="_blank" style="display:block;width:100%;background:linear-gradient(135deg,#818cf8,#6366f1);border:none;border-radius:7px;padding:9px;color:white;font-size:12px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-sizing:border-box;">
-        🚀 Open My Portal
-      </a>
-      <div style="font-size:10px;color:#475569;text-align:center;margin-top:5px;">All answers, history &amp; settings</div>
     </div>
+    <a id="portalLink" href="#" target="_blank" class="btn btn-primary btn-full" style="text-decoration:none;">
+      🚀 Open My Portal
+    </a>
+  </div>
+  <div id="noTokenHint" class="section" style="text-align:center;">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Set your User Token in Settings to access your portal</div>
+    <button onclick="document.getElementById('tabSettings').click()" class="btn btn-outline btn-sm">⚙ Go to Settings</button>
+  </div>
 
-    <!-- No-token hint -->
-    <div id="noTokenHint" style="margin:8px 12px;padding:9px 12px;background:#0a0e1a;border:1px solid #252840;border-radius:8px;text-align:center;">
-      <div style="font-size:11px;color:#475569;margin-bottom:5px;">Set your User Token in Settings to access your portal</div>
-      <button onclick="document.getElementById('tabSettings').click()" style="background:#141827;border:1px solid #252840;border-radius:6px;padding:5px 14px;color:#818cf8;font-size:11px;font-weight:700;cursor:pointer;">⚙ Go to Settings</button>
+  <!-- Audio Stream -->
+  <div class="section">
+    <div class="sec-label">🎧 System Audio Stream</div>
+    <div class="btn-row" style="margin-bottom:5px;">
+      <button id="audioStartBtn" class="btn btn-green btn-full">▶ Start Stream</button>
+      <button id="audioStopBtn" class="btn btn-red btn-full">■ Stop</button>
     </div>
+    <div id="audioStatus" style="font-size:10px;color:#64748b;font-weight:600;text-align:center;min-height:14px;">Auto-detects Meet / Teams / Zoom tab</div>
+  </div>
 
-    <!-- ── AUDIO STREAM SECTION ── -->
-    <div style="padding:8px 12px 10px;border-bottom:1px solid #252840;background:#0a0e1a;">
-      <div style="font-size:10px;font-weight:800;color:#475569;letter-spacing:.5px;margin-bottom:7px;">
-        🎧 SYSTEM AUDIO STREAM
-        <span style="font-size:9px;font-weight:600;color:#334155;margin-left:4px;">· tab audio only, no mic</span>
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:5px;">
-        <button id="audioStartBtn" style="flex:1;background:#065f46;border:1px solid #065f46;border-radius:7px;
-                 padding:8px 4px;color:#4ade80;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;">
-          ▶ Start Stream
-        </button>
-        <button id="audioStopBtn" style="flex:1;background:#7f1d1d44;border:1px solid #7f1d1d;border-radius:7px;
-                 padding:8px 4px;color:#f87171;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;">
-          ■ Stop Stream
-        </button>
-      </div>
-      <div id="audioStatus" style="font-size:10px;color:#475569;min-height:14px;font-weight:600;text-align:center;"></div>
-    </div>
+  <!-- Capture & Screenshot Solve -->
+  <div class="section">
+    <button id="btnCapture" class="capture-btn">
+      📸 CAPTURE NOW <span style="font-size:10px;opacity:.7;">(Ctrl+Alt+Q)</span>
+    </button>
+    <button id="btnSolveImg" class="btn btn-outline btn-full">📷 Solve from Screenshot</button>
+    <div id="captureStatus" style="font-size:10px;color:#64748b;text-align:center;margin-top:5px;min-height:14px;"></div>
+  </div>
 
-    <!-- CAPTURE MEETING BUTTON -->
-    <div style="padding:0 12px 8px;border-bottom:1px solid #252840;">
-      <button id="btnCapture" style="width:100%;background:linear-gradient(135deg,#7c3aed,#5b21b6);border:none;border-radius:8px;
-               padding:10px;color:white;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;
-               justify-content:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);transition:all .15s;">
-        📸 CAPTURE NOW
-        <span style="font-size:10px;opacity:.7;">(Ctrl+Alt+Q)</span>
-      </button>
-      <button id="btnSolveImg" style="width:100%;margin-top:5px;background:#1e3a5f;border:1px solid #1e3a5f;border-radius:8px;
-               padding:8px;color:#60a5fa;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;">
-        📷 Solve Problem from Screenshot
-      </button>
-      <div id="captureStatus" style="font-size:10px;color:#64748b;text-align:center;margin-top:5px;min-height:14px;"></div>
-    </div>
-
-    <!-- TTS TOGGLE -->
-    <div style="padding:6px 12px 8px;border-bottom:1px solid #252840;display:flex;align-items:center;gap:8px;">
-      <span style="font-size:10px;font-weight:800;color:#475569;letter-spacing:.5px;">🔊 READ ANSWERS ALOUD</span>
-      <label style="margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">
-        <input type="checkbox" id="ttsToggle" style="accent-color:#818cf8;width:14px;height:14px;" />
-        <span style="font-size:10px;color:#64748b;font-weight:600;">Auto-speak</span>
-      </label>
-      <button id="ttsStopBtn" title="Stop speaking" style="background:none;border:1px solid #252840;border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;color:#f87171;cursor:pointer;">■ Stop</button>
-    </div>
-
-    <!-- Browser Monitor section -->
-    <div style="padding:10px 12px;border-top:2px solid #252840;margin-top:4px;">
-      <div style="font-size:10px;font-weight:800;color:#475569;letter-spacing:.5px;margin-bottom:8px;">BROWSER MONITOR
-      </div>
-      <div style="margin-bottom:8px;">
-        <label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px;">Session ID</label>
-        <input id="monSessionId" type="text" value="default" style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;
-                 padding:6px 9px;color:#e2e8f0;font-size:11px;outline:none;box-sizing:border-box;" />
-      </div>
-      <label
-        style="display:flex;gap:8px;align-items:center;font-size:11px;color:#94a3b8;margin-bottom:8px;cursor:pointer;">
-        <input type="checkbox" id="monScreenEnabled" style="accent-color:#818cf8;" />
-        Enable screen sharing (WebRTC)
-      </label>
-      <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <button id="monStartBtn" style="flex:1;background:#065f46;border:1px solid #065f46;border-radius:7px;
-                 padding:8px;color:#4ade80;font-size:11px;font-weight:700;cursor:pointer;">
-          ▶ Start Monitor
-        </button>
-        <button id="monStopBtn" style="flex:1;background:#7f1d1d44;border:1px solid #7f1d1d;border-radius:7px;
-                 padding:8px;color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">
-          ■ Stop Monitor
-        </button>
-      </div>
-      <div id="monStatus" style="font-size:10px;color:#475569;min-height:14px;font-weight:600;"></div>
-      <div style="margin-top:8px;">
-        <div style="font-size:10px;color:#64748b;margin-bottom:3px;">Viewer URL (share this)</div>
-        <div style="display:flex;align-items:center;gap:5px;">
-          <div id="monViewerUrl" style="flex:1;font-size:10px;color:#818cf8;background:#0d1117;border:1px solid #252840;
-                   border-radius:5px;padding:5px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            —
-          </div>
-          <button id="monViewerCopyBtn" style="flex-shrink:0;background:#141827;border:1px solid #252840;border-radius:5px;
-                   padding:4px 9px;font-size:10px;font-weight:700;color:#64748b;
-                   cursor:pointer;white-space:nowrap;transition:all 0.15s;" title="Copy viewer URL">📋 Copy</button>
-        </div>
-      </div>
+  <!-- TTS -->
+  <div class="section">
+    <div class="toggle-row">
+      <span class="toggle-lbl">🔊 Read answers aloud</span>
+      <input type="checkbox" id="ttsToggle" />
+      <button id="ttsStopBtn" class="btn btn-outline btn-sm">■ Stop</button>
     </div>
   </div>
 
-  <!-- ── Code Typer Tab ── -->
-  <div class="tab-panel" id="panelCoder">
-    <div class="answer-preview">
-      <div class="ap-label">CODE SLOTS — type #1, #2… in Programiz</div>
-      <div id="apContent"><span class="ap-empty">No answers yet — waiting for questions</span></div>
-      <button class="ap-fetch" id="apFetch">↻ Refresh slots</button>
+  <!-- Browser Monitor -->
+  <div class="section">
+    <div class="sec-label">Browser Monitor</div>
+    <div class="field">
+      <label class="input-label">Session ID</label>
+      <input id="monSessionId" type="text" value="default" class="input input-sm" />
     </div>
+    <label class="toggle-row" style="margin-bottom:8px;cursor:pointer;">
+      <input type="checkbox" id="monScreenEnabled" />
+      <span class="toggle-lbl">Enable screen sharing (WebRTC)</span>
+    </label>
+    <div class="btn-row" style="margin-bottom:6px;">
+      <button id="monStartBtn" class="btn btn-green btn-full">▶ Start</button>
+      <button id="monStopBtn" class="btn btn-red btn-full">■ Stop</button>
+    </div>
+    <div id="monStatus" style="font-size:10px;color:#64748b;font-weight:600;min-height:14px;margin-bottom:6px;"></div>
+    <div class="mon-url-row">
+      <div id="monViewerUrl" class="mon-url">—</div>
+      <button id="monViewerCopyBtn" class="btn btn-outline btn-sm">📋 Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CODE TYPER TAB
+═══════════════════════════════════════════ -->
+<div class="tab-panel" id="panelCoder">
+  <div class="section">
+    <div class="sec-label">Code Slots</div>
+    <div class="slots-box" id="apContent">
+      <span class="slot-empty">No answers yet — waiting for questions</span>
+    </div>
+    <button class="btn btn-outline btn-sm" id="apFetch">↻ Refresh slots</button>
+  </div>
+
+  <div class="section">
     <div class="state-bar">
-      <div class="state-icon" id="stateIcon">⏹</div>
-      <div class="state-txt" id="stateTxt">Idle</div>
+      <span id="stateIcon">⏹</span>
+      <span class="state-txt" id="stateTxt">Idle</span>
     </div>
-    <div class="wpm-row">
-      <span class="wpm-lbl">Typing Speed</span>
+    <div class="slider-row">
+      <span class="slider-lbl">Typing Speed</span>
       <input type="range" id="wpmSlider" min="10" max="200" value="40">
-      <span class="wpm-val" id="wpmValue">40 WPM</span>
+      <span class="slider-val" id="wpmValue">40 WPM</span>
     </div>
-    <div class="actions">
+    <div class="btn-row" style="margin-bottom:10px;">
       <button class="ab ab-start" id="btnStart">⚡ SOLVE</button>
       <button class="ab ab-pause" id="btnPause">⏸ PAUSE</button>
       <button class="ab ab-stop" id="btnStop">⛔ STOP</button>
     </div>
-    <div class="coder-shortcuts shortcuts">
+    <div class="shortcuts">
       <div class="sc-row"><span>Solve / Resume</span><kbd>Ctrl+Alt+A</kbd></div>
       <div class="sc-row"><span>Pause Typing</span><kbd>Ctrl+Alt+P</kbd></div>
       <div class="sc-row"><span>Stop / Reset</span><kbd>Ctrl+Alt+S</kbd></div>
     </div>
   </div>
+</div>
 
-  <!-- ── Settings Tab ── -->
-  <div class="tab-panel" id="panelSettings">
-    <div style="padding:12px;overflow-y:auto;max-height:520px;">
+<!-- ══════════════════════════════════════════
+     SETTINGS TAB
+═══════════════════════════════════════════ -->
+<div class="tab-panel" id="panelSettings">
+  <div style="padding:12px;overflow-y:auto;max-height:520px;">
 
-      <!-- User Identity -->
-      <div style="margin-bottom:12px;padding:10px;background:#0d1117;border:1px solid #818cf844;border-radius:8px;">
-        <div style="font-size:10px;font-weight:800;color:#818cf8;letter-spacing:.5px;margin-bottom:8px;">👤 YOUR IDENTITY</div>
-        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">User Token</label>
-        <input id="settingsUserToken" type="text" placeholder="e.g. alice, java-dev-1 (get from admin)"
-          style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;padding:7px 10px;
-                 color:#e2e8f0;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:6px;" />
-        <div id="userTokenStatus" style="font-size:10px;color:#64748b;min-height:14px;"></div>
-        <a id="settingsPortalLink" href="#" target="_blank" style="display:none;margin-top:7px;width:100%;background:#818cf811;border:1px solid #818cf833;border-radius:6px;padding:7px;color:#818cf8;font-size:11px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-sizing:border-box;">
-          🚀 Open My Portal
-        </a>
+    <!-- Identity -->
+    <div class="section" style="border-radius:8px;border:1px solid #e0e7ff;margin-bottom:10px;">
+      <div class="sec-label" style="color:#6366f1;">👤 Your Identity</div>
+      <div class="field">
+        <label class="input-label">User Token</label>
+        <input id="settingsUserToken" type="text" placeholder="e.g. alice, java-dev-1 (get from admin)" class="input" />
       </div>
-
-      <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:.5px;margin-bottom:8px;">SERVER CONNECTION</div>
-      <div style="margin-bottom:8px;">
-        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Server URL</label>
-        <input id="settingsUrl" type="text" placeholder="https://your-ngrok-url.ngrok-free.app or http://192.168.x.x:8000" style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;padding:7px 10px;
-                 color:#e2e8f0;font-size:12px;outline:none;box-sizing:border-box;" autocomplete="off" spellcheck="false" />
-      </div>
-      <div style="margin-bottom:10px;">
-        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Secret Code</label>
-        <input id="settingsCode" type="password" placeholder="Leave blank for local use" style="width:100%;background:#141827;border:1px solid #252840;border-radius:6px;padding:7px 10px;
-                 color:#e2e8f0;font-size:12px;outline:none;box-sizing:border-box;" />
-      </div>
-      <div style="margin-bottom:10px;padding:8px 10px;background:#0a0e1a;border:1px solid #1e3a5f;border-radius:7px;">
-        <div style="font-size:10px;font-weight:800;color:#60a5fa;letter-spacing:.5px;margin-bottom:4px;">
-          🎙 SARVAM AI STT
-        </div>
-        <div style="font-size:10px;color:#475569;line-height:1.5;">
-          Key loaded automatically from server <code style="color:#818cf8;">.env</code>. If <code style="color:#818cf8;">SARVAM_API_KEY</code> is set on Laptop 1, client-side STT activates automatically — no manual entry needed.
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:8px;">
-        <button id="settingsSave" style="flex:1;background:#818cf8;border:none;border-radius:7px;padding:9px;
-                 color:white;font-size:12px;font-weight:700;cursor:pointer;">
-          Save
-        </button>
-        <button id="settingsTest" style="flex:1;background:#141827;border:1px solid #252840;border-radius:7px;padding:9px;
-                 color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;">
-          Test Connection
-        </button>
-      </div>
-      <div id="settingsMsg" style="font-size:11px;min-height:16px;font-weight:600;"></div>
+      <div id="userTokenStatus" class="status-line" style="font-size:10px;margin-bottom:6px;"></div>
+      <a id="settingsPortalLink" href="#" target="_blank" class="btn btn-outline btn-full btn-sm" style="display:none;text-decoration:none;">🚀 Open My Portal</a>
     </div>
+
+    <!-- Server -->
+    <div class="sec-label">Server Connection</div>
+    <div class="field">
+      <label class="input-label">Server URL</label>
+      <input id="settingsUrl" type="text" placeholder="https://your-ngrok.ngrok-free.app or http://192.168.x.x:8000" class="input" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="field">
+      <label class="input-label">Secret Code</label>
+      <input id="settingsCode" type="password" placeholder="Leave blank for local use" class="input" />
+    </div>
+    <div style="margin-bottom:10px;padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;">
+      <div style="font-size:10px;font-weight:700;color:#2563eb;margin-bottom:3px;">🎙 Sarvam AI STT</div>
+      <div style="font-size:10px;color:#64748b;line-height:1.5;">
+        Key loaded automatically from server <code style="color:#6366f1;">.env</code> — no manual entry needed.
+      </div>
+    </div>
+    <div class="btn-row" style="margin-bottom:8px;">
+      <button id="settingsSave" class="btn btn-primary btn-full">Save</button>
+      <button id="settingsTest" class="btn btn-outline btn-full">Test Connection</button>
+    </div>
+    <div id="settingsMsg" class="status-line"></div>
   </div>
+</div>
 
-  <div class="toast" id="toast"></div>
-  <script src="popup.js"></script>
+<div class="toast" id="toast"></div>
+<script src="popup.js"></script>
 </body>
-
 </html>
