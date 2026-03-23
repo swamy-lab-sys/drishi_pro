@@ -1891,6 +1891,7 @@ TECH_TERMS = {
     "ims", "sip", "ss7", "diameter", "volte", "voip",
     "isup", "sccp", "tcap", "map", "cap", "mtp",
     "hss", "pcrf", "p-cscf", "s-cscf", "i-cscf", "mgcf",
+    "cscf", "pcscf", "scscf", "icscf",  # bare forms (hyphens stripped by tokenizer)
     "sdp", "rtp", "rtcp", "srtp", "sips",
     "sip proxy", "sip registrar", "sip trunk", "sip ua",
     "sip invite", "sip ack", "sip bye", "sip register",
