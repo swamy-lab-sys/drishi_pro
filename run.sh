@@ -277,6 +277,7 @@ if [ "$USE_NGROK" = "true" ]; then
         pkill -x cloudflared 2>/dev/null || true; sleep 0.3
         rm -f /tmp/cloudflared.log
         cloudflared tunnel --url "http://localhost:$WEB_PORT" \
+            --protocol http2 \
             --logfile /tmp/cloudflared.log 2>&1 &
         NGROK_PID=$!
         # Wait up to 16s for trycloudflare.com URL
