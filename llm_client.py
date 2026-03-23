@@ -1123,9 +1123,13 @@ def humanize_response(text: str) -> str:
     return text
 
 
-def clear_session():
-    """Clear any session state. Called between questions for isolation."""
-    HISTORY.clear()
+def clear_session(session_id: str | None = None):
+    """Clear conversation history for this session (or all sessions if session_id=None)."""
+    if session_id is None:
+        _SESSION_HISTORIES.clear()
+        HISTORY.clear()
+    else:
+        _SESSION_HISTORIES.pop(session_id, None)
 
 
 # ── Question Type Classifier ───────────────────────────────────────────────────
@@ -1263,15 +1267,29 @@ def solve_coding_from_image(image_b64: str, media_type: str = "image/png") -> st
         return ""
 
 
-# Global conversation history (keep last 3 pairs — covers multi-turn follow-ups
-# without bloating token count; each Q+A ≈ 60 tokens so 3 pairs ≈ 180 tokens)
+# Per-session conversation history.
+# Keyed by session_id (str). Falls back to "_default" for callers that don't
+# pass a session_id. Each session keeps last 5 Q+A pairs (≈ 300 tokens).
 from collections import deque
-HISTORY = deque(maxlen=3)
+_SESSION_HISTORIES: dict = {}
+_SESSION_HISTORY_MAXLEN = 5
+
+# Legacy alias — kept for any direct external references during transition
+HISTORY = deque(maxlen=_SESSION_HISTORY_MAXLEN)
+
+
+def _get_history(session_id: str | None) -> deque:
+    """Return the history deque for this session, creating it if needed."""
+    key = session_id or "_default"
+    if key not in _SESSION_HISTORIES:
+        _SESSION_HISTORIES[key] = deque(maxlen=_SESSION_HISTORY_MAXLEN)
+    return _SESSION_HISTORIES[key]
 
 def get_interview_answer(question: str, resume_text: str = "", job_description: str = "",
                          include_code: bool = False, active_user_context: str = "",
-                         question_type: str = "technical") -> str:
-    """Single-shot interview answer with history context."""
+                         question_type: str = "technical",
+                         session_id: str | None = None) -> str:
+    """Single-shot interview answer with per-session history context."""
     if question_type == 'behavioral':
         system_prompt = BEHAVIORAL_PROMPT
     elif question_type == 'system_design':
@@ -1294,9 +1312,10 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
 
     dlog.log(f"[LLM] Single-shot: {question[:60]}", "DEBUG")
 
-    # Build messages with history — skip any entry where q or a is empty
+    # Build messages with per-session history — skip any entry where q or a is empty
+    _hist = _get_history(session_id)
     messages = []
-    for q, a in HISTORY:
+    for q, a in _hist:
         if q and a:
             messages.append({"role": "user", "content": q})
             messages.append({"role": "assistant", "content": a})
@@ -1320,8 +1339,8 @@ def get_interview_answer(question: str, resume_text: str = "", job_description: 
         api_time = time.time() - api_start
         answer = humanize_response("-" + response.content[0].text.strip())
 
-        # Update history (deque auto-evicts oldest when full)
-        HISTORY.append((question, answer))
+        # Update per-session history (deque auto-evicts oldest when full)
+        _get_history(session_id).append((question, answer))
             
         dlog.log(f"[LLM] Done: {len(answer)} chars in {api_time*1000:.0f}ms", "DEBUG")
         return answer
@@ -1346,8 +1365,9 @@ _ROLE_CONTEXT = {
 
 def get_streaming_interview_answer(question: str, resume_text: str = "", job_description: str = "",
                                    active_user_context: str = "", model: str = None,
-                                   question_type: str = "technical"):
-    """Streaming interview answer with history context."""
+                                   question_type: str = "technical",
+                                   session_id: str | None = None):
+    """Streaming interview answer with per-session history context."""
     if question_type == 'behavioral':
         system_prompt = BEHAVIORAL_PROMPT
     elif question_type == 'system_design':
@@ -1387,9 +1407,10 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
     dlog.log(f"[LLM] Streaming: {question[:60]}", "DEBUG")
     stream_start = time.time()
 
-    # Build messages with history — skip any entry where q or a is empty
+    # Build messages with per-session history — skip any entry where q or a is empty
+    _hist = _get_history(session_id)
     messages = []
-    for q, a in HISTORY:
+    for q, a in _hist:
         if q and a:
             messages.append({"role": "user", "content": q})
             messages.append({"role": "assistant", "content": a})
@@ -1452,9 +1473,9 @@ def get_streaming_interview_answer(question: str, resume_text: str = "", job_des
             if succeeded:
                 break  # No need to try fallback model
 
-        # Update history — only store if both question and answer are non-empty
+        # Update per-session history — only store if both question and answer are non-empty
         if question and full_answer and full_answer.strip('-').strip():
-            HISTORY.append((question, full_answer))
+            _get_history(session_id).append((question, full_answer))
         dlog.log(f"[LLM] Stream done in {(time.time() - stream_start)*1000:.0f}ms", "DEBUG")
 
     except Exception as e:

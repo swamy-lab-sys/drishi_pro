@@ -294,6 +294,7 @@ body.sb-collapsed #saved-flash { left: var(--sb-w-col); }
       <button class="settings-tab-btn"        id="t-ai"         onclick="showTab('ai')">🤖 AI / Model</button>
       <button class="settings-tab-btn"        id="t-advanced"   onclick="showTab('advanced')">⚙ Advanced</button>
       <button class="settings-tab-btn"        id="t-sttlearn"   onclick="showTab('sttlearn');loadSttCorrections()">🧠 STT Learning</button>
+      <button class="settings-tab-btn"        id="t-jdconfig"   onclick="showTab('jdconfig')">📋 JD Configure</button>
     </div>
 
     <!-- ── Tab: Launch Config ── -->
@@ -721,6 +722,44 @@ body.sb-collapsed #saved-flash { left: var(--sb-w-col); }
 
       </div>
     </div><!-- /panel-sttlearn -->
+
+    <!-- ── Tab: JD Configure ── -->
+    <div class="settings-tab-panel" id="panel-jdconfig">
+      <div class="settings-inner-grid">
+
+        <div class="inner-card settings-inner-grid-full">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">📋</div>
+            <div>
+              <div class="inner-card-title">JD Auto-Configure</div>
+              <div class="inner-card-sub">Paste a job description → auto-set role &amp; round, seed Q&amp;A pairs from the JD</div>
+            </div>
+          </div>
+
+          <div style="background:var(--green-bg);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text-medium);line-height:1.7;margin-bottom:16px">
+            <strong style="color:var(--green)">How it works:</strong><br>
+            1. Paste the full job description below<br>
+            2. Click <strong>Configure</strong> — the LLM extracts role, skills, company, and round type<br>
+            3. Interview Role and Round are applied instantly (terminal bar updates)<br>
+            4. ~20 targeted Q&amp;A pairs are seeded into your DB in the background<br>
+            5. Next question hits the DB instantly instead of waiting for LLM
+          </div>
+
+          <textarea id="jd-text-input" rows="10"
+            placeholder="Paste the full job description here…"
+            style="width:100%;box-sizing:border-box;padding:12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-dark);font-size:13px;font-family:inherit;resize:vertical;line-height:1.6;margin-bottom:12px"></textarea>
+
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="runJdConfigure()" id="jd-config-btn">⚡ Configure from JD</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('jd-text-input').value=''">Clear</button>
+            <span id="jd-config-status" style="font-size:12px;color:var(--text-muted)"></span>
+          </div>
+
+          <div id="jd-config-result" style="display:none;margin-top:16px;padding:14px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;font-size:13px;line-height:1.8"></div>
+        </div>
+
+      </div>
+    </div><!-- /panel-jdconfig -->
 
   </div><!-- /settings-card -->
 
@@ -1353,6 +1392,49 @@ async function applyAndRestart() {
     showSaved();
   } finally {
     if (btn) { btn.innerHTML = 'Apply &amp; Restart'; btn.style.pointerEvents = ''; }
+  }
+}
+
+/* ── JD Auto-Configure ───────────────────────────────────── */
+async function runJdConfigure() {
+  const text = (document.getElementById('jd-text-input').value || '').trim();
+  if (!text) { alert('Please paste a job description first.'); return; }
+  const btn = document.getElementById('jd-config-btn');
+  const status = document.getElementById('jd-config-status');
+  const result = document.getElementById('jd-config-result');
+  btn.textContent = '⏳ Analyzing…'; btn.disabled = true;
+  status.textContent = 'Calling LLM to extract role, skills, round…';
+  result.style.display = 'none';
+  try {
+    const res = await fetch('/api/jd_configure', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    const applied = data.settings_applied || {};
+    const skills = (data.skills || []).join(', ') || '—';
+    result.innerHTML = `
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px">
+        <strong>Company</strong><span>${data.company || '—'}</span>
+        <strong>Detected Role</strong><span>${data.role}</span>
+        <strong>Round Hint</strong><span>${data.round_hint}</span>
+        <strong>Experience</strong><span>${data.experience_years != null ? data.experience_years + ' yrs' : '—'}</span>
+        <strong>Key Skills</strong><span>${skills}</span>
+        <strong>Applied Role</strong><span>${applied.interview_role || '—'}</span>
+        <strong>Applied Round</strong><span>${applied.interview_round || '—'}</span>
+        <strong>Coding Lang</strong><span>${applied.coding_language || '—'}</span>
+        <strong>Q&amp;A Seeding</strong><span style="color:var(--green)">✓ Running in background (~20 pairs)</span>
+      </div>`;
+    result.style.display = 'block';
+    status.textContent = '✓ Done — reload the terminal bar to see updated role/round chips';
+    status.style.color = 'var(--green)';
+  } catch(e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = 'var(--red)';
+  } finally {
+    btn.textContent = '⚡ Configure from JD'; btn.disabled = false;
   }
 }
 

@@ -116,6 +116,21 @@ def set_audio_settings():
     return jsonify(update_audio_settings(data))
 
 
+@settings_bp.route("/api/jd_configure", methods=["POST"])
+def jd_configure():
+    """Analyze pasted JD, apply role/round settings, and async-seed Q&A pairs."""
+    data = request.get_json() or {}
+    jd_text = data.get("text", "").strip()
+    if not jd_text:
+        return jsonify({"error": "No JD text provided"}), 400
+    try:
+        from app.services.jd_service import configure_from_jd
+        result = configure_from_jd(jd_text)
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @settings_bp.route("/api/save_jd", methods=["POST"])
 def save_jd():
     """Save job description text."""
