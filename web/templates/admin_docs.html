@@ -684,7 +684,10 @@ code {
     <a href="#resume-aware"><span class="nav-dot"></span>Resume-Aware</a>
     <a href="#company-boost"><span class="nav-dot"></span>Company/Role Boost</a>
     <a href="#duplicate"><span class="nav-dot"></span>Duplicate Warning</a>
-    <a href="#tts"><span class="nav-dot"></span>Text-to-Speech</a>
+    <a href="#tts"><span class="nav-dot"></span>ElevenLabs TTS</a>
+    <a href="#interview-round"><span class="nav-dot"></span>Interview Round</a>
+    <a href="#semantic-search"><span class="nav-dot"></span>Semantic Search</a>
+    <a href="#jd-configure"><span class="nav-dot"></span>JD Auto-Configure</a>
     <a href="#screenshot"><span class="nav-dot"></span>Screenshot Solver</a>
     <a href="#debrief"><span class="nav-dot"></span>Post-Interview Debrief</a>
 
@@ -1475,35 +1478,185 @@ code {
     <div class="section-divider" id="tts"></div>
     <section class="docs-section">
       <div class="section-label">
-        <div class="section-icon gi-purple">🔊</div>
-        <h2>Text-to-Speech (Earpiece Mode)</h2>
+        <div class="section-icon gi-purple">🎧</div>
+        <h2>ElevenLabs TTS — Earpiece Mode</h2>
       </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Stream every complete answer as natural-sounding speech to your AirPods or earpiece.
+        Uses ElevenLabs <strong>eleven_turbo_v2</strong> for the lowest latency (~0.5s).
+        Flag-gated: off by default, enable via Settings → AI/Model → ElevenLabs TTS.
+      </p>
       <div class="card-grid cols-3" style="margin-bottom:16px;">
         <div class="info-card green-accent">
-          <h4>Chrome Extension</h4>
+          <h4>Setup</h4>
           <ul>
-            <li>Toggle "Auto-speak" checkbox in popup</li>
-            <li>Saved to <code>chrome.storage.sync</code></li>
-            <li>New complete answer triggers <code>speechSynthesis.speak()</code></li>
-            <li>"■ Stop" cancels current speech immediately</li>
+            <li>Get API key at <strong>elevenlabs.io</strong> (free tier)</li>
+            <li>Set <code>ELEVENLABS_API_KEY</code> in <code>.env</code></li>
+            <li>Settings → AI/Model → enable TTS toggle</li>
+            <li>Click <strong>▶ Test TTS</strong> to verify audio</li>
           </ul>
         </div>
         <div class="info-card blue-accent">
-          <h4>User Portal</h4>
+          <h4>Technical Flow</h4>
           <ul>
-            <li>Toggle in Live Interview card header</li>
-            <li>Same Web Speech API behaviour</li>
-            <li>Only reads when <code>is_complete: true</code></li>
-            <li>De-duplicates — same answer won't re-read</li>
+            <li>Answer completes → <code>_ttsSpeak(text)</code> called in browser</li>
+            <li>Browser opens <code>/ws/tts</code> WebSocket</li>
+            <li>Server: <code>tts_client.stream_tts()</code> via httpx streaming</li>
+            <li>Binary MP3 chunks → browser <code>Audio(blob)</code> plays</li>
           </ul>
         </div>
         <div class="info-card gold-accent">
-          <h4>Speech Settings</h4>
+          <h4>Voice Settings</h4>
           <ul>
-            <li>Rate: 0.95 (slightly slower than default)</li>
-            <li>Pitch: 1.0 (natural)</li>
-            <li>Language: en-US</li>
-            <li>Voice: browser default (user can change in OS settings)</li>
+            <li>Model: <code>eleven_turbo_v2</code> (lowest latency)</li>
+            <li>Default voice: Rachel (<code>21m00Tcm4TlvDq8ikWAM</code>)</li>
+            <li>Override: set <code>ELEVENLABS_VOICE_ID</code> in <code>.env</code></li>
+            <li>Markdown stripped before sending (cleaner speech)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── INTERVIEW ROUND ── -->
+    <div class="section-divider" id="interview-round"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-blue">🎯</div>
+        <h2>Interview Round Switcher</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Switch round from the terminal bar <strong>[HR][TECH][DESIGN][CODE]</strong> chips or
+        <code>POST /api/interview_round {"round":"hr"}</code>. Persisted to <code>.env</code>.
+        Each round adjusts LLM token budget, temperature, and answer style.
+      </p>
+      <div class="card-grid cols-4" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>HR Round</h4>
+          <ul>
+            <li>80 tokens max</li>
+            <li>Temperature: 0.30</li>
+            <li>Conversational, first-person</li>
+            <li>STAR method for behavioral</li>
+            <li>≤80 words, no bullet points</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>TECH Round (default)</h4>
+          <ul>
+            <li>100 tokens max</li>
+            <li>Temperature: 0.15</li>
+            <li>3 concise bullet points</li>
+            <li>Role context injected</li>
+            <li>DB/cache hit rate highest</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>DESIGN Round</h4>
+          <ul>
+            <li>500 tokens max</li>
+            <li>Temperature: 0.20</li>
+            <li>Architecture overview</li>
+            <li>Key trade-off per decision</li>
+            <li>Scalability approach last</li>
+          </ul>
+        </div>
+        <div class="info-card purple-accent">
+          <h4>CODE Round</h4>
+          <ul>
+            <li>700 tokens max</li>
+            <li>Temperature: 0.15</li>
+            <li>Code-first answers</li>
+            <li>Combines with ROLE chip</li>
+            <li>Pairs well with Focus Ask</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SEMANTIC SEARCH ── -->
+    <div class="section-divider" id="semantic-search"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-indigo">🔍</div>
+        <h2>Semantic Search</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        When Jaccard similarity finds no DB match (score &lt; 0.72), the pipeline falls back to
+        semantic search before calling the LLM. Uses <strong>all-MiniLM-L6-v2</strong>
+        (384-dim sentence embeddings, ~22MB). Optional — install with
+        <code>pip install sentence-transformers</code>.
+      </p>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>How It Works</h4>
+          <ul>
+            <li>All Q&A questions embedded at server startup (background)</li>
+            <li>Query encoded → cosine similarity against all embeddings</li>
+            <li>Threshold: ≥ 0.80 cosine similarity</li>
+            <li>Returns answer/score/id — same shape as Jaccard result</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>Pipeline Priority</h4>
+          <ul>
+            <li>1. Self-intro (&lt;5ms)</li>
+            <li>2. Jaccard DB match (13–30ms)</li>
+            <li><strong>2b. Semantic search (~5ms)</strong></li>
+            <li>3. LRU answer cache (&lt;1ms)</li>
+            <li>4. LLM stream (~2–3s)</li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Index Management</h4>
+          <ul>
+            <li>Built once at startup in daemon thread</li>
+            <li>New Q&A rows queued for background embedding</li>
+            <li><code>queue_new_entry(qa_id)</code> called on add</li>
+            <li>No restart needed after DB additions</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── JD AUTO-CONFIGURE ── -->
+    <div class="section-divider" id="jd-configure"></div>
+    <section class="docs-section">
+      <div class="section-label">
+        <div class="section-icon gi-green">📋</div>
+        <h2>JD Auto-Configure</h2>
+      </div>
+      <p style="color:var(--text-medium);font-size:13px;margin-bottom:16px;max-width:680px;">
+        Paste a job description → one LLM call extracts role, company, skills, and round hint →
+        settings applied instantly → ~20 targeted Q&A pairs seeded in the background.
+        Available at <strong>Settings → JD Configure</strong> tab or <code>POST /api/jd_configure</code>.
+      </p>
+      <div class="card-grid cols-3" style="margin-bottom:16px;">
+        <div class="info-card green-accent">
+          <h4>What Gets Extracted</h4>
+          <ul>
+            <li>Role: maps to INTERVIEW_ROLE chip</li>
+            <li>Company name (for context)</li>
+            <li>Top 10 technical skills</li>
+            <li>Round hint (tech/hr/design/code)</li>
+            <li>Years of experience required</li>
+          </ul>
+        </div>
+        <div class="info-card blue-accent">
+          <h4>What Gets Applied</h4>
+          <ul>
+            <li>INTERVIEW_ROLE → coding language auto-set</li>
+            <li>INTERVIEW_ROUND → token budget + style</li>
+            <li>Terminal bar chips update instantly</li>
+            <li>Both settings persisted to <code>.env</code></li>
+          </ul>
+        </div>
+        <div class="info-card gold-accent">
+          <h4>Q&amp;A Seeding</h4>
+          <ul>
+            <li>20 Q&amp;A pairs generated in background thread</li>
+            <li>Mix: 40% tech, 30% scenario, 20% behavioral, 10% company</li>
+            <li>Tagged with role + skills for fast lookup</li>
+            <li>Next interview has instant DB hits for JD-specific questions</li>
           </ul>
         </div>
       </div>
@@ -1722,7 +1875,27 @@ code {
           <tr>
             <td><span class="method-badge post">POST</span></td>
             <td><code>/api/clear_session</code></td>
-            <td>Wipe current session answers — called by Focus Ask before each new question</td>
+            <td>Wipe current session answers and conversation history — called by Focus Ask before each new question</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">GET</span></td>
+            <td><code>/api/interview_round</code></td>
+            <td>Get current interview round (tech/hr/design/code)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/interview_round</code></td>
+            <td>Set interview round — adjusts LLM token budget, temperature, answer style. Persisted to <code>.env</code></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge post">POST</span></td>
+            <td><code>/api/jd_configure</code></td>
+            <td>Analyze JD text → apply role/round settings → seed ~20 Q&amp;A pairs in background. Body: <code>{"text":"..."}</code></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge get">WS</span></td>
+            <td><code>/ws/tts</code></td>
+            <td>ElevenLabs TTS WebSocket. Send <code>{"text":"..."}</code> → receive binary MP3 chunks → <code>{"event":"done"}</code></td>
           </tr>
           <tr>
             <td><span class="method-badge post">POST</span></td>

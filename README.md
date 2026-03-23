@@ -20,13 +20,15 @@ Real-time AI interview assistant. Listens to live interview audio, transcribes q
            │
            ├─ Fragment merge (_MERGE_WAIT = 1.0s)
            │
-           ├─ Priority 1: Self-intro     → user.self_introduction    (<5ms)
-           ├─ Priority 2: DB match       → qa_database.find_answer()  (13–30ms, Jaccard ≥0.72)
-           ├─ Priority 3: Answer cache   → LRU in-memory              (<1ms)
-           └─ Priority 4: LLM stream     → Claude Haiku/Sonnet        (~2–3s TTFT)
+           ├─ Priority 1:  Self-intro       → user.self_introduction     (<5ms)
+           ├─ Priority 2:  DB match         → qa_database.find_answer()   (13–30ms, Jaccard ≥0.72)
+           ├─ Priority 2b: Semantic search  → semantic_search.py          (~5ms, cosine ≥0.80)
+           ├─ Priority 3:  Answer cache     → LRU in-memory               (<1ms)
+           └─ Priority 4:  LLM stream       → Claude Haiku/Sonnet         (~2–3s TTFT)
                           │
-                          ▼
-           [SSE /api/stream  →  React UI at /react/  /  Phone Monitor]
+                          ▼               ┌─ ElevenLabs TTS → /ws/tts → browser audio
+           [SSE /api/stream  →  Flask UI / Phone Monitor]
+                                          └─ per-session conversation history (5 pairs)
 ```
 
 ---
@@ -194,6 +196,7 @@ Plural forms are handled correctly: "microservices", "services", "architectures"
 ## Interview Roles
 
 Set from the terminal bar (Dashboard) or `POST /api/interview_role`.
+Setting a role also updates `CODING_LANGUAGE` automatically.
 
 | Chip | Role | LLM focus | DB filter |
 |---|---|---|---|
@@ -203,6 +206,23 @@ Set from the terminal bar (Dashboard) or `POST /api/interview_role`.
 | `js` | javascript | React, Node.js, TypeScript | javascript |
 | `sql` | sql | Query optimization, indexes | sql |
 | `saas` | saas | Multi-tenancy, billing, REST | saas |
+| `devops` | devops | Docker, K8s, CI/CD, Terraform | devops |
+| `prod` | production_support | Incident management, RCA, monitoring | production-support |
+| `telecom` | telecom | SIP, IMS, SS7, Diameter, VoLTE | telecom |
+
+---
+
+## Interview Round Switcher
+
+Set from the terminal bar `[HR][TECH][DESIGN][CODE]` chips or `POST /api/interview_round`.
+Persisted to `.env`. Adjusts LLM token budget, temperature, and answer style per round.
+
+| Chip | Round | Tokens | Temp | Style |
+|---|---|---|---|---|
+| `HR` | hr | 80 | 0.30 | Conversational, first-person, STAR method, ≤80 words |
+| `TECH` | tech | 100 (default) | 0.15 | Bullet points — default behaviour |
+| `DESIGN` | design | 500 | 0.20 | Architecture overview + trade-offs + scalability |
+| `CODE` | code | 700 | 0.15 | Code-first answers |
 
 ---
 
@@ -398,11 +418,21 @@ SILENCE_DEFAULT=1.2
 MAX_RECORDING_DURATION=15.0
 AUDIO_SOURCE=system          # system | extension
 USE_NGROK=false
-NGROK_DOMAIN=                # optional fixed ngrok domain
+NGROK_DOMAIN=                # optional fixed cloudflare/ngrok domain
 USER_ID_OVERRIDE=            # active user ID
 CODING_LANGUAGE=python
 INTERVIEW_ROLE=general
+INTERVIEW_ROUND=tech         # tech | hr | design | code
 WEB_PORT=8000
+
+# ElevenLabs TTS earpiece (optional)
+ELEVENLABS_ENABLED=false
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+
+# Async task queue (optional — requires Redis)
+CELERY_ENABLED=false
+REDIS_URL=redis://localhost:6379/0
 ```
 
 ---
@@ -415,8 +445,11 @@ Drishi/
 ├── config.py                ← all runtime constants
 ├── state.py                 ← pipeline state machine + latency tracking
 ├── stt.py                   ← STT (Whisper / Sarvam / Deepgram / AssemblyAI)
-├── llm_client.py            ← Claude API, streaming, prompt caching
+├── llm_client.py            ← Claude API, streaming, per-session history, round params
 ├── qa_database.py           ← SQLite/PG Q&A store, Jaccard lookup
+├── semantic_search.py       ← sentence-transformers cosine fallback (all-MiniLM-L6-v2)
+├── tts_client.py            ← ElevenLabs TTS streaming (flag-gated)
+├── celery_app.py            ← async LLM task queue via Redis (flag-gated)
 ├── db_backend.py            ← PostgreSQL adapter (pg8000, drop-in sqlite3 compat)
 ├── answer_storage.py        ← in-memory answer state (thread-safe)
 ├── event_bus.py             ← SSE zero-latency push
@@ -424,21 +457,26 @@ Drishi/
 ├── question_validator.py    ← noise/filler rejection, normalization
 ├── answer_cache.py          ← LRU cache for LLM answers (max 1000)
 ├── fragment_context.py      ← cross-source fragment merge
-├── run.sh                   ← startup script (venv, deps, ngrok, server)
+├── run.sh                   ← startup script (venv, deps, cloudflare/ngrok, redis, server)
 ├── .env                     ← secrets + persisted settings
 ├── qa_pairs.db              ← Q&A database (source)
 │
 ├── app/
 │   ├── api/routes/          ← Flask blueprint handlers
 │   │   ├── interview.py     ← POST /api/ask, GET /api/stream
-│   │   ├── settings.py      ← audio_settings, launch_config, interview_role
+│   │   ├── settings.py      ← audio_settings, launch_config, interview_role, interview_round, jd_configure
 │   │   ├── users.py         ← CRUD /api/users
 │   │   ├── knowledge.py     ← CRUD /api/qa, /api/save_to_db
 │   │   ├── coding.py        ← /api/set_llm_model, /api/solve_problem
 │   │   ├── ops.py           ← /api/session-info, /api/answers, /api/logs
 │   │   ├── monitoring.py    ← /monitor-viewer/, /api/session/predictions
-│   │   └── ui.py            ← all HTML + React production routes
-│   ├── services/            ← business logic
+│   │   └── ui.py            ← all HTML routes
+│   ├── services/
+│   │   ├── interview_service.py  ← ask pipeline (DB → semantic → cache → LLM)
+│   │   ├── jd_service.py         ← JD Auto-Configure (analyze + seed Q&A)
+│   │   ├── settings_service.py   ← update_audio/launch/role/round settings
+│   │   ├── knowledge_service.py  ← DB CRUD + semantic index update
+│   │   └── user_service.py       ← user profile management
 │   └── core/
 │       └── config_schema.py ← RuntimeConfig dataclass
 │
@@ -495,10 +533,24 @@ GET  /api/audio_settings
 POST /api/audio_settings   {"silence_duration":1.2, "stt_backend":"local", "stt_model":"tiny.en"}
 
 GET  /api/launch_config
-POST /api/launch_config    {"llm_model":"haiku|sonnet", "user_id_override":"1"}
+POST /api/launch_config    {"llm_model":"haiku|sonnet", "user_id_override":"1",
+                            "elevenlabs_enabled":true}
 
 GET  /api/interview_role
-POST /api/interview_role   {"role":"general|python|java|javascript|sql|saas"}
+POST /api/interview_role   {"role":"general|python|java|javascript|sql|saas|devops|production_support|telecom"}
+                           → also sets coding_language automatically
+
+GET  /api/interview_round
+POST /api/interview_round  {"round":"tech|hr|design|code"}
+                           → adjusts LLM token budget, temperature, answer style
+
+POST /api/jd_configure     {"text":"<full job description>"}
+                           → analyzes JD, applies role+round, seeds ~20 Q&A in background
+                           → returns {role, company, skills, round_hint, experience_years,
+                                      settings_applied, seeding:"started"}
+
+WS   /ws/tts               Send: {"text":"...", "voice_id":"optional"}
+                           Receive: binary MP3 chunks → {"event":"done"}
 ```
 
 ### Knowledge Base
@@ -541,6 +593,79 @@ PATCH  /api/users/<id>/profile
 
 ---
 
+## Semantic Search
+
+When Jaccard similarity finds no match (score < 0.72), the pipeline falls back to semantic search before hitting the LLM:
+
+- Model: `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~22MB)
+- Threshold: cosine similarity ≥ 0.80
+- Index built in background at startup — no latency impact on server start
+- Newly inserted Q&A rows are embedded and appended automatically
+
+**Install** (optional — server runs without it, graceful no-op if missing):
+```bash
+pip install sentence-transformers
+```
+
+---
+
+## JD Auto-Configure
+
+Paste a job description and let the LLM configure the session automatically.
+
+**Via Settings → JD Configure tab:**
+1. Paste the full JD → click **Configure from JD**
+2. LLM extracts: role, company, top 10 skills, round hint, experience
+3. `INTERVIEW_ROLE` and `INTERVIEW_ROUND` applied immediately
+4. ~20 targeted Q&A pairs seeded into DB in the background
+
+**Via API:**
+```bash
+POST /api/jd_configure  {"text": "<full job description>"}
+```
+
+Response:
+```json
+{
+  "role": "python",
+  "company": "Acme Corp",
+  "skills": ["django", "fastapi", "postgresql", "redis"],
+  "round_hint": "tech",
+  "experience_years": 4,
+  "settings_applied": {"interview_role": "python", "interview_round": "tech", "coding_language": "python"},
+  "seeding": "started"
+}
+```
+
+---
+
+## ElevenLabs TTS Earpiece Mode
+
+Stream answers as speech to your earpiece via the browser.
+
+**Setup:**
+1. Get an API key at [elevenlabs.io](https://elevenlabs.io) (free tier available)
+2. Add to `.env`: `ELEVENLABS_API_KEY=...`
+3. Settings → AI/Model → **ElevenLabs TTS** toggle → Enable
+4. Click **Test TTS** to verify
+5. Every subsequent complete answer streams automatically via `/ws/tts`
+
+**How it works:** `eleven_turbo_v2` model, WebSocket binary MP3 chunks → `Audio()` browser playback. Markdown stripped before sending. Adds ~0.5s audio latency.
+
+---
+
+## Conversation History (Per-Session)
+
+Each browser session gets its own rolling conversation history (last 5 Q&A pairs). This lets the LLM handle natural follow-up questions:
+
+- "Can you explain that again with more detail?" — LLM has context of what "that" refers to
+- Follow-up code questions don't need to re-state the problem
+
+History is keyed by `session_id` — different browser tabs/users are isolated.
+`POST /api/clear_session` resets history for the current session.
+
+---
+
 ## Deployment
 
 ### Local
@@ -549,15 +674,40 @@ PATCH  /api/users/<id>/profile
 ./run.sh
 ```
 
-### ngrok (share with remote users)
+### Tunnel (global access — Cloudflare or ngrok)
+
+`run.sh` tries Cloudflare Tunnel first (free, no auth, stable), falls back to ngrok:
 
 ```bash
 # In .env
 USE_NGROK=true
-NGROK_DOMAIN=your-domain.ngrok-free.app   # optional fixed domain
+NGROK_DOMAIN=your-domain.ngrok-free.app   # optional fixed ngrok domain
 ```
 
-Restart the server — ngrok URL is shown in startup output and reflected in the UI.
+**Cloudflare Tunnel (recommended):**
+```bash
+# Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+sudo apt install cloudflared     # or brew install cloudflare/cloudflare/cloudflared
+```
+
+Restart the server — tunnel URL is shown in startup output.
+
+### Async LLM (Celery + Redis — optional)
+
+For high-concurrency deployments:
+
+```bash
+# Install
+pip install celery redis
+
+# .env
+CELERY_ENABLED=true
+REDIS_URL=redis://localhost:6379/0
+
+# run.sh auto-starts Redis (Docker) and Celery worker when CELERY_ENABLED=true
+```
+
+When `CELERY_ENABLED=false` (default), all LLM calls run synchronously — no change to behaviour.
 
 ### Production (Flask serves React)
 
