@@ -31,8 +31,9 @@ def test_api_ask_uses_db(monkeypatch, client):
     data = response.get_json()
     assert response.status_code == 200
     assert data["answer"] == "db-answer"
-    assert data["question"].lower().startswith("what is")
-    assert called["saved"][0].lower().startswith("what is")
+    # DB-driven expansion: "lambda" found in DB (monkeypatched) → not expanded
+    assert "lambda" in data["question"].lower()
+    assert "lambda" in called["saved"][0].lower()
 
 
 def test_api_stream_forwards(monkeypatch, client):

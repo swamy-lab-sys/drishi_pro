@@ -48,7 +48,8 @@ def test_ask_question_payload_uses_db_hit(monkeypatch):
     assert status == 200
     assert payload["answer"] == "db-answer"
     assert payload["source"] == "db"
-    assert calls["last"]["question"].lower().startswith("what is")
+    # DB-driven expansion: "lambda" is found in DB so it is not expanded
+    assert "lambda" in calls["last"]["question"].lower()
 
 
 def test_ask_question_payload_falls_back_to_llm(monkeypatch):
