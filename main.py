@@ -1047,7 +1047,7 @@ def start(boot_start_time: float = None):
     # Update state with active model names (shown in /api/session-info)
     _stt_info = stt.get_model_info()
     state.set_active_models(
-        stt=_stt_info.get('backend', config.STT_BACKEND) + '/' + _stt_info.get('name', config.STT_MODEL),
+        stt=(_stt_info.get('backend') or config.STT_BACKEND) + '/' + (_stt_info.get('name') or config.STT_MODEL),
         llm=config.LLM_MODEL,
     )
 
