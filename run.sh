@@ -236,6 +236,34 @@ rm -f ~/.drishi/current_answer.json ~/.drishi/history.json 2>/dev/null || true
 echo -e "  ${G}✓${D} Fresh session ready"
 
 # ═══════════════════════════════════════════════════════════════════
+#  STEP 10a — Redis + Celery (optional async task queue)
+# ═══════════════════════════════════════════════════════════════════
+CELERY_ENABLED="${CELERY_ENABLED:-false}"
+CELERY_PID=""
+if [ "$CELERY_ENABLED" = "true" ]; then
+    REDIS_URL="${REDIS_URL:-redis://localhost:6379/0}"
+    # Try to start Redis via Docker if not running
+    if command -v redis-cli &>/dev/null && ! redis-cli -u "$REDIS_URL" ping &>/dev/null 2>&1; then
+        if command -v docker &>/dev/null; then
+            echo -e "  ${Y}⚡${D} Starting Redis container..."
+            docker run -d --name drishi-redis -p 6379:6379 redis:7-alpine > /dev/null 2>&1 || true
+            sleep 1
+        fi
+    fi
+    if redis-cli -u "$REDIS_URL" ping &>/dev/null 2>&1; then
+        echo -e "  ${G}✓${D} Redis ready ($REDIS_URL)"
+        # Start Celery worker in background
+        ./venv/bin/celery -A celery_app worker \
+            --loglevel=warning --concurrency=2 \
+            --logfile=/tmp/drishi_celery.log 2>&1 &
+        CELERY_PID=$!
+        echo -e "  ${G}✓${D} Celery worker started (pid=$CELERY_PID)"
+    else
+        echo -e "  ${Y}⚠${D} Redis unavailable — async LLM disabled (set CELERY_ENABLED=false to hide this)"
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════════
 #  STEP 10 — Tunnel (Cloudflare preferred, ngrok fallback)
 # ═══════════════════════════════════════════════════════════════════
 NGROK_URL=""
@@ -339,6 +367,7 @@ fi
 # `exec` fires EXIT before replacing the shell, which would kill the agent instantly.
 # The agent is self-managing (reconnects) and is killed by pkill on next ./run.sh.
 trap 'kill $NGROK_PID 2>/dev/null || true
+      kill $CELERY_PID 2>/dev/null || true
       [[ -n "$ORIGINAL_SOURCE" ]] && pactl set-default-source "$ORIGINAL_SOURCE" 2>/dev/null || true' EXIT
 
 # ═══════════════════════════════════════════════════════════════════

@@ -87,6 +87,17 @@ MouseInfo==0.1.3
 # ── Cloud STT (optional) ────────────────────────────────────────────
 deepgram-sdk==6.0.1
 
+# ── Semantic Search (optional — enable by installing) ───────────────
+# sentence-transformers==3.4.1   # pip install sentence-transformers
+# torch==2.7.0                   # pulled in by sentence-transformers
+
+# ── Async task queue (optional — set CELERY_ENABLED=true) ───────────
+# celery==5.4.0                  # pip install celery redis
+# redis==5.2.0
+
+# ── ElevenLabs TTS (optional — set ELEVENLABS_ENABLED=true) ─────────
+# elevenlabs==1.13.0             # pip install elevenlabs
+
 # ── ONNX runtime (faster-whisper dependency) ────────────────────────
 onnxruntime==1.23.2
 
