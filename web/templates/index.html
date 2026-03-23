@@ -1811,6 +1811,38 @@ function setLiveBadge(state) {
 
 let _sseConnectedOnce = false;
 
+// ── TTS Earpiece ───────────────────────────────────────────────────────────────
+let _ttsEnabled = false;   // set from /api/launch_config on page load
+
+async function _ttsSpeak(text) {
+  if (!_ttsEnabled || !text) return;
+  // Strip markdown bullets/symbols for cleaner speech
+  const clean = text.replace(/^[\-\*•]\s*/gm, '').replace(/\*\*/g, '').replace(/#+ /g, '').trim();
+  if (!clean) return;
+  try {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws/tts`);
+    ws.binaryType = 'arraybuffer';
+    const chunks = [];
+    ws.onopen = () => ws.send(JSON.stringify({ text: clean.slice(0, 1000) }));
+    ws.onmessage = evt => {
+      if (typeof evt.data === 'string') {
+        let msg; try { msg = JSON.parse(evt.data); } catch { return; }
+        if (msg.event === 'done') {
+          ws.close();
+          const blob = new Blob(chunks, { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.play().catch(() => {});
+        }
+      } else {
+        chunks.push(new Uint8Array(evt.data));
+      }
+    };
+    ws.onerror = () => {};
+  } catch(e) {}
+}
+
 function startStream() {
   setLiveBadge('reconnect');
 
@@ -1846,6 +1878,8 @@ function startStream() {
   DrishiStream.on('answer', rawData => {
     let ans; try { ans = JSON.parse(rawData); } catch { return; }
     completeCard(ans);
+    // TTS earpiece: stream answer text as audio if enabled
+    if (ans && ans.answer) _ttsSpeak(ans.answer);
   });
 
   DrishiStream.on('transcribing', rawData => {
@@ -2183,6 +2217,12 @@ async function _tbInit() {
   _tbClearLlm();
   const llmChip = document.getElementById('tbc-' + _model);
   if (llmChip) llmChip.classList.add('active-llm');
+
+  // Load TTS enabled state
+  try {
+    const lc = await fetch('/api/launch_config').then(r => r.json());
+    _ttsEnabled = !!lc.elevenlabs_enabled;
+  } catch {}
 
   // Load current role chip
   try {

@@ -1192,6 +1192,41 @@ def _handle_ws_text(ws, text: str, ext_session: dict = None):
             pass
 
 
+# ── ElevenLabs TTS WebSocket endpoint ─────────────────────────────────────────
+@sock.route('/ws/tts')
+def tts_websocket(ws):
+    """Stream MP3 audio for incoming text via ElevenLabs TTS.
+
+    Client sends: {"text": "...", "voice_id": "optional-id"}
+    Server replies: binary MP3 chunks, then {"event": "done"} JSON frame.
+    If TTS disabled or error, sends {"event": "error", "message": "..."}.
+    """
+    try:
+        raw = ws.receive(timeout=10)
+        if not raw:
+            return
+        data = json.loads(raw) if isinstance(raw, str) else {}
+        text = (data.get("text") or "").strip()
+        if not text:
+            ws.send(json.dumps({"event": "error", "message": "No text provided"}))
+            return
+
+        import tts_client
+        if not tts_client.is_enabled():
+            ws.send(json.dumps({"event": "error", "message": "ElevenLabs TTS not enabled"}))
+            return
+
+        voice_id = data.get("voice_id") or None
+        for chunk in tts_client.stream_tts(text, voice_id=voice_id):
+            ws.send(chunk)
+        ws.send(json.dumps({"event": "done"}))
+    except Exception as exc:
+        try:
+            ws.send(json.dumps({"event": "error", "message": str(exc)}))
+        except Exception:
+            pass
+
+
 # ── Browser Monitor WebSocket endpoint ────────────────────────────────────────
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).parent))

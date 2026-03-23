@@ -602,6 +602,35 @@ body.sb-collapsed #saved-flash { left: var(--sb-w-col); }
           </div>
         </div>
 
+        <!-- ElevenLabs TTS -->
+        <div class="inner-card settings-inner-grid-full">
+          <div class="inner-card-head">
+            <div class="inner-card-icon">🎧</div>
+            <div>
+              <div class="inner-card-title">ElevenLabs TTS — Earpiece Mode</div>
+              <div class="inner-card-sub">Stream answers as speech to your earpiece via browser audio</div>
+            </div>
+          </div>
+          <div style="background:var(--green-bg);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-medium);line-height:1.6;margin-bottom:14px">
+            <strong style="color:var(--green)">How it works:</strong> When enabled, each LLM answer is also streamed as audio via WebSocket → browser → your AirPods/earpiece. Set ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID in .env.
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Enable TTS Earpiece</div>
+              <div class="toggle-hint">Requires ELEVENLABS_API_KEY in .env. Adds ~0.5s audio latency.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="tog-tts" onchange="setTtsEnabled(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div style="height:12px"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-secondary" onclick="testTts()">▶ Test TTS</button>
+            <span id="tts-status" style="font-size:12px;color:var(--text-muted)"></span>
+          </div>
+        </div>
+
       </div><!-- /inner-grid -->
     </div><!-- /panel-ai -->
 
@@ -912,6 +941,61 @@ function setModel(m) {
   fetch('/api/launch_config', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ llm_model: m }) }).catch(() => {});
   showSaved();
+}
+
+/* ── ElevenLabs TTS ──────────────────────────────────────── */
+let _ttsWs = null;
+let _ttsAudioChunks = [];
+let _ttsMediaSource = null;
+
+function setTtsEnabled(enabled) {
+  fetch('/api/launch_config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ elevenlabs_enabled: enabled })
+  }).catch(() => {});
+  const st = document.getElementById('tts-status');
+  if (st) st.textContent = enabled ? '✓ TTS enabled (takes effect immediately)' : '';
+  showSaved();
+}
+
+async function testTts() {
+  const st = document.getElementById('tts-status');
+  if (st) { st.textContent = '⏳ Connecting…'; st.style.color = 'var(--text-muted)'; }
+  try {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws/tts`);
+    ws.binaryType = 'arraybuffer';
+    const chunks = [];
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ text: 'ElevenLabs TTS test successful. Your earpiece is working.' }));
+    };
+    ws.onmessage = (evt) => {
+      if (typeof evt.data === 'string') {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === 'done') {
+          ws.close();
+          const blob = new Blob(chunks, { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.play().then(() => {
+            if (st) { st.textContent = '✓ TTS working'; st.style.color = 'var(--green)'; }
+          }).catch(e => {
+            if (st) { st.textContent = '✗ Audio play blocked: ' + e.message; st.style.color = 'var(--red)'; }
+          });
+        } else if (msg.event === 'error') {
+          if (st) { st.textContent = '✗ ' + msg.message; st.style.color = 'var(--red)'; }
+        }
+      } else {
+        chunks.push(new Uint8Array(evt.data));
+      }
+    };
+    ws.onerror = () => {
+      if (st) { st.textContent = '✗ WebSocket error'; st.style.color = 'var(--red)'; }
+    };
+  } catch(e) {
+    if (st) { st.textContent = '✗ ' + e.message; st.style.color = 'var(--red)'; }
+  }
 }
 
 /* ── Theme ───────────────────────────────────────────────── */

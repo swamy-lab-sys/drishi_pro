@@ -56,6 +56,7 @@ def get_launch_config_payload() -> dict:
         "stt_model": config.STT_MODEL,
         "llm_model": config.LLM_MODEL,
         "user_id_override": config.USER_ID_OVERRIDE,
+        "elevenlabs_enabled": config.ELEVENLABS_ENABLED,
     }
 
 
@@ -114,6 +115,14 @@ def update_launch_config(data: dict) -> dict:
                 print(f"[SETTINGS] Active user → {result.get('name', val)} (id={val})")
             except Exception:
                 pass
+
+    if "elevenlabs_enabled" in data:
+        val = bool(data["elevenlabs_enabled"])
+        config.ELEVENLABS_ENABLED = val
+        os.environ["ELEVENLABS_ENABLED"] = "true" if val else "false"
+        _persist_env("ELEVENLABS_ENABLED", "true" if val else "false")
+        changed["elevenlabs_enabled"] = val
+        print(f"[SETTINGS] ElevenLabs TTS → {'enabled' if val else 'disabled'}")
 
     if changed:
         print(f"[SETTINGS] Launch config applied: {changed}")
