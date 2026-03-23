@@ -523,7 +523,7 @@ GET  /api/stream           SSE — events: question_started, chunk, answer, erro
 POST /api/cc_question      {"text":"..."} — Chrome extension text injection
 
 GET  /api/interview_tips   ?role=python&round=tech
-                           → {role, round, tips: [...10 live interview tips]}
+                           → {role, round, round_tips: [...6 round tips], role_tips: [...4 role tips], total: 10}
                            Roles: general|python|java|javascript|sql|saas|devops|production_support|telecom
                            Rounds: tech|hr|design|code
 

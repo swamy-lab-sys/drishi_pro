@@ -1895,7 +1895,7 @@ code {
           <tr>
             <td><span class="method-badge get">GET</span></td>
             <td><code>/api/interview_tips</code></td>
-            <td>Live interview tips for the current role + round. Params: <code>role</code>, <code>round</code> (both optional — fall back to active session values). Returns 10 actionable tips.</td>
+            <td>Live interview tips for the current role + round. Params: <code>role</code>, <code>round</code> (both optional). Returns <code>round_tips</code> (6 round-specific) + <code>role_tips</code> (4 role-specific), total 10.</td>
           </tr>
           <tr>
             <td><span class="method-badge get">GET</span></td>

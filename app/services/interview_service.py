@@ -155,12 +155,13 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
     db_result = None if quick_mode else qa_database.find_answer(question, want_code=wants_code, user_role=user_role, role_tag=_role_tag)
     if db_result:
         db_answer, db_score, db_id = db_result
+        _ms = int((time.time() - _t0) * 1000)
         answer_storage.set_complete_answer(
             question,
             db_answer,
-            {"source": f"db-{db_id}", "db_score": round(db_score, 2)},
+            {"source": f"db-{db_id}", "db_score": round(db_score, 2), "latency_ms": _ms},
         )
-        state.record_answer_latency((time.time() - _t0) * 1000)
+        state.record_answer_latency(_ms)
         return {
             "answer": db_answer,
             "source": "db",
@@ -176,12 +177,13 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
             sem_result = _sem.find_semantic_answer(question, want_code=wants_code)
             if sem_result:
                 sem_answer, sem_score, sem_id = sem_result
+                _ms = int((time.time() - _t0) * 1000)
                 answer_storage.set_complete_answer(
                     question,
                     sem_answer,
-                    {"source": f"semantic-{sem_id}", "sem_score": round(sem_score, 2)},
+                    {"source": f"semantic-{sem_id}", "sem_score": round(sem_score, 2), "latency_ms": _ms},
                 )
-                state.record_answer_latency((time.time() - _t0) * 1000)
+                state.record_answer_latency(_ms)
                 return {
                     "answer": sem_answer,
                     "source": "semantic",
@@ -196,8 +198,9 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
     import answer_cache as _ac
     cached = None if quick_mode else _ac.get_cached_answer(question, role=user_role)
     if cached:
-        answer_storage.set_complete_answer(question, cached, {"source": "cache"})
-        state.record_answer_latency((time.time() - _t0) * 1000)
+        _ms = int((time.time() - _t0) * 1000)
+        answer_storage.set_complete_answer(question, cached, {"source": "cache", "latency_ms": _ms})
+        state.record_answer_latency(_ms)
         return {
             "answer": cached,
             "source": "cache",
@@ -224,9 +227,10 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
                 # Quick ask: short focused answer, no streaming, ~0.8s TTFT
                 answer = llm_client.get_quick_answer(question)
                 if answer:
-                    answer_storage.set_complete_answer(question, answer, {"source": "api-quick"})
+                    _ms = int((time.time() - _t0) * 1000)
+                    answer_storage.set_complete_answer(question, answer, {"source": "api-quick", "latency_ms": _ms})
                     answer_cache.cache_answer(question, answer, role=user_role)
-                    state.record_answer_latency((time.time() - _t0) * 1000)
+                    state.record_answer_latency(_ms)
                 return
 
             if wants_code:
@@ -250,9 +254,10 @@ def ask_question_payload(data: dict | None) -> tuple[dict, int]:
 
             if answer:
                 src_tag = "api-code" if wants_code else "api"
-                answer_storage.set_complete_answer(question, answer, {"source": src_tag})
+                _ms = int((time.time() - _t0) * 1000)
+                answer_storage.set_complete_answer(question, answer, {"source": src_tag, "latency_ms": _ms})
                 answer_cache.cache_answer(question, answer, role=user_role)
-                state.record_answer_latency((time.time() - _t0) * 1000)
+                state.record_answer_latency(_ms)
                 try:
                     from main import _submit_for_learning
                     _submit_for_learning(question, answer, wants_code)
