@@ -53,8 +53,7 @@ def _load_model():
             print("[SEMANTIC] Loading all-MiniLM-L6-v2…")
             _model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
             print("[SEMANTIC] Model loaded.")
-        except Exception as exc:
-            print(f"[SEMANTIC] sentence-transformers not available: {exc}")
+        except Exception:
             _model = None
     return _model
 
@@ -229,7 +228,6 @@ def find_semantic_answer(
 def init_async():
     """Build the embedding index in a background thread at server startup."""
     if not _is_available():
-        print("[SEMANTIC] sentence-transformers not installed — semantic search disabled")
         return
     t = threading.Thread(target=_build_index, daemon=True, name="semantic-init")
     t.start()

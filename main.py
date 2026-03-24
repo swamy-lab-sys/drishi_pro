@@ -922,11 +922,7 @@ def start(boot_start_time: float = None):
 
     ALWAYS SUCCEEDS - never crashes due to audio/device issues.
     """
-    print("\n" + "=" * 60)
-    print(PRODUCT_NAME.upper())
-    print("=" * 60)
-    print(f"  STT Model: {config.STT_MODEL}")
-    print(f"  LLM Model: {os.environ.get('LLM_MODEL_OVERRIDE', config.LLM_MODEL)}")
+    print(f"  STT: {config.STT_MODEL} | LLM: {os.environ.get('LLM_MODEL_OVERRIDE', config.LLM_MODEL)}")
 
     # Clear runtime state (locks, cooldowns, etc.)
     state.force_clear_all()
@@ -977,19 +973,18 @@ def start(boot_start_time: float = None):
         )
         # Display LAN IP prominently for Extension and Mobile
         _lan_ip = get_server_ip()
-        _public_domain = os.environ.get("NGROK_DOMAIN")
-        _server_url = f"https://{_public_domain}" if _public_domain else f"http://{_lan_ip}:{config.WEB_PORT}"
-        _mobile_url = f"https://{_public_domain}" if _public_domain else f"http://{_lan_ip}:{config.WEB_PORT}"
+        _tunnel_url = os.environ.get("NGROK_URL") or (
+            f"https://{os.environ['NGROK_DOMAIN']}" if os.environ.get("NGROK_DOMAIN") else None
+        )
+        _server_url = _tunnel_url or f"http://{_lan_ip}:{config.WEB_PORT}"
+        _mobile_url = _server_url
         
-        print(f"✓ {product_banner()}")
-        print(f"✓ Web UI: http://localhost:{config.WEB_PORT}")
-        print(f"✓ Extension Server URL: {_server_url}")
-        print(f"✓ Mobile: {_mobile_url}  ← open on phone/tablet")
+        if _tunnel_url:
+            print(f"✓ Extension Server URL: {_server_url}")
     except Exception:
         pass
 
     # Pre-load STT + warm up cloud connections
-    print("Loading models...")
     import stt
     import numpy as np
     if config.STT_BACKEND == "deepgram":
@@ -1014,8 +1009,10 @@ def start(boot_start_time: float = None):
                 timeout=8,
             )
             _resp.raise_for_status()
+            stt._sarvam_down = False
             print("  ✓ Sarvam API: connected (saarika:v2.5)")
         except Exception as _e:
+            stt._sarvam_down = True
             print(f"  ⚠ Sarvam API failed: {_e}")
             print("  ⚠ FALLING BACK TO LOCAL WHISPER — change STT in settings or check SARVAM_API_KEY")
     else:

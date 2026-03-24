@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drishi Audio Stream</title>
+<link rel="manifest" href="/static/stream_manifest.json">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: #1e293b; border-radius: 16px; padding: 36px 32px;
+    width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9; }
+  .sub { font-size: 12px; color: #64748b; margin-bottom: 24px; }
+
+  label { font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 6px; }
+  select {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+    font-size: 13px; margin-bottom: 16px; cursor: pointer;
+  }
+  select:focus { outline: none; border-color: #6366f1; }
+
+  .token-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  input[type=text] {
+    flex: 1; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+    font-size: 13px;
+  }
+  input[type=text]:focus { outline: none; border-color: #6366f1; }
+
+  .btn {
+    width: 100%; padding: 13px; border-radius: 10px; border: none;
+    font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-start { background: #6366f1; color: #fff; }
+  .btn-start:hover { background: #4f46e5; }
+  .btn-stop  { background: #ef4444; color: #fff; margin-top: 10px; display: none; }
+  .btn-stop:hover { background: #dc2626; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  .status {
+    margin-top: 18px; padding: 10px 14px; border-radius: 8px;
+    font-size: 12px; font-weight: 600; text-align: center;
+    background: #0f172a; color: #64748b;
+  }
+  .status.ok  { color: #22c55e; }
+  .status.err { color: #ef4444; }
+  .status.live { color: #6366f1; }
+
+  .dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; background: #64748b; margin-right: 6px;
+    vertical-align: middle;
+  }
+  .dot.live { background: #22c55e; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+  }
+
+  .tip {
+    margin-top: 20px; padding: 12px; border-radius: 8px;
+    background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2);
+    font-size: 11px; color: #94a3b8; line-height: 1.6;
+  }
+  .tip strong { color: #a5b4fc; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🎙 Drishi Audio Capture</h2>
+  <p class="sub">Streams mic/loopback audio → Bangalore server → Sarvam STT</p>
+
+  <label>Audio Source</label>
+  <select id="deviceSelect">
+    <option value="">⏳ Loading devices...</option>
+  </select>
+
+  <label>User Token (optional)</label>
+  <div class="token-row">
+    <input type="text" id="tokenInput" placeholder="your-token" />
+  </div>
+
+  <button class="btn btn-start" id="startBtn">▶ Start Capture</button>
+  <button class="btn btn-stop"  id="stopBtn">■ Stop</button>
+
+  <div class="status" id="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusTxt">Ready — select audio source and start</span>
+  </div>
+
+  <div class="tip">
+    <strong>Setup (one time):</strong><br>
+    <code>pactl load-module module-loopback latency_msec=5</code><br><br>
+    Then select <strong>"Monitor of …"</strong> device above — this captures
+    Chrome audio only (interviewer voice), not your microphone.
+    <br><br>
+    <strong>No tab capture. No indicators. Safe.</strong>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const startBtn    = document.getElementById('startBtn');
+  const stopBtn     = document.getElementById('stopBtn');
+  const deviceSel   = document.getElementById('deviceSelect');
+  const tokenInput  = document.getElementById('tokenInput');
+  const statusEl    = document.getElementById('status');
+  const statusTxt   = document.getElementById('statusTxt');
+  const dot         = document.getElementById('dot');
+
+  const SAMPLE_RATE  = 16000;
+  const CHUNK_SIZE   = 1024;  // 64ms @ 16kHz
+  const WS_PING_MS   = 15000;
+
+  let active = false, micStream = null, micCtx = null, micWs = null;
+  let micProc = null, pingTimer = null;
+
+  // ── Load saved token ────────────────────────────────────────────────────────
+  tokenInput.value = localStorage.getItem('drishi_token') || '';
+
+  // ── Enumerate audio devices ─────────────────────────────────────────────────
+  async function loadDevices() {
+    try {
+      // Request mic permission first so device labels are visible
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tmp.getTracks().forEach(t => t.stop());
+    } catch (_) {}
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs  = devices.filter(d => d.kind === 'audioinput');
+    deviceSel.innerHTML = '';
+
+    // Put "Monitor" (loopback) devices first — that's what we want
+    const sorted = [
+      ...inputs.filter(d => d.label.toLowerCase().includes('monitor')),
+      ...inputs.filter(d => !d.label.toLowerCase().includes('monitor')),
+    ];
+
+    if (sorted.length === 0) {
+      deviceSel.innerHTML = '<option value="">No audio devices found</option>';
+      return;
+    }
+
+    sorted.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Device ${d.deviceId.slice(0, 8)}`;
+      // Pre-select first Monitor device
+      if (d.label.toLowerCase().includes('monitor') && !deviceSel.value) {
+        opt.selected = true;
+      }
+      deviceSel.appendChild(opt);
+    });
+  }
+
+  await loadDevices();
+
+  // ── Status helpers ──────────────────────────────────────────────────────────
+  function setStatus(msg, cls = '') {
+    statusTxt.textContent = msg;
+    statusEl.className    = 'status ' + cls;
+    dot.className         = 'dot ' + (cls === 'live' ? 'live' : '');
+  }
+
+  // ── PCM helpers ─────────────────────────────────────────────────────────────
+  function toPcm16(f32) {
+    const out = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++)
+      out[i] = Math.max(-32768, Math.min(32767, f32[i] * 32767));
+    return out;
+  }
+
+  // ── Stop ────────────────────────────────────────────────────────────────────
+  function doStop() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    if (micProc)   { try { micProc.disconnect(); } catch(_){} micProc = null; }
+    if (micCtx)    { try { micCtx.close();       } catch(_){} micCtx  = null; }
+    if (micWs)     { try { micWs.close(1000);    } catch(_){} micWs   = null; }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    active = false;
+    startBtn.disabled    = false;
+    startBtn.style.display = 'block';
+    stopBtn.style.display  = 'none';
+    setStatus('Stopped');
+  }
+
+  // ── Start ───────────────────────────────────────────────────────────────────
+  async function doStart() {
+    const deviceId = deviceSel.value;
+    const token    = tokenInput.value.trim();
+    if (!deviceId) { setStatus('Select an audio device first', 'err'); return; }
+
+    localStorage.setItem('drishi_token', token);
+
+    startBtn.disabled = true;
+    setStatus('Requesting mic access…');
+
+    // 1. Capture selected audio device
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId:          { exact: deviceId },
+          echoCancellation:  false,
+          noiseSuppression:  false,
+          autoGainControl:   false,
+          sampleRate:        SAMPLE_RATE,
+        },
+        video: false,
+      });
+    } catch (e) {
+      setStatus('Mic access denied: ' + e.message, 'err');
+      startBtn.disabled = false;
+      return;
+    }
+
+    // 2. Connect WebSocket to server
+    setStatus('Connecting to server…');
+    const proto  = location.protocol === 'https:' ? 'wss' : 'ws';
+    const params = new URLSearchParams({ 'ngrok-skip-browser-warning': '1' });
+    if (token) params.set('token', token);
+    const wsUrl  = `${proto}://${location.host}/ws/audio?${params}`;
+
+    micWs = new WebSocket(wsUrl);
+    micWs.binaryType = 'arraybuffer';
+
+    try {
+      await new Promise((res, rej) => {
+        const t = setTimeout(() => rej(new Error('Connection timed out (5s)')), 5000);
+        micWs.onopen  = () => { clearTimeout(t); res(); };
+        micWs.onerror = () => { clearTimeout(t); rej(new Error('WebSocket failed — check server URL')); };
+      });
+    } catch (e) {
+      doStop();
+      setStatus(e.message, 'err');
+      return;
+    }
+
+    micWs.onclose = (ev) => {
+      if (active && ev.code !== 1000) {
+        setStatus('Connection dropped — stopped', 'err');
+        doStop();
+      }
+    };
+
+    pingTimer = setInterval(() => {
+      if (micWs?.readyState === WebSocket.OPEN)
+        micWs.send(JSON.stringify({ type: 'ping' }));
+    }, WS_PING_MS);
+
+    // 3. Audio pipeline
+    micCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    if (micCtx.state === 'suspended') await micCtx.resume();
+    const source = micCtx.createMediaStreamSource(micStream);
+
+    // AudioWorklet preferred, ScriptProcessorNode fallback
+    let usedWorklet = false;
+    try {
+      await micCtx.audioWorklet.addModule('/static/js/pcm_worklet.js');
+      micProc = new AudioWorkletNode(micCtx, 'drishi-pcm-capture');
+      micProc.port.onmessage = (e) => {
+        if (micWs?.readyState === WebSocket.OPEN)
+          micWs.send(toPcm16(e.data).buffer);
+      };
+      source.connect(micProc);
+      usedWorklet = true;
+    } catch (_) {
+      micProc = micCtx.createScriptProcessor(CHUNK_SIZE, 1, 1);
+      micProc.onaudioprocess = (ev) => {
+        if (micWs?.readyState === WebSocket.OPEN)
+          micWs.send(toPcm16(ev.inputBuffer.getChannelData(0)).buffer);
+      };
+      source.connect(micProc);
+      micProc.connect(micCtx.destination);
+    }
+
+    active = true;
+    startBtn.style.display = 'none';
+    stopBtn.style.display  = 'block';
+    const src = deviceSel.options[deviceSel.selectedIndex]?.text || 'device';
+    setStatus(`Live — ${src.slice(0, 30)} (${usedWorklet ? 'Worklet' : 'SPNode'})`, 'live');
+  }
+
+  startBtn.addEventListener('click', doStart);
+  stopBtn.addEventListener('click', doStop);
+})();
+</script>
+</body>
+</html>

@@ -27,6 +27,8 @@ function apiFetch(url, opts = {}) {
 chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev', secretCode: '' }, (data) => {
   SERVER_URL  = data.serverUrl;
   SECRET_CODE = data.secretCode;
+  // Try to auto-discover tunnel URL from local server
+  _autoDiscoverTunnelUrl();
 });
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -58,8 +60,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   // ── Audio stream messages ─────────────────────────────────────────────────
-  if (request.action === 'audio_start') { handleAudioStart(sendResponse, request.userToken || ''); return true; }
-  if (request.action === 'audio_stop')  { handleAudioStop(sendResponse);  return true; }
+  if (request.action === 'audio_start') { handleAudioStart(sendResponse, request); return true; }
+  if (request.action === 'audio_stop')  { handleAudioStop(sendResponse); return true; }
   if (request.type === 'audio_status') {
     audioStreamActive = request.status === 'streaming';
     chrome.storage.local.set({ audioStreamStatus: request.status || 'stopped' });
@@ -95,6 +97,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "mon_screen_capture_started") {
     monUpdateState({ screenStatus: "streaming", screenEnabled: true, lastError: "" });
     monCaptureRestartAttempts = 0;
+    _broadcastToAllTabs({ type: 'drishi_screen_share_state', active: true });
     sendResponse({ ok: true });
     return false;
   }
@@ -111,6 +114,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       streamViewerCount: 0,
       lastError: interrupted ? (request.error || monCurrentSettings.lastError) : "",
     });
+    _broadcastToAllTabs({ type: 'drishi_screen_share_state', active: false });
     sendResponse({ ok: true });
     if (interrupted) monQueueCaptureRestart(reason);
     return false;
@@ -198,6 +202,37 @@ async function handleSolveChatProxy(payload, sendResponse) {
   } catch (error) {
     sendResponse({ success: false, error: error.message });
   }
+}
+
+// ── Broadcast helper — send message to all tabs ───────────────────────────────
+function _broadcastToAllTabs(msg) {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+      }
+    }
+  });
+}
+
+// ── Tunnel URL auto-discovery ─────────────────────────────────────────────────
+// Fetches /api/tunnel_url from localhost on startup. If the server exposes a
+// Cloudflare/ngrok public URL, the extension auto-updates its serverUrl so it
+// works globally without manual configuration.
+function _autoDiscoverTunnelUrl() {
+  fetch('http://localhost:8000/api/tunnel_url', {
+    signal: AbortSignal.timeout(2000),
+    headers: { 'ngrok-skip-browser-warning': 'true' },
+  })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.url && data.url !== SERVER_URL) {
+        SERVER_URL = data.url;
+        chrome.storage.sync.set({ serverUrl: data.url });
+        console.log('[Drishi] Auto-updated server URL:', data.url);
+      }
+    })
+    .catch(() => {/* localhost not reachable — use stored URL */});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -730,140 +765,86 @@ async function monHandleControlCommand(payload) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  AUDIO STREAM — tab audio capture → PCM-16 → /ws/audio
+//
+//  Flow: popup calls chrome.tabCapture.getMediaStreamId({}) (no targetTabId)
+//        which captures whatever tab was active when the popup opened — no tab
+//        switching needed. Popup then sends streamId + config here to start.
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Meeting tab URL patterns — used to auto-detect the interview tab ──────────
-const MEETING_URL_PATTERNS = [
-  '*://meet.google.com/*',
-  '*://*.teams.microsoft.com/*',
-  '*://teams.live.com/*',
-  '*://teams.microsoft.com/*',
-  '*://zoom.us/wc/*',
-  '*://zoom.us/j/*',
-  '*://app.zoom.us/wc/*',
-  '*://*.zoom.us/wc/*',
-  '*://webex.com/*',
-  '*://*.webex.com/meet/*',
-];
 
-/**
- * Find the best tab to capture audio from.
- * Priority: (1) known meeting URL, (2) last-active tab across all windows.
- * Returns { tab, source: 'meeting'|'active' }
- */
-async function findMeetingTab() {
-  // 1. Search across all windows for a recognised meeting URL
-  for (const pattern of MEETING_URL_PATTERNS) {
-    const tabs = await chrome.tabs.query({ url: pattern });
-    if (tabs.length > 0) {
-      // Pick the most recently accessed tab
-      tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-      return { tab: tabs[0], source: 'meeting' };
-    }
-  }
-  // 2. Fall back to whatever tab is currently active in the focused window
-  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (activeTab?.id) return { tab: activeTab, source: 'active' };
-  return { tab: null, source: null };
+/** Safely close offscreen doc (idempotent). */
+async function _closeOffscreenDoc() {
+  try { await chrome.offscreen.closeDocument(); } catch (_) {}
+  audioOffscreenCreated = false;
 }
 
-async function handleAudioStart(sendResponse, userToken = '') {
+/** Create offscreen doc, recovering from stale-doc crash automatically. */
+async function _ensureOffscreenDoc() {
+  if (audioOffscreenCreated) return;
+  const docUrl = chrome.runtime.getURL('audio_offscreen.html');
   try {
-    // Auto-detect meeting tab (Google Meet, Teams, Zoom, Webex)
-    const { tab: targetTab, source } = await findMeetingTab();
-    if (!targetTab?.id) {
-      throw new Error('No meeting tab found. Open Google Meet / Teams / Zoom in Chrome first.');
-    }
-    console.log(`[AudioStream] Target tab: [${source}] ${targetTab.url?.slice(0, 80)}`);
-    // Tell popup which tab we're capturing
-    chrome.storage.local.set({
-      captureTabTitle: targetTab.title || targetTab.url || 'Unknown tab',
-      captureTabUrl:   targetTab.url  || '',
+    await chrome.offscreen.createDocument({
+      url: docUrl, reasons: ['USER_MEDIA'],
+      justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
     });
-
-    // Load current server settings
-    const stored     = await chrome.storage.sync.get({ serverUrl: SERVER_URL, secretCode: SECRET_CODE });
-    const serverUrl  = stored.serverUrl  || SERVER_URL;
-    const secretCode = stored.secretCode || SECRET_CODE;
-
-    // Parallelize: create offscreen doc AND fetch stt_config simultaneously
-    const offscreenPromise = audioOffscreenCreated
-      ? Promise.resolve()
-      : chrome.offscreen.createDocument({
-          url: chrome.runtime.getURL('audio_offscreen.html'),
-          reasons: ['USER_MEDIA'],
-          justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio endpoint',
-        }).then(() => { audioOffscreenCreated = true; });
-
-    // Use cached Sarvam key if fresh (< 60s), otherwise fetch
-    const sarvamKeyPromise = (async () => {
-      const now = Date.now();
-      if (_sarvamKeyCache !== null && now - _sarvamKeyCacheAt < SARVAM_KEY_TTL_MS) {
-        return _sarvamKeyCache;
-      }
-      try {
-        const tokenParam = secretCode
-          ? `?token=${encodeURIComponent(secretCode)}&ngrok-skip-browser-warning=1`
-          : '?ngrok-skip-browser-warning=1';
-        const cfgResp = await fetch(`${serverUrl}/api/stt_config${tokenParam}`,
-          { signal: AbortSignal.timeout(3000) });  // was 5000
-        if (cfgResp.ok) {
-          const cfg = await cfgResp.json();
-          _sarvamKeyCache   = cfg.sarvam_key || '';
-          _sarvamKeyCacheAt = Date.now();
-          return _sarvamKeyCache;
-        }
-      } catch (e) {
-        console.warn('[AudioStream] Could not fetch stt_config:', e.message);
-      }
-      return _sarvamKeyCache || '';
-    })();
-
-    const [, sarvamKey] = await Promise.all([offscreenPromise, sarvamKeyPromise]);
-    console.log(`[AudioStream] Starting — Sarvam STT: ${sarvamKey ? 'ON (client-side)' : 'OFF (raw PCM)'}`);
-
-    // Get streamId as late as possible (token expires ~2s) — right before sending to offscreen doc
-    const streamId = await new Promise((resolve, reject) => {
-      chrome.tabCapture.getMediaStreamId({ targetTabId: targetTab.id }, (id) => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-        else resolve(id);
+    audioOffscreenCreated = true;
+  } catch (e) {
+    if (e.message?.includes('Only a single offscreen')) {
+      await _closeOffscreenDoc();
+      await chrome.offscreen.createDocument({
+        url: docUrl, reasons: ['USER_MEDIA'],
+        justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
       });
-    });
+      audioOffscreenCreated = true;
+    } else throw e;
+  }
+}
 
-    // Kick off capture in offscreen doc
-    const resp = await chrome.runtime.sendMessage({
-      type: 'audio_start_capture',
-      streamId,
-      serverUrl,
-      secretCode,
-      sarvamKey,
-      userToken,   // per-user token — included in WS URL so server routes to right session
-    });
+/**
+ * Called from popup with { streamId, serverUrl, secretCode, sarvamKey, userToken, tabTitle }.
+ * Popup already called getMediaStreamId({}) — no tab switching needed here.
+ */
+async function handleAudioStart(sendResponse, req) {
+  try {
+    const { streamId, serverUrl, secretCode, sarvamKey = '', userToken = '', tabTitle = '' } = req;
+    if (!streamId)  throw new Error('No stream ID — popup must call getMediaStreamId first.');
+    if (!serverUrl) throw new Error('Server URL not configured. Set it in Settings.');
+
+    chrome.storage.local.set({ captureTabTitle: tabTitle, captureTabUrl: '' });
+
+    await _ensureOffscreenDoc();
+
+    console.log(`[AudioStream] Starting capture — Sarvam: ${sarvamKey ? 'ON' : 'OFF'}`);
+
+    let resp;
+    try {
+      resp = await chrome.runtime.sendMessage({
+        type: 'audio_start_capture', streamId, serverUrl, secretCode, sarvamKey, userToken,
+      });
+    } catch (_) {
+      throw new Error('Offscreen document not responding. Please try again.');
+    }
 
     if (resp?.ok) {
       audioStreamActive = true;
       chrome.storage.local.set({ audioStreamStatus: 'streaming' });
       sendResponse({ ok: true });
     } else {
-      sendResponse({ ok: false, error: resp?.error || 'Capture failed to start' });
+      await _closeOffscreenDoc();
+      sendResponse({ ok: false, error: resp?.error || 'Offscreen capture failed.' });
     }
   } catch (e) {
     console.error('[AudioStream] Start failed:', e.message);
+    await _closeOffscreenDoc();
+    audioStreamActive = false;
     sendResponse({ ok: false, error: e.message });
   }
 }
 
 async function handleAudioStop(sendResponse) {
-  try {
-    if (audioOffscreenCreated) {
-      await chrome.runtime.sendMessage({ type: 'audio_stop_capture' }).catch(() => {});
-      await chrome.offscreen.closeDocument().catch(() => {});
-      audioOffscreenCreated = false;
-    }
-    audioStreamActive = false;
-    chrome.storage.local.set({ audioStreamStatus: 'stopped', captureTabTitle: '', captureTabUrl: '' });
-    sendResponse({ ok: true });
-  } catch (e) {
-    sendResponse({ ok: false, error: e.message });
-  }
+  try { await chrome.runtime.sendMessage({ type: 'audio_stop_capture' }); } catch (_) {}
+  await _closeOffscreenDoc();
+  audioStreamActive = false;
+  chrome.storage.local.set({ audioStreamStatus: 'stopped', captureTabTitle: '', captureTabUrl: '' });
+  sendResponse({ ok: true });
 }

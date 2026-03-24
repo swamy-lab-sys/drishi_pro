@@ -1196,10 +1196,7 @@ def _backfill_humanized():
 
     stale_count = len(stale_rows)
     empty_count = len(empty_rows)
-    if stale_count:
-        print(f"  [DB] Re-generated answer_humanized (backtick fix) for {stale_count} seeded rows")
-    if empty_count:
-        print(f"  [DB] Backfilled answer_humanized for {empty_count} empty rows")
+    pass  # migrations run silently
 
 
 # ── User Profile CRUD ─────────────────────────────────────────────────────────

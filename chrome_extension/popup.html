@@ -203,11 +203,11 @@
     <div style="margin-bottom:10px;padding:7px 10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;font-size:10px;color:#64748b;text-align:center;">
       Server: <span id="loginServerUrl" style="color:#6366f1;font-weight:700;">not configured</span>
       &nbsp;·&nbsp;
-      <span onclick="document.getElementById('loginScreen').style.display='none';document.getElementById('tabSettings').click();"
+      <span id="loginConfigureLink"
         style="color:#6366f1;cursor:pointer;text-decoration:underline;">Configure</span>
     </div>
     <div id="loginError" style="min-height:18px;margin-bottom:8px;font-size:11px;font-weight:600;color:#ef4444;text-align:center;opacity:0;transition:opacity .2s;"></div>
-    <button id="loginBtn" onclick="doLogin()"
+    <button id="loginBtn"
       style="width:100%;background:#6366f1;border:none;border-radius:9px;padding:12px;
              color:white;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;">
       Sign In
@@ -280,7 +280,7 @@
   </div>
   <div id="noTokenHint" class="section" style="text-align:center;">
     <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Set your User Token in Settings to access your portal</div>
-    <button onclick="document.getElementById('tabSettings').click()" class="btn btn-outline btn-sm">⚙ Go to Settings</button>
+    <button id="portalGoToSettings" class="btn btn-outline btn-sm">⚙ Go to Settings</button>
   </div>
 
   <!-- Audio Stream -->

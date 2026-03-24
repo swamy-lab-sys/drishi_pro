@@ -112,6 +112,24 @@
     }
   }
 
+  // ── Screen-share hide: inject CSS once, toggle class on <html> ─────────────
+  (function initScreenShareHide() {
+    const STYLE_ID = 'drishi-screenshare-hide';
+    if (!document.getElementById(STYLE_ID)) {
+      const s = document.createElement('style');
+      s.id = STYLE_ID;
+      s.textContent = 'html.drishi-screen-sharing .drishi-overlay { display: none !important; }';
+      (document.head || document.documentElement).appendChild(s);
+    }
+  })();
+
+  // Mark all existing Drishi overlays so the CSS rule covers them
+  function markDrishiOverlay(el) {
+    if (el && !el.classList.contains('drishi-overlay')) {
+      el.classList.add('drishi-overlay');
+    }
+  }
+
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "remote_control_state") {
       if (message.active) {
@@ -120,5 +138,20 @@
         hideOverlay();
       }
     }
+
+    if (message.type === "drishi_screen_share_state") {
+      document.documentElement.classList.toggle('drishi-screen-sharing', !!message.active);
+    }
   });
+
+  // Ensure the remote-control overlay gets the drishi-overlay class
+  const _origCreate = typeof createOverlay !== 'undefined' ? createOverlay : null;
+  if (_origCreate) {
+    // Patch: add class after create
+    const observer = new MutationObserver(() => {
+      const el = document.getElementById(OVERLAY_ID);
+      if (el) { markDrishiOverlay(el); observer.disconnect(); }
+    });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  }
 })();

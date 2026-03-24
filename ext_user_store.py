@@ -332,11 +332,31 @@ class UserAnswerStorage:
                 'is_complete': False, 'metrics': None,
             }
             self._write(force=True)
+        try:
+            import answer_storage as _gs
+            _gs.set_processing_question(question.strip())
+        except Exception:
+            pass
+        try:
+            import event_bus as _eb
+            _eb.push_question_started(question.strip())
+        except Exception:
+            pass
 
     def append_answer_chunk(self, chunk: str):
         with self._lock:
             self._current['answer'] += chunk
             self._write(force=False)
+        try:
+            import answer_storage as _gs
+            _gs.append_answer_chunk(chunk)
+        except Exception:
+            pass
+        try:
+            import event_bus as _eb
+            _eb.push_chunk(self._current.get('question', ''), chunk)
+        except Exception:
+            pass
 
     def update_current_question(self, new_q: str):
         with self._lock:
@@ -366,6 +386,16 @@ class UserAnswerStorage:
                     f.write('\n')
             except Exception:
                 pass
+        try:
+            import answer_storage as _gs
+            _gs.set_complete_answer(question.strip(), answer.strip(), metrics)
+        except Exception:
+            pass
+        try:
+            import event_bus as _eb
+            _eb.push_complete(question.strip(), answer.strip(), metrics)
+        except Exception:
+            pass
 
     def get_all_answers(self) -> list:
         try:

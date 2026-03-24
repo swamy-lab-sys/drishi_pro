@@ -286,31 +286,53 @@ Access at `http://localhost:8000/react/`.
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked** → select `/path/to/Drishi/chrome_extension/`
 4. Click the **Drishi Enterprise** icon in the toolbar
-5. Set **Server URL**:
+5. Extension popup → **Settings** tab → set **Server URL**:
    - Local: `http://localhost:8000`
-   - With ngrok: `https://your-domain.ngrok-free.app`
+   - Remote (ngrok): `https://your-domain.ngrok-free.app`
+6. **Login** tab → enter your user token → Sign In
 
 ### Usage
 
 1. Start the server: `./run.sh`
-2. Join your Google Meet / Zoom / Teams interview
-3. Click **Start** in the extension popup → audio capture begins
-4. Interviewer questions are transcribed → answers appear live at `http://localhost:8000/react/`
-5. The extension also injects a floating answer overlay on meeting pages
+2. Navigate to your interview tab (Google Meet / Zoom / Teams / YouTube / any URL)
+3. Click the extension icon **while on that tab** → popup opens
+4. Click **▶ Start Stream** → audio capture begins from the active tab
+5. Answers appear live at `/react/` or on the phone monitor
+
+### Audio Capture — How It Works
+
+The extension uses `chrome.tabCapture.getMediaStreamId({})` called from the **popup context** (no `targetTabId`). This captures whatever tab was active when the popup was opened — no tab switching, no redirects.
+
+- Tab audio = only what you **hear** (remote/interviewer voice)
+- Your own microphone input is never part of tab audio playback
+- Sarvam STT (client-side) or raw PCM stream to server STT
 
 ### Extension Features
 
 | Feature | How it works |
 |---|---|
-| Audio capture | Captures tab/system audio via WebRTC AudioWorklet (16kHz mono) |
-| Monitor overlay | Floating answer overlay injected into Google Meet / Zoom pages |
+| Audio capture | `tabCapture` → offscreen AudioWorklet (16kHz mono PCM) → WebSocket `/ws/audio` |
+| Sarvam STT | Client-side: silence detection → WAV → Sarvam API → text sent as question |
+| Raw PCM mode | Server-side STT: PCM-16 binary streamed directly to `/ws/audio` |
+| Meeting captions | MutationObserver on caption DOM → filters own speech → `/api/cc_question` |
+| Monitor overlay | Floating answer overlay injected into meeting pages |
 | Code interceptor | Detects coding problems on LeetCode, HackerRank, Codility, etc. |
 | Typewriter | Auto-types generated solutions into coding platform editors |
 
-### Supported coding platforms (auto-intercept)
+### Supported Meeting Platforms (audio capture)
+
+- Google Meet, Microsoft Teams, Zoom, Webex
+- YouTube (any URL), and any normal `http/https` tab as fallback
+
+### Supported Coding Platforms (auto-intercept)
 
 - LeetCode, HackerRank, Codility, CodeSignal, Codewars
 - Replit, Google Colab, Programiz
+
+### CSP Compliance (MV3)
+
+All event handlers use `addEventListener` — no inline `onclick=` attributes.
+Popup login, configure link, and settings navigation are all wired in `popup.js`.
 
 ---
 
@@ -319,7 +341,8 @@ Access at `http://localhost:8000/react/`.
 | URL | Purpose |
 |---|---|
 | `/` | Main dashboard (index.html) |
-| `/monitor` | Global monitor view |
+| `/monitor` | Global monitor view — SSE answer feed |
+| `/stream` | **Phone mic / loopback audio capture** — streams to server via WebSocket |
 | `/settings` | Settings page |
 | `/qa-manager` | QA database manager |
 | `/ext-users` | Extension user admin |
@@ -328,6 +351,26 @@ Access at `http://localhost:8000/react/`.
 | `/voice` | Voice test interface |
 | `/api-dashboard` | API key status |
 | `/admin-docs` | Full project reference |
+| `/copilot` | Co-pilot view — friend watches live answers and sends hints |
+
+### `/stream` — Zero-Indicator Audio Capture
+
+A standalone capture page for remote candidate use. Uses `getUserMedia` on a selected audio device (including PulseAudio loopback "Monitor" devices) — **no tab capture, no recording indicator**.
+
+**Linux one-time setup:**
+```bash
+pactl load-module module-loopback latency_msec=5
+# Permanent:
+echo "load-module module-loopback latency_msec=5" | sudo tee -a /etc/pulse/default.pa
+```
+
+**Usage:**
+1. Open `/stream` in a background tab or install as PWA (standalone window)
+2. Select **"Monitor of …"** device (auto-highlighted) → Start Capture
+3. Streams interviewer audio (Chrome output only) → Sarvam STT → answers
+
+**Install as PWA** (no tab bar, no address bar, fully standalone):
+- Open `/stream` → click install icon in Chrome address bar → opens as app window
 
 ---
 
@@ -358,8 +401,10 @@ POST /api/launch_config  {"user_id_override": "4"}
 ### User setup (candidate)
 
 1. Load `chrome_extension/` as unpacked extension in Chrome
-2. Extension popup → paste **Server URL** and **User Token**
-3. Click **Start** → answers appear on their monitor only
+2. Extension popup → **Settings** tab → paste **Server URL**
+3. **Login** tab → paste **User Token** → Sign In
+4. Navigate to interview tab → open popup → click **▶ Start Stream**
+5. Answers appear on their monitor only
 
 ### Isolation guarantees
 
@@ -367,6 +412,30 @@ POST /api/launch_config  {"user_id_override": "4"}
 - DB lookups filtered by `db_user_id` (role-based answer sets)
 - LLM prompt includes user's resume + role context
 - No answer cross-contamination between tokens
+
+---
+
+## Remote Candidate Setup (Hyderabad ↔ Bangalore)
+
+For a remote candidate connecting to a server in another city via ngrok.
+
+**Server (Bangalore):** runs `./run.sh` with `USE_NGROK=true` and fixed `NGROK_DOMAIN`.
+
+**Candidate (Hyderabad):** has three options depending on constraints:
+
+| Method | Indicators | Cost | Reliability |
+|---|---|---|---|
+| Chrome extension (tab capture) | Tab dot 🔴 (only if screen shared) | ₹0 | 90% |
+| `/stream` + PulseAudio loopback | None | ₹0 | 85% |
+| 3.5mm TRRS audio splitter | None | ₹150 | **100%** |
+
+**Recommended (100%):** 3.5mm TRRS splitter → laptop headphone jack → one end earphones, other end phone mic-in → phone opens `/stream` → streams to server.
+
+**Phone as monitor:** Open `https://<ngrok-domain>/monitor` on phone → answers appear in real-time.
+
+**Phone mic capture on monitor page:** Tap **🎤 MIC OFF** button on `/monitor` to stream phone mic audio directly to server. Use with laptop in speaker mode (no earphones). Hold **🤫 HOLD WHILE SPEAKING** while answering to prevent your own voice from being transcribed.
+
+See `REMOTE_SETUP_OPTIONS.md` for full comparison, decision guide, and hardware recommendations.
 
 ---
 
@@ -492,15 +561,24 @@ Drishi/
 │
 ├── web/
 │   ├── server.py            ← Flask app factory
-│   ├── static/react/        ← production React build (npm run build)
-│   └── templates/           ← Jinja2 HTML pages (classic UI)
+│   ├── static/
+│   │   ├── react/           ← production React build (npm run build)
+│   │   ├── js/
+│   │   │   ├── drishi-stream.js       ← SSE client
+│   │   │   └── pcm_worklet.js         ← AudioWorklet for /stream + /monitor mic
+│   │   └── stream_manifest.json       ← PWA manifest for /stream page
+│   └── templates/
+│       ├── monitor.html     ← phone monitor (🎤 mic capture + 🤫 mute button)
+│       ├── stream_audio.html ← zero-indicator loopback audio capture page
+│       └── ...              ← other Jinja2 pages
 │
 ├── chrome_extension/        ← Load unpacked from this folder
-│   ├── manifest.json        ← MV3, permissions
-│   ├── popup.html / popup.js
-│   ├── background.js        ← service worker
-│   ├── audio_offscreen.js / audio_offscreen.html
-│   ├── audio_processor_worklet.js  ← 16kHz mono WebRTC streaming
+│   ├── manifest.json        ← MV3, tabCapture + offscreen permissions
+│   ├── popup.html / popup.js ← CSP-compliant (no inline onclick)
+│   ├── background.js        ← service worker (audio start/stop handlers)
+│   ├── audio_offscreen.js / audio_offscreen.html ← AudioWorklet capture
+│   ├── audio_processor_worklet.js  ← 16kHz mono, 64ms chunks
+│   ├── meeting_captions.js  ← DOM caption reader (Meet/Teams/Zoom)
 │   ├── monitor_content.js   ← meeting page overlay
 │   ├── coder_content.js     ← LeetCode/HackerRank interceptor
 │   └── typewriter.js        ← auto-types answers into editors

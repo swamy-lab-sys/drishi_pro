@@ -14,6 +14,7 @@ from app.services.ops_service import (
     get_session_info_payload,
     get_system_health_payload,
     get_transcribing_payload,
+    get_tunnel_url_payload,
 )
 
 ops_bp = Blueprint("ops", __name__)
@@ -63,6 +64,12 @@ def get_logs():
 def local_url():
     """Return the local network URL for mobile QR code scanning."""
     return jsonify(get_local_url_payload(request.host))
+
+
+@ops_bp.route("/api/tunnel_url")
+def tunnel_url():
+    """Return the active public tunnel URL for Chrome extension auto-configuration."""
+    return jsonify(get_tunnel_url_payload())
 
 
 @ops_bp.route("/api/session_export")

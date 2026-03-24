@@ -960,13 +960,13 @@ code {
             </div>
           </div>
           <div class="feat-card-body">
-            <p>Captures audio, transcribes via Web Speech API, sends transcript to server, and displays the AI-generated answer in real-time.</p>
+            <p>Captures tab audio via <code>chrome.tabCapture.getMediaStreamId({})</code> called from the popup context — captures whatever tab was active when popup opened. No tab switching. Streams 16kHz mono PCM to server via WebSocket.</p>
             <ul class="feat-steps">
-              <li data-n="1">Click the Drishi icon in Chrome toolbar</li>
-              <li data-n="2">Select user profile from dropdown</li>
-              <li data-n="3">Click <strong>CAPTURE NOW</strong> to start recording</li>
-              <li data-n="4">Answers appear automatically as questions are detected</li>
-              <li data-n="5">Click <strong>STOP</strong> when done</li>
+              <li data-n="1">Navigate to interview tab (Meet / Teams / Zoom / YouTube / any URL)</li>
+              <li data-n="2">Click Drishi icon → Login tab → enter token → Sign In</li>
+              <li data-n="3">Click <strong>▶ Start Stream</strong> — captures active tab audio</li>
+              <li data-n="4">Tab audio = interviewer voice only (your mic is not echoed back)</li>
+              <li data-n="5">Answers appear on <code>/monitor</code> on phone in real-time</li>
             </ul>
           </div>
         </div>
@@ -1022,7 +1022,7 @@ code {
               <li data-n="2">Enable <strong>Developer Mode</strong> (top-right toggle)</li>
               <li data-n="3">Click <strong>Load unpacked</strong></li>
               <li data-n="4">Select <code>chrome_extension/</code> directory</li>
-              <li data-n="5">Click the Drishi icon → set <strong>Server URL</strong>: <code>http://localhost:8000</code> (local) or your ngrok URL</li>
+              <li data-n="5">Click the Drishi icon → <strong>Settings</strong> tab → set Server URL → <strong>Login</strong> tab → enter token</li>
             </ul>
           </div>
         </div>
@@ -1133,7 +1133,9 @@ code {
             </td>
           </tr>
           <tr><td><code>/</code></td><td>Dashboard</td><td>Classic main interview page (Jinja2)</td></tr>
-          <tr><td><code>/monitor</code></td><td>Monitor</td><td>Classic monitor view</td></tr>
+          <tr><td><code>/monitor</code></td><td>Monitor</td><td>Classic monitor view — SSE feed + 🎤 phone mic capture + 🤫 mute button</td></tr>
+          <tr><td><code>/stream</code></td><td>Audio Capture</td><td>Zero-indicator loopback capture — getUserMedia on PulseAudio Monitor device → WebSocket → Sarvam STT. Installable as PWA.</td></tr>
+          <tr><td><code>/copilot</code></td><td>Co-pilot</td><td>Friend/helper watches live answers and sends hints</td></tr>
           <tr><td><code>/qa-manager</code></td><td>QA Manager</td><td>Classic QA editor</td></tr>
           <tr><td><code>/settings</code></td><td>Settings</td><td>Classic settings page</td></tr>
           <tr><td><code>/ext-users</code></td><td>Ext Users</td><td>Classic extension user admin</td></tr>

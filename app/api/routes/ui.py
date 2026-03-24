@@ -70,6 +70,12 @@ def monitor():
     return render_template("monitor.html")
 
 
+@ui_bp.route("/copilot")
+def copilot():
+    """Co-pilot page — friend opens this to watch live answers and send hints."""
+    return render_template("copilot.html")
+
+
 @ui_bp.route("/lookup")
 def lookup():
     """Keyword lookup page — type any word/topic, see full Q&A details instantly."""
@@ -80,6 +86,13 @@ def lookup():
 def voice_ui():
     """Serve push-to-talk voice interface."""
     return render_template("voice.html")
+
+
+@ui_bp.route("/stream")
+def stream_audio():
+    """Hidden audio capture page — getUserMedia on PulseAudio loopback mic.
+    No tab capture, no extension, no indicators. For remote candidate use."""
+    return render_template("stream_audio.html")
 
 
 @ui_bp.route("/qa-manager")

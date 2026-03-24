@@ -26,8 +26,8 @@ def monitor_viewer(filename: str = "index.html"):
 @monitoring_bp.route("/v/<session_id>")
 @monitoring_bp.route("/v/<session_id>/<key>")
 def viewer_shortlink(session_id: str, key: str = ""):
-    """Short URL — redirects to the live monitor page."""
-    return redirect("/monitor")
+    """Short URL — redirects to copilot with session pre-filled."""
+    return redirect(f"/copilot?s={session_id}")
 
 
 @monitoring_bp.route("/api/session/predictions")

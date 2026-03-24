@@ -148,23 +148,49 @@
     .pulse-dots span:nth-child(2) { animation-delay: 0.2s; }
     .pulse-dots span:nth-child(3) { animation-delay: 0.4s; }
 
-    /* ── QA Card (identical style to index.html) ── */
+    /* ── QA Card ── */
     .qa-card {
       background: var(--white);
       border-radius: 12px;
       box-shadow: var(--card-shadow);
       border: 1px solid var(--card-border);
       overflow: hidden;
-      animation: slideIn 0.1s ease-out;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      animation: slideIn 0.15s ease-out;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.2s;
     }
     .qa-card.active {
       border-color: var(--blue);
       border-left: 3px solid var(--blue);
       box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
     }
+    /* Collapsed state — shows compact preview of completed answers */
+    .qa-card.collapsed {
+      opacity: 0.88;
+    }
+    .qa-card.collapsed .card-body {
+      max-height: 64px;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+      mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+      cursor: pointer;
+    }
+    .qa-card.collapsed .card-foot { display: none; }
+    /* Expand toggle strip */
+    .expand-tog {
+      display: none;
+      font-size: 10px; font-weight: 700;
+      color: var(--blue); cursor: pointer; letter-spacing: 0.3px;
+      padding: 5px 14px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      background: rgba(59,130,246,0.03);
+      transition: background 0.12s;
+      user-select: none;
+    }
+    .expand-tog:hover { background: rgba(59,130,246,0.08); }
+    .qa-card.collapsed .expand-tog { display: block; }
     @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-6px); }
+      from { opacity: 0; transform: translateY(-5px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
@@ -392,6 +418,14 @@
         <button class="mode-btn active" id="mbt-bullet" onclick="setMode('bullet')">&#8226; Bullet</button>
         <button class="mode-btn" id="mbt-para"   onclick="setMode('para')">&#182; Para</button>
       </div>
+      <button id="mic-btn" title="Capture phone mic audio → send to server"
+        style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;">
+        🎤 MIC OFF
+      </button>
+      <button id="mute-btn" title="Hold while YOU are speaking — releases when interviewer speaks"
+        style="display:none;font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;user-select:none;-webkit-user-select:none;">
+        🤫 HOLD WHILE SPEAKING
+      </button>
       <button id="share-remote-btn" onclick="shareRemote()" title="Copy remote viewer link to clipboard"
         style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);transition:all 0.15s;"
         onmouseover="this.style.background='var(--green-light)';this.style.color='var(--green)';this.style.borderColor='var(--green)';"
@@ -567,6 +601,10 @@
 
     if (existingCard) {
       const newEl = buildCard(item, idx);
+      // Preserve collapsed state when updating an existing card
+      if (existingCard.classList.contains('collapsed') && item.is_complete !== false) {
+        newEl.classList.add('collapsed');
+      }
       feed.replaceChild(newEl, existingCard);
       wireButtons(newEl);
     } else {
@@ -582,9 +620,15 @@
       feed.insertBefore(el, feed.firstChild);
       wireButtons(el);
 
+      // Collapse older completed cards so previous answers stay visible on screen
+      collapseOlderCards();
+
       // Anchor scroll: if user has scrolled down, compensate for the new card height
       if (wrap && prevScrollTop > 0) {
         wrap.scrollTop = prevScrollTop + (feed.scrollHeight - prevHeight);
+      } else {
+        // Scroll to top to show new answer
+        wrap && wrap.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
   }
@@ -673,6 +717,7 @@
         </div>
       </div>
       <div class="card-body">${renderAnswerBody(item)}</div>
+      <div class="expand-tog">▼ show more</div>
       <div class="card-foot">
         <span class="src-badge ${srcCls}">${srcLbl}</span>
         ${score ? `<div class="conf-bar"><span>${score}</span><div class="conf-track"><div class="conf-fill" style="width:${score};background:var(--green)"></div></div></div>` : ''}
@@ -781,7 +826,7 @@
   /* ── Wire copy buttons ── */
   function wireButtons(root) {
     root.querySelectorAll('.copy-btn').forEach(btn => {
-      btn.replaceWith(btn.cloneNode(true));  // remove old listeners
+      btn.replaceWith(btn.cloneNode(true));
     });
     root.querySelectorAll('.copy-btn').forEach(btn => {
       btn.addEventListener('click', () => copyText(btn.dataset.ans || '', btn));
@@ -791,6 +836,41 @@
     });
     root.querySelectorAll('.cb-copy').forEach(btn => {
       btn.addEventListener('click', () => copyText(btn.dataset.code || '', btn));
+    });
+    // Wire expand toggles
+    const cards = root.classList?.contains('qa-card') ? [root] : Array.from(root.querySelectorAll('.qa-card'));
+    cards.forEach(card => {
+      const tog = card.querySelector('.expand-tog');
+      if (!tog) return;
+      tog.replaceWith(tog.cloneNode(true));
+      const freshTog = card.querySelector('.expand-tog');
+      freshTog.addEventListener('click', e => {
+        e.stopPropagation();
+        toggleCard(card);
+      });
+      card.querySelector('.card-body')?.addEventListener('click', () => {
+        if (card.classList.contains('collapsed')) toggleCard(card);
+      });
+    });
+  }
+
+  function toggleCard(card) {
+    const isCollapsed = card.classList.contains('collapsed');
+    card.classList.toggle('collapsed', !isCollapsed);
+    const tog = card.querySelector('.expand-tog');
+    if (tog) tog.textContent = isCollapsed ? '▲ show less' : '▼ show more';
+  }
+
+  /* Collapse all completed cards except the one at idx 0 (newest) */
+  function collapseOlderCards() {
+    const feed = document.getElementById('feed');
+    feed.querySelectorAll('.qa-card').forEach(card => {
+      const idx = parseInt(card.dataset.qidx, 10);
+      if (idx > 0 && !card.classList.contains('active')) {
+        card.classList.add('collapsed');
+        const tog = card.querySelector('.expand-tog');
+        if (tog) tog.textContent = '▼ show more';
+      }
     });
   }
 
@@ -881,6 +961,128 @@
   /* ── Start ── */
   connect();
   setInterval(updateLatency, 5000);
+
+  /* ── Phone mic capture → /ws/audio ─────────────────────────────────────────
+   * Hyderabad person opens /monitor on phone. Phone mic picks up interviewer
+   * audio from laptop speakers. Streams PCM-16 to server via WebSocket.
+   * No extension, no laptop change, no indicators — completely clean.
+   * ───────────────────────────────────────────────────────────────────────── */
+  (function initPhoneMic() {
+    const btn       = document.getElementById('mic-btn');
+    const muteBtn   = document.getElementById('mute-btn');
+    const SAMPLE_RATE = 16000;
+    const CHUNK_MS    = 60;
+    let micActive = false, micStream = null, micCtx = null, micWs = null, micProc = null, micPing = null;
+    let micMuted  = false; // true while candidate is speaking
+
+    function micSetBtn(on) {
+      btn.textContent = on ? '🎤 MIC ON' : '🎤 MIC OFF';
+      btn.style.background  = on ? 'var(--green)' : 'transparent';
+      btn.style.color       = on ? '#fff'          : 'var(--text-muted)';
+      btn.style.borderColor = on ? 'var(--green)'  : 'var(--border)';
+      muteBtn.style.display = on ? 'inline-block'  : 'none';
+    }
+
+    // Hold mute button while speaking — releases automatically on pointer/touch up
+    function setMuted(on) {
+      micMuted = on;
+      muteBtn.style.background  = on ? '#ef4444'          : 'transparent';
+      muteBtn.style.color       = on ? '#fff'              : 'var(--text-muted)';
+      muteBtn.style.borderColor = on ? '#ef4444'           : 'var(--border)';
+      muteBtn.textContent       = on ? '🔴 MUTED (speaking)' : '🤫 HOLD WHILE SPEAKING';
+    }
+
+    // Support both mouse and touch for mobile
+    muteBtn.addEventListener('mousedown',  () => setMuted(true));
+    muteBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setMuted(true); });
+    muteBtn.addEventListener('mouseup',    () => setMuted(false));
+    muteBtn.addEventListener('mouseleave', () => setMuted(false));
+    muteBtn.addEventListener('touchend',   () => setMuted(false));
+
+    function micStop() {
+      if (micPing)  { clearInterval(micPing);  micPing  = null; }
+      if (micProc)  { try { micProc.disconnect(); } catch(_){} micProc = null; }
+      if (micCtx)   { try { micCtx.close();       } catch(_){} micCtx  = null; }
+      if (micWs)    { try { micWs.close(1000);    } catch(_){} micWs   = null; }
+      if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      micActive = false;
+      micMuted  = false;
+      micSetBtn(false);
+      setMuted(false);
+    }
+
+    async function micStart() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false,
+                   autoGainControl: false, sampleRate: SAMPLE_RATE },
+          video: false,
+        });
+      } catch(e) {
+        alert('Mic access denied: ' + e.message); return;
+      }
+
+      // WebSocket — same server the monitor page is served from
+      const proto  = location.protocol === 'https:' ? 'wss' : 'ws';
+      const params = new URLSearchParams({ 'ngrok-skip-browser-warning': '1' });
+      const token  = new URLSearchParams(location.search).get('token');
+      if (token) params.set('token', token);
+      micWs = new WebSocket(`${proto}://${location.host}/ws/audio?${params}`);
+      micWs.binaryType = 'arraybuffer';
+
+      await new Promise((res, rej) => {
+        const t = setTimeout(() => { micStop(); rej(new Error('WS timeout')); }, 5000);
+        micWs.onopen  = () => { clearTimeout(t); res(); };
+        micWs.onerror = () => { clearTimeout(t); rej(new Error('WS failed')); };
+      });
+
+      micWs.onclose = (e) => { if (micActive && e.code !== 1000) micStop(); };
+
+      micPing = setInterval(() => {
+        if (micWs && micWs.readyState === WebSocket.OPEN)
+          micWs.send(JSON.stringify({ type: 'ping' }));
+      }, 15000);
+
+      micCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      if (micCtx.state === 'suspended') await micCtx.resume();
+
+      const source   = micCtx.createMediaStreamSource(micStream);
+      const bufSize  = Math.round(SAMPLE_RATE * CHUNK_MS / 1000);
+
+      // Float32 → Int16
+      function toPcm16(f32) {
+        const out = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++)
+          out[i] = Math.max(-32768, Math.min(32767, f32[i] * 32767));
+        return out;
+      }
+
+      try {
+        // AudioWorklet preferred (no deprecation warning)
+        await micCtx.audioWorklet.addModule('/static/js/pcm_worklet.js');
+        micProc = new AudioWorkletNode(micCtx, 'drishi-pcm-capture');
+        micProc.port.onmessage = (e) => {
+          if (!micMuted && micWs?.readyState === WebSocket.OPEN)
+            micWs.send(toPcm16(e.data).buffer);
+        };
+        source.connect(micProc);
+      } catch(_) {
+        // ScriptProcessorNode fallback
+        micProc = micCtx.createScriptProcessor(bufSize, 1, 1);
+        micProc.onaudioprocess = (ev) => {
+          if (!micMuted && micWs?.readyState === WebSocket.OPEN)
+            micWs.send(toPcm16(ev.inputBuffer.getChannelData(0)).buffer);
+        };
+        source.connect(micProc);
+        micProc.connect(micCtx.destination);
+      }
+
+      micActive = true;
+      micSetBtn(true);
+    }
+
+    btn.addEventListener('click', () => { micActive ? micStop() : micStart(); });
+  })();
 })();
 </script>
 {% endblock %}

@@ -701,7 +701,7 @@ def _init_learned_corrections():
         import stt_learner as _learner
         _learner.reload_into_stt(force=True)
         _learner._start_reload_thread()
-        print(f"  [STT] Learned corrections loaded ({len(_COMPILED_CORRECTIONS)} total)")
+        pass
     except Exception as e:
         print(f"  [STT] Learned corrections load skipped: {e}")
 
@@ -717,6 +717,11 @@ _deepgram_client = None
 # Persistent HTTP sessions — reuses TCP connections, avoids 500ms TLS handshake per call
 _deepgram_session = None
 _sarvam_session = None
+_sarvam_down = False  # True when Sarvam API is unavailable (timeout/error)
+
+
+def is_sarvam_down() -> bool:
+    return _sarvam_down
 
 
 def _get_deepgram_session():
@@ -1138,12 +1143,14 @@ def _transcribe_sarvam(audio_array: np.ndarray):
     If Telugu/Hindi/Tamil/Kannada detected, auto-translates to English.
     ~400-700ms latency. Requires SARVAM_API_KEY from sarvam.ai
     """
+    global _sarvam_down
     import io
     import soundfile as sf
 
     api_key = config.SARVAM_API_KEY
     if not api_key:
         print("  [STT] WARNING: SARVAM_API_KEY not set — falling back to local Whisper")
+        _sarvam_down = True
         return _transcribe_local(audio_array)
 
     buf = io.BytesIO()
@@ -1179,8 +1186,10 @@ def _transcribe_sarvam(audio_array: np.ndarray):
             if not _is_technical_content(text):
                 return "", 0.0
 
+        _sarvam_down = False
         return text, 0.92
     except Exception as e:
+        _sarvam_down = True
         print(f"\n  ⚠⚠ SARVAM FALLBACK: {e}")
         print("  ⚠⚠ Check SARVAM_API_KEY and internet connection.\n")
         try:

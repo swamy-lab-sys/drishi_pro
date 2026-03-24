@@ -270,34 +270,9 @@ NGROK_URL=""
 NGROK_PID=""
 
 if [ "$USE_NGROK" = "true" ]; then
-    # ── Try Cloudflare Tunnel first (free, no auth, stable, no 1-tunnel limit)
-    if command -v cloudflared &>/dev/null; then
+    if command -v ngrok &>/dev/null; then
         echo ""
-        echo -e "  Starting Cloudflare tunnel..."
-        pkill -x cloudflared 2>/dev/null || true; sleep 0.3
-        rm -f /tmp/cloudflared.log
-        cloudflared tunnel --url "http://localhost:$WEB_PORT" \
-            --protocol http2 \
-            --logfile /tmp/cloudflared.log 2>&1 &
-        NGROK_PID=$!
-        # Wait up to 16s for trycloudflare.com URL
-        for _i in 1 2 3 4 5 6 7 8; do
-            sleep 2
-            NGROK_URL=$(grep -oE 'https://[a-z0-9\-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || echo "")
-            [ -n "$NGROK_URL" ] && break
-        done
-        if [ -n "$NGROK_URL" ]; then
-            echo -e "  ${G}✓${D} Cloudflare tunnel active"
-        else
-            echo -e "  ${Y}⚠${D} Cloudflare URL unavailable — trying ngrok..."
-            pkill -x cloudflared 2>/dev/null || true
-            NGROK_URL=""
-        fi
-
-    # ── Fall back to ngrok if cloudflared not installed
-    elif command -v ngrok &>/dev/null; then
-        echo ""
-        echo -e "  Starting ngrok tunnel (tip: install cloudflared for better tunnels)..."
+        echo -e "  Starting ngrok tunnel..."
         pkill -x ngrok 2>/dev/null || true; sleep 0.5
         if [ -n "$NGROK_DOMAIN" ]; then
             ngrok http --url="$NGROK_DOMAIN" --request-header-add "ngrok-skip-browser-warning: true" "$WEB_PORT" --log=stdout > /tmp/ngrok.log 2>&1 &
@@ -323,12 +298,9 @@ except: print('')
         else
             echo -e "  ${Y}⚠${D} ngrok URL unavailable — using LAN only"
         fi
-
     else
         echo ""
-        echo -e "${Y}  No tunnel tool found. Install one for global access:${D}"
-        echo "  • Cloudflare (recommended, free): https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
-        echo "  • ngrok (free tier): https://ngrok.com/download"
+        echo -e "${Y}  ngrok not found. Install for global access: https://ngrok.com/download${D}"
         USE_NGROK=false
     fi
 fi

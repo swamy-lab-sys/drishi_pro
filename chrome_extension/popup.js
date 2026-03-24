@@ -245,6 +245,20 @@ document.getElementById('loginToken').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
 
+// ── Login button (was inline onclick — removed for CSP compliance) ────────────
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+
+// ── "Configure" link on login screen ─────────────────────────────────────────
+document.getElementById('loginConfigureLink').addEventListener('click', () => {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('tabSettings').click();
+});
+
+// ── "Go to Settings" button on portal panel ──────────────────────────────────
+document.getElementById('portalGoToSettings').addEventListener('click', () => {
+  document.getElementById('tabSettings').click();
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // END SESSION MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -636,26 +650,81 @@ function showToast(msg, type = '') {
     }
   });
 
+  /** Send message to background with timeout. */
+  function sendMsg(msg, timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('Background did not respond (timeout)')), timeoutMs
+      );
+      chrome.runtime.sendMessage(msg, (resp) => {
+        clearTimeout(timer);
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(resp);
+      });
+    });
+  }
+
+  function _resetStartBtn() {
+    startBtn.disabled = false;
+    startBtn.textContent = '▶ Start Stream';
+  }
+
   startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     startBtn.textContent = '⏳ Starting...';
-    setAudioStatus('Detecting Meet / Teams / Zoom tab...', '#f59e0b');
+
     try {
-      const resp = await chrome.runtime.sendMessage({ action: 'audio_start', userToken: USER_TOKEN });
-      if (resp?.ok) {
-        const { captureTabTitle } = await new Promise(r => chrome.storage.local.get({ captureTabTitle: '' }, r));
-        setStreamingUI(true, captureTabTitle);
-        showToast('Audio streaming started!', 'ok');
-      } else {
-        startBtn.disabled = false;
-        startBtn.textContent = '▶ Start Stream';
-        setAudioStatus('Error: ' + (resp?.error || 'unknown'), '#f87171');
-        showToast('Stream failed — open Meet / Teams / Zoom in Chrome first', 'err');
-      }
+      // Step 1: read server config from storage
+      setAudioStatus('Loading config...', '#f59e0b');
+      const stored = await new Promise(r =>
+        chrome.storage.sync.get({ serverUrl: '', secretCode: '' }, r)
+      );
+      const serverUrl  = (stored.serverUrl  || '').replace(/\/$/, '');
+      const secretCode = stored.secretCode  || '';
+      if (!serverUrl) throw new Error('Server URL not set — configure it in Settings');
+
+      // Step 2: fetch Sarvam key (non-fatal)
+      let sarvamKey = '';
+      try {
+        const params = new URLSearchParams({ 'ngrok-skip-browser-warning': '1' });
+        if (secretCode) params.set('token', secretCode);
+        const r = await fetch(`${serverUrl}/api/stt_config?${params}`,
+          { signal: AbortSignal.timeout(3000) });
+        if (r.ok) sarvamKey = (await r.json()).sarvam_key || '';
+      } catch (_) { /* non-fatal — stream works without Sarvam key */ }
+
+      // Step 3: get active tab title for display
+      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const tabTitle = activeTab?.title || activeTab?.url || 'Current tab';
+
+      // Step 4: get stream ID — captures the tab active when popup opened (no tab switch)
+      setAudioStatus('Requesting capture...', '#f59e0b');
+      const streamId = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('getMediaStreamId timed out')), 5000);
+        chrome.tabCapture.getMediaStreamId({}, (id) => {
+          clearTimeout(timer);
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else if (!id) reject(new Error('Empty stream ID returned'));
+          else resolve(id);
+        });
+      });
+
+      // Step 5: send everything to background to start offscreen capture
+      setAudioStatus('Starting capture...', '#f59e0b');
+      const resp = await sendMsg({
+        action: 'audio_start', streamId, serverUrl, secretCode, sarvamKey,
+        userToken: USER_TOKEN, tabTitle,
+      }, 10000);
+      if (!resp?.ok) throw new Error(resp?.error || 'Capture failed to start');
+
+      setStreamingUI(true, tabTitle);
+      showToast('Audio streaming started!', 'ok');
+
     } catch (e) {
-      startBtn.disabled = false;
-      startBtn.textContent = '▶ Start Stream';
+      _resetStartBtn();
       setAudioStatus('Error: ' + e.message, '#f87171');
+      showToast('Stream failed: ' + e.message, 'err');
+      console.error('[Popup] Audio start error:', e.message);
     }
   });
 
@@ -663,12 +732,10 @@ function showToast(msg, type = '') {
     stopBtn.disabled = true;
     setAudioStatus('Stopping...', '#f59e0b');
     try {
-      await chrome.runtime.sendMessage({ action: 'audio_stop' });
-      setStreamingUI(false);
-      showToast('Audio stream stopped', '');
-    } catch (e) {
-      setAudioStatus('Error: ' + e.message, '#f87171');
-    }
+      await sendMsg({ action: 'audio_stop' }, 5000);
+    } catch (_) { /* best-effort */ }
+    setStreamingUI(false);
+    showToast('Audio stream stopped', '');
     stopBtn.disabled = false;
   });
 })();

@@ -289,7 +289,7 @@ def reload_into_stt(force: bool = False):
         # (learned corrections take priority if there's overlap)
         static = list(_stt._STATIC_COMPILED_CORRECTIONS)
         _stt._COMPILED_CORRECTIONS = new_compiled + static
-        print(f"[STT/learn] Hot-reloaded {len(new_compiled)} learned + {len(static)} static corrections")
+        pass  # silent reload
     except Exception as e:
         print(f"[STT/learn] Reload error: {e}")
 

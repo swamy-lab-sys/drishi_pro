@@ -41,6 +41,18 @@
     },
     {
       "matches": [
+        "https://meet.google.com/*",
+        "https://zoom.us/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ],
+      "js": [
+        "meeting_captions.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "https://www.programiz.com/*",
         "https://leetcode.com/*",
         "https://www.hackerrank.com/*",

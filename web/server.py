@@ -1457,15 +1457,6 @@ def main():
         port = _port
         host = _host
 
-    print("=" * 60)
-    print(f"{PRODUCT_NAME} - Web UI Server")
-    print("=" * 60)
-    _lan_ip = get_server_ip()
-    print(f"\nServer: http://localhost:{args.port}  ← open this in Chrome")
-    print(f"Mobile: http://{_lan_ip}:{args.port}")
-    print(f"Data: {answer_storage.get_answers_file_path()}")
-    print("\nPress Ctrl+C to stop\n")
-    print("=" * 60 + "\n")
 
     try:
         if HAS_GEVENT:

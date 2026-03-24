@@ -36,11 +36,20 @@ def get_session_info_payload() -> dict:
 
 def get_system_health_payload() -> dict:
     """Real-time system monitoring."""
+    sarvam_down = False
+    try:
+        import stt as _stt
+        import config as _cfg
+        if _cfg.STT_BACKEND == "sarvam":
+            sarvam_down = _stt.is_sarvam_down()
+    except Exception:
+        pass
     return {
         "cpu": psutil.cpu_percent(),
         "ram": psutil.virtual_memory().percent,
         "stt_status": "Listening",
         "llm_status": "Idle",
+        "sarvam_down": sarvam_down,
     }
 
 
@@ -150,6 +159,23 @@ def get_local_url_payload(request_host: str) -> dict:
         "ip": local_ip,
         "port": port,
     }
+
+
+def get_tunnel_url_payload() -> dict:
+    """Return the active public ngrok tunnel URL for extension auto-config."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen("http://localhost:4040/api/tunnels", timeout=2) as r:
+            import json
+            data = json.loads(r.read())
+            tunnels = [t for t in data.get("tunnels", []) if t.get("proto") == "https"]
+            if tunnels:
+                return {"url": tunnels[0]["public_url"], "provider": "ngrok"}
+    except Exception:
+        pass
+
+    return {"url": None, "provider": None}
 
 
 def build_session_export_response() -> Response:
