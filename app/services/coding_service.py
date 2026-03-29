@@ -76,7 +76,6 @@ def clear_session_payload() -> tuple[dict, int]:
     """Clear the current answer session."""
     try:
         answer_storage.clear_all(force_clear=True)
-        print("[API] Session cleared manually - starting fresh")
         return {"status": "cleared", "message": "All Q&A history cleared"}, 200
     except Exception as exc:
         return {"error": str(exc)}, 500
@@ -202,15 +201,11 @@ def solve_problem_payload(data: dict | None) -> tuple[dict, int]:
         problem_hash == recent_problems["last_hash"]
         and now - recent_problems["last_time"] < DEDUP_WINDOW_SECONDS
     ):
-        print(f"[API] DUPLICATE - Skipping (same problem within {DEDUP_WINDOW_SECONDS}s)")
-        return {"solution": "", "duplicate": True}, 200
+            return {"solution": "", "duplicate": True}, 200
 
     recent_problems["last_hash"] = problem_hash
     recent_problems["last_time"] = now
 
-    print("\n[API] SOLVE REQUEST RECEIVED")
-    print(f"      Source: {source}")
-    print(f"      URL: {url}")
     dlog.log(f"[API] Solve request from {source} for {url}", "INFO")
 
     latest_code["status"] = "generating"
@@ -223,10 +218,6 @@ def solve_problem_payload(data: dict | None) -> tuple[dict, int]:
         print("      [CHAT MODE] Forced to VIEW-ONLY")
 
     try:
-        print(f"\n{'=' * 50}")
-        print(" QUESTION (Extracted Problem Text):")
-        print(f"{'-' * 50}\n{problem_text}\n{'-' * 50}")
-
         solution = llm_client.get_platform_solution(problem_text, editor_content, url)
 
         latest_code["code"] = solution
@@ -249,10 +240,6 @@ def solve_problem_payload(data: dict | None) -> tuple[dict, int]:
             metrics={"source": source, "url": url[:50] if url else None},
         )
 
-        print("\n ANSWER (Generated Code):")
-        print(f"{'-' * 50}\n{solution}\n{'-' * 50}")
-        print(f"Solution generated ({len(solution)} chars)")
-        print(f"{'=' * 50}\n")
         return {"solution": solution}, 200
     except Exception as exc:
         latest_code["status"] = "error"
@@ -266,27 +253,22 @@ def latest_code_payload() -> dict:
 
 def control_start_payload() -> dict:
     latest_code["control"] = "running"
-    print("[CONTROL] START/RESUME")
     return {"status": "running", "mode": latest_code["mode"]}
 
 
 def control_pause_payload() -> dict:
     latest_code["control"] = "paused"
-    print("[CONTROL] PAUSE")
     return {"status": "paused", "mode": latest_code["mode"]}
 
 
 def control_stop_payload() -> dict:
     latest_code["control"] = "stopped"
     latest_code["status"] = "idle"
-    print("[CONTROL] STOP")
     return {"status": "stopped", "mode": latest_code["mode"]}
 
 
 def control_toggle_mode_payload() -> dict:
     latest_code["mode"] = "view" if latest_code["mode"] == "auto" else "auto"
-    mode_name = "AUTO-TYPE" if latest_code["mode"] == "auto" else "VIEW-ONLY"
-    print(f"[CONTROL] MODE -> {mode_name}")
     return {"mode": latest_code["mode"], "status": latest_code["control"]}
 
 

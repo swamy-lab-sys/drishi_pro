@@ -8,7 +8,22 @@
 const SAMPLE_RATE       = 16000;
 const BUFFER_SIZE       = 1024; // 64ms per callback at 16kHz (was 256ms/4096)
 const WS_PING_INTERVAL_MS = 15000; // keepalive ping to prevent 1005 disconnects
-const WS_CONNECT_TIMEOUT  = 4000;  // ms (was 8000)
+const WS_CONNECT_TIMEOUT  = 10000;  // ms — ngrok adds ~1-2s latency, need more headroom
+
+// ── Remote logging ────────────────────────────────────────────────────────────
+let _rlogUrl   = '';
+let _rlogToken = '';
+function rlog(msg, level = 'info') {
+  console.log(`[offscreen] ${msg}`);
+  if (!_rlogUrl) return;
+  fetch(`${_rlogUrl}/api/ext/log`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    body: JSON.stringify({ source: 'offscreen', msg: String(msg), level, token: _rlogToken }),
+  }).catch(() => {});
+}
+// RMS log throttle: log audio stats every N chunks to avoid spamming
+let _rmsLogCount = 0;
 
 let audioCtx          = null;
 let wsConn            = null;
@@ -24,7 +39,7 @@ let sarvamAbortCtrl   = null;  // AbortController for in-flight Sarvam request
 // ── Message handler ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'audio_start_capture') {
-    startCapture(msg.streamId, msg.serverUrl, msg.secretCode, msg.sarvamKey, msg.userToken || '')
+    startCapture(msg.streamId, msg.serverUrl, msg.secretCode, msg.sarvamKey, msg.userToken || '', msg.captureMode || 'tab')
       .then(() => sendResponse({ ok: true }))
       .catch(e => {
         stopCapture();
@@ -101,18 +116,62 @@ async function transcribeWithSarvam(int16Samples, sarvamKey, signal) {
   return (result.transcript || '').trim();
 }
 
+// ── POST fallback for Sarvam transcripts (no WS needed) ──────────────────────
+// Used when WS fails/times out. Sends directly to /api/cc_question like meeting captions.
+async function sendTranscriptViaPost(text) {
+  if (!_rlogUrl) return;
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
+    };
+    if (wsSecretCode) headers['X-Auth-Token'] = wsSecretCode;
+    const body = { question: text, source: 'sarvam_audio' };
+    if (wsUserToken) body.user_token = wsUserToken;
+    const resp = await fetch(`${_rlogUrl}/api/cc_question`, {
+      method: 'POST', headers, body: JSON.stringify(body),
+    });
+    rlog(`POST /api/cc_question → ${resp.status}: "${text.slice(0,60)}"`);
+  } catch (e) {
+    rlog(`POST fallback failed: ${e.message}`, 'error');
+  }
+}
+
 // ── Start capture ─────────────────────────────────────────────────────────────
-async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToken = '') {
+async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToken = '', captureMode = 'tab') {
   stopCapture();
   // Store for WS reconnect
   wsServerUrl  = serverUrl;
   wsSecretCode = secretCode;
   wsUserToken  = userToken;
+  _rlogUrl     = (serverUrl || '').replace(/\/$/, '');
+  _rlogToken   = userToken || '';
+  rlog(`startCapture called | mode=${captureMode} | sarvam=${sarvamKey ? 'YES(len='+sarvamKey.length+')' : 'NO'} | serverUrl=${serverUrl} | userToken=${userToken ? userToken.slice(0,8)+'...' : 'none'}`);
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
-    video: false,
-  });
+  let stream;
+  try {
+    if (captureMode === 'mic') {
+      // Mic mode: no tab recording indicator, captures ambient room audio
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } else if (captureMode === 'desktop') {
+      const constraints = {
+        audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: streamId } },
+        video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: streamId } },
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      stream.getVideoTracks().forEach(t => t.stop());
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
+        video: false,
+      });
+    }
+    const audioTracks = stream.getAudioTracks();
+    rlog(`getUserMedia OK | audioTracks=${audioTracks.length} | label="${audioTracks[0]?.label || 'none'}"`);
+  } catch (e) {
+    rlog(`getUserMedia FAILED: ${e.message}`, 'error');
+    throw e;
+  }
   activeStream = stream;
 
   // ── WebSocket connection ────────────────────────────────────────────────────
@@ -124,21 +183,41 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   if (userToken)  params.set('user_token', userToken);
   const wsUrl  = `${wsBase}/ws/audio?${params.toString()}`;
 
+  rlog(`WS connecting → ${wsUrl} (sarvam=${!!sarvamKey}: WS optional in Sarvam mode)`);
   wsConn = new WebSocket(wsUrl);
   wsConn.binaryType = 'arraybuffer';
 
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('WebSocket connection timed out (4s)')), WS_CONNECT_TIMEOUT);
+    const timer = setTimeout(() => {
+      rlog(`WS TIMEOUT after ${WS_CONNECT_TIMEOUT}ms | url=${wsUrl}`, 'error');
+      wsConn = null;  // mark as unavailable
+      if (sarvamKey) {
+        // Sarvam mode: WS is optional — can send transcripts via POST fallback
+        rlog(`Sarvam mode: continuing without WS — will use POST fallback`);
+        resolve();
+      } else {
+        reject(new Error(`WebSocket connection timed out (${WS_CONNECT_TIMEOUT/1000}s)`));
+      }
+    }, WS_CONNECT_TIMEOUT);
     wsConn.onopen = () => {
       clearTimeout(timer);
-      console.log('[Drishi] WS connected →', wsUrl);
-      // Start audio passthrough so user can still hear the meeting
+      rlog(`WS connected OK → ${wsUrl}`);
       audioElement = new Audio();
       audioElement.srcObject = stream;
       audioElement.play().catch(e => console.warn('[Drishi] Audio passthrough muted (autoplay):', e));
       resolve();
     };
-    wsConn.onerror = () => { clearTimeout(timer); reject(new Error('WebSocket connection failed')); };
+    wsConn.onerror = (e) => {
+      clearTimeout(timer);
+      rlog(`WS onerror | url=${wsUrl}`, 'error');
+      wsConn = null;
+      if (sarvamKey) {
+        rlog(`Sarvam mode: WS failed — continuing with POST fallback`);
+        resolve();
+      } else {
+        reject(new Error('WebSocket connection failed'));
+      }
+    };
   });
 
   // Keepalive ping — prevents 1005 "No Status Received" drops on idle connections
@@ -148,8 +227,25 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
     }
   }, WS_PING_INTERVAL_MS);
 
+  // ── Receive server commands (laptop1 → laptop2 remote control) ─────────────
+  wsConn.onmessage = (evt) => {
+    if (typeof evt.data !== 'string') return;
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type !== 'command') return;
+      if (msg.action === 'start_capture') {
+        // Ask background to start tab capture remotely (no user gesture needed)
+        chrome.runtime.sendMessage({ type: 'remote_start_capture' })
+          .catch(e => console.warn('[Drishi] remote_start_capture failed:', e.message));
+      } else if (msg.action === 'stop_capture') {
+        stopCapture();
+        chrome.runtime.sendMessage({ type: 'audio_status', status: 'stopped', reason: 'remote_stop' }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
   wsConn.onclose = (evt) => {
-    console.log(`[Drishi] WS closed (${evt.code})`);
+    rlog(`WS closed | code=${evt.code} reason="${evt.reason || 'none'}"`, evt.code === 1000 ? 'info' : 'error');
     clearInterval(wsPingTimer);
     wsPingTimer = null;
     // Auto-reconnect on unexpected close (not 1000 = normal stop)
@@ -168,12 +264,10 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   // Google Meet (and other conferencing tabs) may suspend the AudioContext due to
   // Chrome's autoplay policy. Resume explicitly so audio processing actually runs.
   if (audioCtx.state === 'suspended') {
-    console.log('[Drishi] AudioContext suspended — resuming for Google Meet...');
     await audioCtx.resume();
   }
   audioCtx.addEventListener('statechange', async () => {
     if (audioCtx && audioCtx.state === 'suspended') {
-      console.log('[Drishi] AudioContext re-suspended — resuming...');
       try { await audioCtx.resume(); } catch (_) {}
     }
   });
@@ -181,16 +275,21 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   const source = audioCtx.createMediaStreamSource(stream);
 
   // ── Mode A state (Sarvam client-side STT) ──────────────────────────────────
-  const SILENCE_THRESHOLD  = 0.008;
-  const SILENCE_CHUNKS_END = 16;      // 16 × 64ms = 1.0s of silence → flush (was 6×256ms=1.5s)
-  const MIN_SPEECH_SAMPLES = 8000;    // 0.5s minimum (was 0.75s/12000)
+  // Mic mode needs higher thresholds: mic picks up user's voice + ambient room noise.
+  // Raise threshold so only clear speech triggers capture, and require longer utterances
+  // (filters out short acknowledgments like "Okay", "Right", "Thank you").
+  const SILENCE_THRESHOLD  = captureMode === 'mic' ? 0.018 : 0.008;
+  const SILENCE_CHUNKS_END = captureMode === 'mic' ? 14  : 10;   // mic: 900ms, tab: 640ms
+  const MIN_SPEECH_SAMPLES = captureMode === 'mic' ? 24000 : 8000; // mic: 1.5s min, tab: 0.5s
   const MAX_BUFFER_SAMPLES = 96000;   // 6s safety cap
+  const PRE_ROLL_CHUNKS    = 3;       // ~200ms pre-roll before speech onset
 
   let pcmBuffer     = [];
   let bufferSamples = 0;
   let inSpeech      = false;
   let silenceCount  = 0;
   let transcribing  = false;
+  let preRoll       = [];             // circular pre-roll: last N silent chunks
 
   async function flushBuffer() {
     if (bufferSamples < MIN_SPEECH_SAMPLES) {
@@ -210,15 +309,26 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
     for (const chunk of pcmBuffer) { total.set(chunk, offset); offset += chunk.length; }
     pcmBuffer = []; bufferSamples = 0; inSpeech = false; silenceCount = 0;
     try {
-      console.log(`[Drishi] Sarvam STT: ${total.length} samples (${(total.length / SAMPLE_RATE).toFixed(1)}s)`);
+      const durSec = (total.length / SAMPLE_RATE).toFixed(1);
+      rlog(`Sarvam STT sending: ${total.length} samples (${durSec}s)`);
       const text = await transcribeWithSarvam(total, sarvamKey, currentAbort.signal);
-      if (currentAbort.signal.aborted) return; // newer segment superseded this one
-      console.log(`[Drishi] Sarvam result: "${text}"`);
-      if (text && text.length >= 4 && wsConn && wsConn.readyState === WebSocket.OPEN) {
-        wsConn.send(JSON.stringify({ type: 'text_question', text }));
+      if (currentAbort.signal.aborted) return;
+      rlog(`Sarvam result: "${text}"`);
+      if (text && text.length >= 4) {
+        if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+          // Primary: send over existing WS connection
+          wsConn.send(JSON.stringify({ type: 'text_question', text }));
+          rlog(`Sarvam→WS: "${text.slice(0,80)}"`);
+        } else {
+          // Fallback: POST directly to /api/cc_question (works without WS / through ngrok)
+          rlog(`WS unavailable — posting via HTTP: "${text.slice(0,60)}"`);
+          sendTranscriptViaPost(text);
+        }
+      } else {
+        rlog(`Sarvam returned empty/short text — skipped`);
       }
     } catch (e) {
-      if (e.name !== 'AbortError') console.error('[Drishi] Sarvam error:', e.message);
+      if (e.name !== 'AbortError') rlog(`Sarvam ERROR: ${e.message}`, 'error');
     } finally {
       transcribing = false;
       if (sarvamAbortCtrl === currentAbort) sarvamAbortCtrl = null;
@@ -227,7 +337,9 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
 
   // ── Per-chunk processor — called by both AudioWorklet and ScriptProcessorNode
   function processChunk(float32) {
-    if (!wsConn || wsConn.readyState !== WebSocket.OPEN) return;
+    // Sarvam mode: process audio locally — WS not required (sends via POST fallback)
+    // Raw PCM mode: WS required to stream binary
+    if (!sarvamKey && (!wsConn || wsConn.readyState !== WebSocket.OPEN)) return;
 
     if (sarvamKey) {
       // Mode A: accumulate + silence detection → Sarvam AI STT
@@ -237,17 +349,35 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
       const isSilent = rms < SILENCE_THRESHOLD;
       const pcm16    = float32ToPcm16(float32);
 
+      // Log audio stats every 50 chunks (~3s) to confirm audio is flowing
+      _rmsLogCount++;
+      if (_rmsLogCount % 50 === 1) {
+        rlog(`audio flowing | rms=${rms.toFixed(4)} (threshold=${SILENCE_THRESHOLD}) silent=${isSilent} inSpeech=${inSpeech} buffered=${(bufferSamples/SAMPLE_RATE).toFixed(1)}s wsState=${wsConn?.readyState}`);
+      }
+
       if (!isSilent) {
+        if (!inSpeech) {
+          // Speech onset — prepend pre-roll so we don't clip the start
+          for (const pre of preRoll) { pcmBuffer.push(pre); bufferSamples += pre.length; }
+          preRoll = [];
+        }
         inSpeech = true; silenceCount = 0;
       } else if (inSpeech) {
         silenceCount++;
       }
 
-      pcmBuffer.push(pcm16);
-      bufferSamples += pcm16.length;
+      if (inSpeech) {
+        // Only accumulate while speech is active (avoid 6s silent flushes)
+        pcmBuffer.push(pcm16);
+        bufferSamples += pcm16.length;
+      } else {
+        // Keep a rolling pre-roll window so speech onset isn't clipped
+        preRoll.push(pcm16);
+        if (preRoll.length > PRE_ROLL_CHUNKS) preRoll.shift();
+      }
 
       const endOfSpeech = inSpeech && silenceCount >= SILENCE_CHUNKS_END;
-      const bufferFull  = bufferSamples >= MAX_BUFFER_SAMPLES;
+      const bufferFull  = inSpeech && bufferSamples >= MAX_BUFFER_SAMPLES;
       if ((endOfSpeech || bufferFull) && !transcribing) {
         flushBuffer();
       }
@@ -270,7 +400,6 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
     workletNode.connect(audioCtx.destination);
     processor  = workletNode;
     useWorklet = true;
-    console.log('[Drishi] AudioWorklet active (sarvam=' + !!sarvamKey + ')');
   } catch (e) {
     console.warn('[Drishi] AudioWorklet unavailable, using ScriptProcessorNode fallback:', e.message);
     const spn = audioCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
@@ -281,7 +410,7 @@ async function startCapture(streamId, serverUrl, secretCode, sarvamKey, userToke
   }
 
   chrome.runtime.sendMessage({ type: 'audio_status', status: 'streaming' }).catch(() => {});
-  console.log(`[Drishi] Capturing tab audio at ${SAMPLE_RATE / 1000}kHz | mode=${sarvamKey ? 'Sarvam STT' : 'raw PCM'} | engine=${useWorklet ? 'AudioWorklet' : 'ScriptProcessorNode'}`);
+  rlog(`CAPTURE ACTIVE | ${SAMPLE_RATE/1000}kHz | mode=${sarvamKey ? 'Sarvam STT' : 'raw PCM'} | engine=${useWorklet ? 'AudioWorklet' : 'ScriptProcessorNode'}`);
 }
 
 // ── WS reconnect (called when WS drops but stream is still active) ────────────

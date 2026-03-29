@@ -73,6 +73,10 @@ _HAS_QUESTION_RE = re.compile(
 )
 
 
+_VS_RE = re.compile(r"\s+vs\.?\s+|\s+versus\s+", re.IGNORECASE)
+_DIFF_RE = re.compile(r"^difference between\s+(.+)\s+and\s+(.+)$", re.IGNORECASE)
+
+
 def normalize_manual_question(raw_question: str) -> str:
     """Expand short keyword-style manual asks into full questions.
     Also tries the DB for known keywords to return the canonical question form."""
@@ -83,11 +87,26 @@ def normalize_manual_question(raw_question: str) -> str:
     words = question.split()
     has_question_word = _HAS_QUESTION_RE.search(question)
     if len(words) <= 3 and not has_question_word and not question.endswith("?"):
+        # Normalise "X vs Y" shorthand at the focus-bar
+        m_vs = _VS_RE.search(question)
+        if m_vs:
+            parts = _VS_RE.split(question, maxsplit=1)
+            if len(parts) == 2:
+                return f"What is the difference between {parts[0].strip()} and {parts[1].strip()}?"
         # Try DB lookup for well-known short keywords first
         db_hit = qa_database.find_answer(question, want_code=False)
         if db_hit:
             return question  # DB knows it — pass as-is
         return f"What is {question}? Explain in detail with examples."
+
+    # Normalise bare "X vs Y" or "X versus Y" without a question word
+    if not has_question_word and not question.endswith("?"):
+        m_vs = _VS_RE.search(question)
+        if m_vs:
+            parts = _VS_RE.split(question, maxsplit=1)
+            if len(parts) == 2:
+                return f"What is the difference between {parts[0].strip()} and {parts[1].strip()}?"
+
     return question
 
 
@@ -446,7 +465,6 @@ def expand_short_keyword(text: str) -> str:
         return stripped
 
     expanded = f"What is {stripped}? Explain with examples."
-    print(f"[CC] Keyword expanded: '{stripped}' → '{expanded}'")
     return expanded
 
 
@@ -475,7 +493,6 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     question_text = expand_short_keyword(question_text)
     merged_text, was_merged = fragment_context.merge_with_context(question_text)
     if was_merged:
-        print(f"[CC] Fragment merged: '{question_text[:40]}' -> '{merged_text[:60]}'")
         question_text = merged_text
 
     is_valid, cleaned_question, rejection_reason = validate_question(question_text)
@@ -488,7 +505,6 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
         }, 200
 
     question_text = cleaned_question
-    print(f"[CC] Question validated: {question_text[:60]}...")
 
     if is_chat_source:
         append_chat_question(question_text, source, time.time(), "answered")
@@ -505,7 +521,6 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
     # Skip dedup check only for intro; everything else deduplicates
     existing = answer_storage.is_already_answered(question_text)
     if existing:
-        print(f"[CC] Already answered, showing existing: {question_text[:40]}...")
         return {
             "status": "already_answered",
             "question": question_text[:50],
@@ -534,10 +549,8 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
             is_infra = any(ind in q_lower for ind in infra_indicators)
             if is_infra:
                 wants_code = True
-                print("[CC] Infra/script question -> coding mode")
             elif not is_theory:
                 wants_code = True
-                print("[CC] Chat question -> treating as coding request")
 
         _active = state.get_selected_user() or {}
         _role_tag = getattr(config, "INTERVIEW_ROLE", "") or ""
@@ -572,11 +585,9 @@ def cc_question_payload(data: dict | None) -> tuple[dict, int]:
                 from user_manager import build_resume_context_for_llm
 
                 if wc:
-                    print("[CC] Code request - calling LLM (bg)")
                     answer = llm_client.get_coding_answer(q)
                     answer_storage.set_complete_answer(q, answer, {"source": sl})
                 else:
-                    print("[CC] Theory question - streaming LLM (bg)")
                     user_ctx = build_resume_context_for_llm()
                     raw_chunks = []
                     for chunk in llm_client.get_streaming_interview_answer(q, res, jd, user_ctx):

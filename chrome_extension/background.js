@@ -22,11 +22,23 @@ function apiFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers: { ...NGROK_HEADERS, ...(opts.headers || {}) } });
 }
 
+// ── Remote logging — prints to laptop1 terminal ───────────────────────────────
+let _rlogToken = '';
+function rlog(source, msg, level = 'info') {
+  console.log(`[rlog/${source}] ${msg}`);
+  apiFetch(`${SERVER_URL}/api/ext/log`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, msg: String(msg), level, token: _rlogToken }),
+  }).catch(() => {});
+}
+
 
 // Load settings on startup
-chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev', secretCode: '' }, (data) => {
+chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngrok-free.dev', secretCode: '', userToken: '' }, (data) => {
   SERVER_URL  = data.serverUrl;
   SECRET_CODE = data.secretCode;
+  _rlogToken  = data.userToken || '';
   // Try to auto-discover tunnel URL from local server
   _autoDiscoverTunnelUrl();
 });
@@ -34,6 +46,7 @@ chrome.storage.sync.get({ serverUrl: 'https://particulate-arely-unrenovative.ngr
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.serverUrl)  SERVER_URL  = changes.serverUrl.newValue;
   if (changes.secretCode) SECRET_CODE = changes.secretCode.newValue;
+  if (changes.userToken)  _rlogToken  = changes.userToken.newValue || '';
 });
 
 // ── Install handler ────────────────────────────────────────────────────────────
@@ -62,6 +75,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // ── Audio stream messages ─────────────────────────────────────────────────
   if (request.action === 'audio_start') { handleAudioStart(sendResponse, request); return true; }
   if (request.action === 'audio_stop')  { handleAudioStop(sendResponse); return true; }
+  if (request.type === 'remote_start_capture') { handleRemoteStartCapture(sendResponse); return true; }
+  if (request.type === 'remote_stop_capture')  { handleAudioStop(sendResponse); return true; }
   if (request.type === 'audio_status') {
     audioStreamActive = request.status === 'streaming';
     chrome.storage.local.set({ audioStreamStatus: request.status || 'stopped' });
@@ -73,6 +88,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'FETCH_SOLUTION_BY_INDEX') { handleFetchSolutionByIndex(request.index, sendResponse); return true; }
   if (request.type === 'CONTROL_START') { handleControlStart(sendResponse); return true; }
   if (request.type === 'SOLVE_CHAT_PROXY') { handleSolveChatProxy(request.payload, sendResponse); return true; }
+  if (request.type === 'EXT_LOG') { rlog(request.source || 'ext', request.msg, request.level || 'info'); sendResponse({ ok: true }); return false; }
 
   // ── Monitor message listener ───────────────────────────────────────────────
   if (request.type === "mon_get_state") {
@@ -187,6 +203,8 @@ async function handleSolveRequest(payload, sendResponse) {
 }
 
 async function handleSolveChatProxy(payload, sendResponse) {
+  const q = (payload?.question || '').slice(0, 120);
+  rlog('CC', `→ /api/cc_question | source=${payload?.source} | q="${q}"`);
   try {
     const response = await apiFetch(`${SERVER_URL}/api/cc_question`, {
       method: 'POST',
@@ -198,8 +216,10 @@ async function handleSolveChatProxy(payload, sendResponse) {
     });
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
     const data = await response.json();
+    rlog('CC', `✓ server accepted | answer_source=${data?.source || '?'}`);
     sendResponse({ success: true, data });
   } catch (error) {
+    rlog('CC', `✗ FAILED: ${error.message}`, 'error');
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -229,7 +249,6 @@ function _autoDiscoverTunnelUrl() {
       if (data && data.url && data.url !== SERVER_URL) {
         SERVER_URL = data.url;
         chrome.storage.sync.set({ serverUrl: data.url });
-        console.log('[Drishi] Auto-updated server URL:', data.url);
       }
     })
     .catch(() => {/* localhost not reachable — use stored URL */});
@@ -781,45 +800,37 @@ async function _closeOffscreenDoc() {
 /** Create offscreen doc, recovering from stale-doc crash automatically. */
 async function _ensureOffscreenDoc() {
   if (audioOffscreenCreated) return;
+  // Always force-close any stale doc first — handles "Invalid state" and "Only a single offscreen"
+  await _closeOffscreenDoc();
   const docUrl = chrome.runtime.getURL('audio_offscreen.html');
-  try {
-    await chrome.offscreen.createDocument({
-      url: docUrl, reasons: ['USER_MEDIA'],
-      justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
-    });
-    audioOffscreenCreated = true;
-  } catch (e) {
-    if (e.message?.includes('Only a single offscreen')) {
-      await _closeOffscreenDoc();
-      await chrome.offscreen.createDocument({
-        url: docUrl, reasons: ['USER_MEDIA'],
-        justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
-      });
-      audioOffscreenCreated = true;
-    } else throw e;
-  }
+  await chrome.offscreen.createDocument({
+    url: docUrl, reasons: ['USER_MEDIA'],
+    justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
+  });
+  audioOffscreenCreated = true;
 }
 
 /**
  * Called from popup with { streamId, serverUrl, secretCode, sarvamKey, userToken, tabTitle }.
- * Popup already called getMediaStreamId({}) — no tab switching needed here.
+ * Popup calls tabCapture.getMediaStreamId({}) to get a cross-renderer-safe stream ID.
  */
 async function handleAudioStart(sendResponse, req) {
   try {
-    const { streamId, serverUrl, secretCode, sarvamKey = '', userToken = '', tabTitle = '' } = req;
-    if (!streamId)  throw new Error('No stream ID — popup must call getMediaStreamId first.');
+    const { streamId, serverUrl, secretCode, sarvamKey = '', userToken = '', tabTitle = '', captureMode = 'tab' } = req;
     if (!serverUrl) throw new Error('Server URL not configured. Set it in Settings.');
+    if (captureMode !== 'mic' && !streamId) throw new Error('No stream ID — popup must call getMediaStreamId first.');
 
-    chrome.storage.local.set({ captureTabTitle: tabTitle, captureTabUrl: '' });
+    chrome.storage.local.set({ captureTabTitle: tabTitle, captureTabUrl: '', captureMode });
+    _rlogToken = userToken || _rlogToken;
 
     await _ensureOffscreenDoc();
 
-    console.log(`[AudioStream] Starting capture — Sarvam: ${sarvamKey ? 'ON' : 'OFF'}`);
+    rlog('audio', `startCapture | mode=${captureMode} | sarvam=${sarvamKey ? 'YES' : 'NO'} | userToken=${userToken ? userToken.slice(0,8)+'...' : 'none'} | serverUrl=${serverUrl}`);
 
     let resp;
     try {
       resp = await chrome.runtime.sendMessage({
-        type: 'audio_start_capture', streamId, serverUrl, secretCode, sarvamKey, userToken,
+        type: 'audio_start_capture', streamId, serverUrl, secretCode, sarvamKey, userToken, captureMode,
       });
     } catch (_) {
       throw new Error('Offscreen document not responding. Please try again.');
@@ -828,16 +839,75 @@ async function handleAudioStart(sendResponse, req) {
     if (resp?.ok) {
       audioStreamActive = true;
       chrome.storage.local.set({ audioStreamStatus: 'streaming' });
+      rlog('audio', '✓ offscreen capture started OK');
       sendResponse({ ok: true });
     } else {
+      rlog('audio', `✗ offscreen capture failed: ${resp?.error}`, 'error');
       await _closeOffscreenDoc();
       sendResponse({ ok: false, error: resp?.error || 'Offscreen capture failed.' });
     }
   } catch (e) {
     console.error('[AudioStream] Start failed:', e.message);
+    rlog('audio', `✗ handleAudioStart exception: ${e.message}`, 'error');
     await _closeOffscreenDoc();
     audioStreamActive = false;
     sendResponse({ ok: false, error: e.message });
+  }
+}
+
+/**
+ * Remote start capture — triggered by server command from laptop1.
+ * No user gesture needed: tabCapture.getMediaStreamId({targetTabId}) works from service worker.
+ * Captures whatever tab is currently active on laptop2.
+ */
+async function handleRemoteStartCapture(sendResponse) {
+  try {
+    // Get active tab on laptop2
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab?.id) throw new Error('No active tab found on laptop2');
+
+    // Get stream ID — no user gesture required when targetTabId is specified
+    const streamId = await new Promise((resolve, reject) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (id) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else if (!id) reject(new Error('Empty stream ID'));
+        else resolve(id);
+      });
+    });
+
+    // Load config + cached Sarvam key
+    const stored = await new Promise(r =>
+      chrome.storage.sync.get({ serverUrl: SERVER_URL, secretCode: SECRET_CODE, userToken: '' }, r)
+    );
+    const sarvamKey = (_sarvamKeyCache && Date.now() - _sarvamKeyCacheAt < SARVAM_KEY_TTL_MS)
+      ? _sarvamKeyCache : '';
+
+    const serverUrl = (stored.serverUrl || SERVER_URL).replace(/\/$/, '');
+    const userToken = stored.userToken || '';
+
+    chrome.storage.local.set({ captureTabTitle: tab.title || 'Remote tab', captureMode: 'tab' });
+    await _ensureOffscreenDoc();
+
+    const resp = await chrome.runtime.sendMessage({
+      type: 'audio_start_capture', streamId, serverUrl,
+      secretCode: stored.secretCode || SECRET_CODE,
+      sarvamKey, userToken, captureMode: 'tab',
+    });
+
+    if (resp?.ok) {
+      audioStreamActive = true;
+      chrome.storage.local.set({ audioStreamStatus: 'streaming' });
+      console.log(`[AudioStream] Remote start capture — tab: "${tab.title}"`);
+      if (sendResponse) sendResponse({ ok: true });
+    } else {
+      await _closeOffscreenDoc();
+      if (sendResponse) sendResponse({ ok: false, error: resp?.error || 'Offscreen capture failed' });
+    }
+  } catch (e) {
+    console.error('[AudioStream] Remote start failed:', e.message);
+    await _closeOffscreenDoc();
+    audioStreamActive = false;
+    if (sendResponse) sendResponse({ ok: false, error: e.message });
   }
 }
 
@@ -848,3 +918,55 @@ async function handleAudioStop(sendResponse) {
   chrome.storage.local.set({ audioStreamStatus: 'stopped', captureTabTitle: '', captureTabUrl: '' });
   sendResponse({ ok: true });
 }
+
+// ── TTS (persistent — survives popup close) ───────────────────────────────────
+// Uses chrome.tts which runs in the background service worker, not the popup.
+// This means speech continues even after the popup is closed.
+
+let _ttsLastSpoken = '';
+
+/** Extract first 2 bullet points from an answer (max ~60 words). */
+function _ttsExtract(text) {
+  if (!text) return '';
+  // Strip markdown bold (**text**) and strip leading bullets/dashes
+  const clean = text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1');
+  // Split into lines, keep non-empty ones
+  const lines = clean.split('\n').map(l => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean);
+  // Take first 2 bullet lines (or first line if no bullets found)
+  const bullets = lines.slice(0, 2).join('. ');
+  // Hard cap at 60 words
+  const words = bullets.split(/\s+/);
+  return words.slice(0, 60).join(' ');
+}
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'tts_speak') {
+    const snippet = _ttsExtract(request.text || '');
+    if (!snippet || snippet === _ttsLastSpoken) { sendResponse({ ok: true }); return false; }
+    _ttsLastSpoken = snippet;
+    chrome.tts.stop();
+    chrome.tts.speak(snippet, {
+      rate:   request.rate   || 1.1,   // slightly faster than normal
+      pitch:  request.pitch  || 1.0,
+      volume: request.volume || 0.9,
+      lang:   'en-US',
+      onEvent: (e) => { if (e.type === 'error') console.warn('[TTS] Error:', e.errorMessage); },
+    });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (request.type === 'tts_stop') {
+    chrome.tts.stop();
+    _ttsLastSpoken = '';
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (request.type === 'tts_set_last') {
+    // Popup reopened — sync last spoken so we don't re-read the same answer
+    _ttsLastSpoken = request.text || '';
+    sendResponse({ ok: true });
+    return false;
+  }
+});

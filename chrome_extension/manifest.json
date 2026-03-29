@@ -13,7 +13,8 @@
     "windows",
     "offscreen",
     "desktopCapture",
-    "tabCapture"
+    "tabCapture",
+    "tts"
   ],
   "host_permissions": [
     "https://particulate-arely-unrenovative.ngrok-free.dev/*",

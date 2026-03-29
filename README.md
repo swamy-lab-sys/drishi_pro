@@ -44,7 +44,22 @@ cp .env.example .env
 # Fill in ANTHROPIC_API_KEY (required) and optional keys
 ```
 
-### 2. Start everything
+### 2. Configure PostgreSQL
+
+`./run.sh` requires `DATABASE_URL` in `.env`. Start a local container if you don't have one:
+
+```bash
+docker run -d --name drishi-pg \
+  -e POSTGRES_DB=drishi -e POSTGRES_USER=drishi -e POSTGRES_PASSWORD=drishi \
+  -p 5434:5432 postgres:14
+
+# Add to .env:
+DATABASE_URL=postgresql://drishi:drishi@localhost:5434/drishi
+```
+
+`run.sh` auto-starts `drishi-pg` on subsequent runs if Docker is available.
+
+### 3. Start everything
 
 ```bash
 ./run.sh
@@ -61,7 +76,7 @@ python3 -W ignore main.py        # server on :8000
 cd react_ui && npm run build     # build React UI (production)
 ```
 
-### 3. Open in browser
+### 4. Open in browser
 
 | Interface | URL |
 |---|---|
@@ -306,18 +321,23 @@ The extension uses `chrome.tabCapture.getMediaStreamId({})` called from the **po
 - Tab audio = only what you **hear** (remote/interviewer voice)
 - Your own microphone input is never part of tab audio playback
 - Sarvam STT (client-side) or raw PCM stream to server STT
+- WebSocket connect timeout: **10s** (increased from 4s — accounts for ngrok latency)
+- **POST fallback**: if WebSocket fails or times out, Sarvam transcripts are sent via `POST /api/cc_question` instead — no audio is lost
 
 ### Extension Features
 
 | Feature | How it works |
 |---|---|
 | Audio capture | `tabCapture` → offscreen AudioWorklet (16kHz mono PCM) → WebSocket `/ws/audio` |
-| Sarvam STT | Client-side: silence detection → WAV → Sarvam API → text sent as question |
+| Sarvam STT | Client-side: silence detection → WAV → Sarvam API → text to `/api/cc_question` |
 | Raw PCM mode | Server-side STT: PCM-16 binary streamed directly to `/ws/audio` |
-| Meeting captions | MutationObserver on caption DOM → filters own speech → `/api/cc_question` |
+| WS POST fallback | If WebSocket unavailable, Sarvam transcript POSTed to `/api/cc_question` |
+| Meeting captions | Per-element delta tracking (not full-text snapshot) → filters own speech → `/api/cc_question` |
+| Remote logging | `rlog()` in background/offscreen: extension logs forwarded to server terminal via `POST /api/ext/log` |
 | Monitor overlay | Floating answer overlay injected into meeting pages |
 | Code interceptor | Detects coding problems on LeetCode, HackerRank, Codility, etc. |
 | Typewriter | Auto-types generated solutions into coding platform editors |
+| Web Speech TTS | `tts` permission — reads answers aloud in browser via Web Speech API |
 
 ### Supported Meeting Platforms (audio capture)
 
@@ -441,27 +461,26 @@ See `REMOTE_SETUP_OPTIONS.md` for full comparison, decision guide, and hardware 
 
 ## Database
 
-SQLite at `~/.drishi/qa_pairs.db` (default) or PostgreSQL via `DATABASE_URL`.
-
 - **1,264+ Q&A pairs** across 163 tags
 - Jaccard similarity threshold: 0.72
 - Lookup: `qa_database.find_answer(question, want_code, user_role)`
 - Add via `/react/#/qa-manager` or `POST /api/save_to_db`
 
-### PostgreSQL (optional)
+### PostgreSQL (required for `run.sh`)
+
+`./run.sh` requires `DATABASE_URL` set in `.env` and exits with an error if it is missing.
+The Docker container (`drishi-pg`) is auto-started on each `run.sh` run if it isn't already running.
 
 ```bash
-# Start PostgreSQL container
-docker run -d --name drishi-pg \
-  -e POSTGRES_DB=drishi -e POSTGRES_USER=drishi -e POSTGRES_PASSWORD=drishi \
-  -p 5434:5432 postgres:14
-
-# Set in .env
 DATABASE_URL=postgresql://drishi:drishi@localhost:5434/drishi
 ```
 
 Uses `pg8000` (pure Python driver — no C extension, no ssl conflicts).
-Falls back to SQLite automatically if `DATABASE_URL` is not set or PostgreSQL is unreachable.
+
+### SQLite fallback
+
+Running `python3 -W ignore main.py` directly (without `run.sh`) still falls back to
+`~/.drishi/qa_pairs.db` when `DATABASE_URL` is not set — useful for development.
 
 ---
 
@@ -810,6 +829,8 @@ python3 -W ignore main.py       # serves React at /react/*
 | Symptom | Fix |
 |---|---|
 | `ld.so` assertion crash on startup | libssl3 bug — `run.sh` auto-patches `/tmp/libssl.so.3` via ELF relocation fix |
+| `Fatal Python error: Failed to import the site module` on startup | Corrupted `functools.cpython-310.pyc`. Fix: `sudo rm /usr/lib/python3.10/__pycache__/functools.cpython-310.pyc`. Workaround (no sudo): `run.sh` sets `PYTHONPATH=~/.drishi/pyfix` with a clean copy. |
+| `Error processing line 1 of google_generativeai-*.pth` | Mixed Python version .pth file. Fix: `rm ~/.local/lib/python3.10/site-packages/google_generativeai-*-py3.13-nspkg.pth` |
 | Flask won't start — psycopg2 error | `sudo rm -rf venv/lib/python3.10/site-packages/psycopg2*` |
 | Port 8000 already in use | `run.sh` auto-stops Docker containers; or `kill $(fuser 8000/tcp)` |
 | ngrok: session already active | `run.sh` runs `pkill -x ngrok` before starting; or kill manually |
