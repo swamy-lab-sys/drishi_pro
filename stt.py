@@ -682,6 +682,230 @@ _RAW_CORRECTIONS = {
     "i p sec":                       "IPsec",
     "s t u n":                       "STUN",
     "t u r n":                       "TURN",
+
+    # ── Java / Spring Boot mishears ──────────────────────────────────────────
+    "single ton":                    "singleton",
+    "single tone":                   "singleton",
+    "factory pattern":               "factory pattern",
+    "builder pattern":               "builder pattern",
+    "observer pattern":              "observer pattern",
+    "depend and injection":          "dependency injection",
+    "depend in injection":           "dependency injection",
+    "dependency ejection":           "dependency injection",
+    "dependency injection":          "dependency injection",
+    "spring boot application":       "Spring Boot application",
+    "spring boat":                   "Spring Boot",
+    "j p a":                         "JPA",
+    "spring jpa":                    "Spring JPA",
+    "spring data":                   "Spring Data",
+    "auto wired":                    "Autowired",
+    "auto wire":                     "Autowire",
+    "bean scope":                    "bean scope",
+    "component scan":                "component scan",
+    "aspect oriented":               "aspect-oriented",
+    "a o p":                         "AOP",
+    "spring security":               "Spring Security",
+    "spring mvc":                    "Spring MVC",
+    "garbage collection in java":    "garbage collection in Java",
+    "string immutable":              "String immutable",
+    "java 8":                        "Java 8",
+    "java 11":                       "Java 11",
+    "java 17":                       "Java 17",
+    "optional in java":              "Optional in Java",
+    "stream api":                    "Stream API",
+    "functional interface":          "functional interface",
+    "comparable and comparator":     "Comparable and Comparator",
+    "hash map":                      "HashMap",
+    "hash set":                      "HashSet",
+    "array list":                    "ArrayList",
+    "linked list":                   "LinkedList",
+    "thread safe":                   "thread-safe",
+    "thread pool":                   "thread pool",
+    "dead lock":                     "deadlock",
+    "completable future":            "CompletableFuture",
+    "executor service":              "ExecutorService",
+
+    # ── SQL / Database mishears ───────────────────────────────────────────────
+    "sub query":                     "subquery",
+    "sub-query":                     "subquery",
+    "see t e":                       "CTE",
+    "c t e":                         "CTE",
+    "common table expression":       "CTE",
+    "window functions":              "window functions",
+    "group by clause":               "GROUP BY clause",
+    "having clause":                 "HAVING clause",
+    "inner join":                    "INNER JOIN",
+    "left join":                     "LEFT JOIN",
+    "right join":                    "RIGHT JOIN",
+    "full outer join":               "FULL OUTER JOIN",
+    "foreign key":                   "foreign key",
+    "primary key":                   "primary key",
+    "unique constraint":             "unique constraint",
+    "stored procedure":              "stored procedure",
+    "normalization":                 "normalization",
+    "denormalization":               "denormalization",
+    "normal form":                   "normal form",
+    "1nf":                           "1NF",
+    "2nf":                           "2NF",
+    "3nf":                           "3NF",
+    "b c n f":                       "BCNF",
+    "acid properties":               "ACID properties",
+    "transaction isolation":         "transaction isolation",
+    "dead lock in sql":              "deadlock in SQL",
+    "query optimization":            "query optimization",
+    "execution plan":                "execution plan",
+    "explain plan":                  "EXPLAIN plan",
+    "composite index":               "composite index",
+    "covering index":                "covering index",
+    "cluster index":                 "clustered index",
+    "clustered vs non-clustered":    "clustered vs non-clustered",
+    "materialized view":             "materialized view",
+    "view vs materialized":          "view vs materialized view",
+    "postgres":                      "PostgreSQL",
+    "my sql":                        "MySQL",
+
+    # ── JavaScript / React mishears ───────────────────────────────────────────
+    "use state":                     "useState",
+    "use effect":                    "useEffect",
+    "use context":                   "useContext",
+    "use ref":                       "useRef",
+    "use memo":                      "useMemo",
+    "use callback":                  "useCallback",
+    "use reducer":                   "useReducer",
+    "react hooks":                   "React hooks",
+    "virtual dom":                   "virtual DOM",
+    "virtual d o m":                 "virtual DOM",
+    "event loop in javascript":      "event loop in JavaScript",
+    "call stack":                    "call stack",
+    "callback queue":                "callback queue",
+    "microtask queue":               "microtask queue",
+    "promise chaining":              "promise chaining",
+    "async and await":               "async and await",
+    "arrow function":                "arrow function",
+    "higher order function":         "higher order function",
+    "spread operator":               "spread operator",
+    "rest parameter":                "rest parameter",
+    "destructuring":                 "destructuring",
+    "prototype chain":               "prototype chain",
+    "event bubbling":                "event bubbling",
+    "event delegation":              "event delegation",
+    "local storage":                 "localStorage",
+    "session storage":               "sessionStorage",
+    "node j s":                      "Node.js",
+    "node js":                       "Node.js",
+    "express js":                    "Express.js",
+    "next js":                       "Next.js",
+    "type script":                   "TypeScript",
+
+    # ── System Design mishears ────────────────────────────────────────────────
+    "content delivery network":      "CDN",
+    "c d n":                         "CDN",
+    "eventual consistency":          "eventual consistency",
+    "strong consistency":            "strong consistency",
+    "partition tolerance":           "partition tolerance",
+    "shard ing":                     "sharding",
+    "replication lag":               "replication lag",
+    "leader election":               "leader election",
+    "consensus algorithm":           "consensus algorithm",
+    "rate limit":                    "rate limiting",
+    "rate limiter":                  "rate limiter",
+    "circuit breaker":               "circuit breaker",
+    "service mesh":                  "service mesh",
+    "api gateway":                   "API gateway",
+    "message broker":                "message broker",
+    "publish subscribe":             "publish-subscribe",
+    "pub sub":                       "pub/sub",
+    "event driven":                  "event-driven",
+    "event sourcing":                "event sourcing",
+    "cqrs":                          "CQRS",
+    "saga pattern":                  "saga pattern",
+    "blue green deployment":         "blue-green deployment",
+    "canary deployment":             "canary deployment",
+    "rolling deployment":            "rolling deployment",
+    "chaos engineering":             "chaos engineering",
+    "sql vs no sql":                 "SQL vs NoSQL",
+    "no sql":                        "NoSQL",
+    "mongo db":                      "MongoDB",
+    "dynamo db":                     "DynamoDB",
+    "couch db":                      "CouchDB",
+    "elastic search":                "Elasticsearch",
+    "memcached":                     "Memcached",
+    "redis cache":                   "Redis cache",
+    "horizontal scaling":            "horizontal scaling",
+    "vertical scaling":              "vertical scaling",
+    "auto scaling":                  "auto scaling",
+    "consistent hashing":            "consistent hashing",
+
+    # ── Common interview question patterns (Sarvam Indian EN) ─────────────────
+    "n plus one":                    "N+1",
+    "n plus 1":                      "N+1",
+    "n+1 problem":                   "N+1 problem",
+    "select related":                "select_related",
+    "pre fetch related":             "prefetch_related",
+    "prefetch related":              "prefetch_related",
+    "m to m":                        "ManyToMany",
+    "many to many":                  "ManyToMany",
+    "one to one":                    "OneToOne",
+    "one to many":                   "OneToMany",
+    "foreign key relation":          "ForeignKey relation",
+    "view set":                      "ViewSet",
+    "model view set":                "ModelViewSet",
+    "model serializer":              "ModelSerializer",
+    "d r f":                         "DRF",
+    "or m":                          "ORM",
+    "access token and refresh token":"access token and refresh token",
+    "refresh token":                 "refresh token",
+    "bearer token":                  "bearer token",
+    "o auth":                        "OAuth",
+    "o auth 2":                      "OAuth2",
+    "open i d":                      "OpenID",
+    "open id connect":               "OpenID Connect",
+    "single sign on":                "SSO",
+    "s s o":                         "SSO",
+    "two factor":                    "two-factor",
+    "2 f a":                         "2FA",
+    "rate throttling":               "rate throttling",
+    "cors policy":                   "CORS policy",
+    "web hook":                      "webhook",
+    "web hooks":                     "webhooks",
+    "rest full":                     "RESTful",
+    "rest full api":                 "RESTful API",
+    "graph ql":                      "GraphQL",
+    "grpc":                          "gRPC",
+    "g r p c":                       "gRPC",
+    "proto buf":                     "protobuf",
+    "protocol buffers":              "Protocol Buffers",
+    "open api":                      "OpenAPI",
+    "swagger":                       "Swagger",
+    "postman":                       "Postman",
+    "micro front end":               "micro frontend",
+    "server side rendering":         "server-side rendering",
+    "s s r":                         "SSR",
+    "client side rendering":         "client-side rendering",
+    "c s r":                         "CSR",
+    "static site generation":        "static site generation",
+    "s s g":                         "SSG",
+
+    # ── Middleware mishears (Sarvam Indian EN) ────────────────────────────────
+    "middle wears":                  "middleware",
+    "middle wear":                   "middleware",
+    "middle ways":                   "middleware",
+    "middle way":                    "middleware",
+    "middle ware":                   "middleware",
+    "middlewears":                   "middleware",
+    "middlewares":                   "middlewares",
+    "what are the middle wears":     "what is middleware",
+    "what are the middle ways":      "what is middleware",
+    "what is middle wear":           "what is middleware",
+    "how do you use middle wear":    "how do you use middleware",
+
+    # ── JWT mishears ──────────────────────────────────────────────────────────
+    "jwa token":                     "JWT token",
+    "jwa tokens":                    "JWT tokens",
+    "j w a":                         "JWT",
+    "what is jwa":                   "what is JWT",
+    "what are jwa":                  "what are JWT",
+    "difference between jwa":        "difference between JWT",
 }
 # Static compiled corrections (from _RAW_CORRECTIONS above)
 # stt_learner.py prepends learned corrections to this list at runtime.
@@ -718,6 +942,7 @@ _deepgram_client = None
 _deepgram_session = None
 _sarvam_session = None
 _sarvam_down = False  # True when Sarvam API is unavailable (timeout/error)
+_sarvam_down_until = 0.0  # epoch time after which Sarvam can be retried
 
 
 def is_sarvam_down() -> bool:
@@ -1057,16 +1282,15 @@ def _transcribe_local(audio_array: np.ndarray, model_override: str = None):
         vad_parameters=dict(
             # Lower threshold = more sensitive to soft/slow speech
             threshold=0.25,
-            # Allow longer silences inside the utterance before splitting
-            min_silence_duration_ms=600,
-            # Wider padding ensures slow word starts are not clipped
-            speech_pad_ms=250,
+            # Tight silence split — keeps segments short for faster decode
+            min_silence_duration_ms=200,
+            # Minimal padding — 80ms still captures word edges cleanly
+            speech_pad_ms=80,
         ),
         initial_prompt=get_active_tech_prompt(),
         language="en",
         condition_on_previous_text=False,
-        repetition_penalty=1.3,
-        no_repeat_ngram_size=3,
+        repetition_penalty=1.1,
     )
 
     segments = list(segments)
@@ -1143,15 +1367,19 @@ def _transcribe_sarvam(audio_array: np.ndarray):
     If Telugu/Hindi/Tamil/Kannada detected, auto-translates to English.
     ~400-700ms latency. Requires SARVAM_API_KEY from sarvam.ai
     """
-    global _sarvam_down
+    global _sarvam_down, _sarvam_down_until
     import io
+    import time as _time
     import soundfile as sf
+
+    # Circuit breaker: stay down for 90s after a timeout — skip (no Whisper fallback)
+    if _sarvam_down and _time.time() < _sarvam_down_until:
+        return "", 0.0
 
     api_key = config.SARVAM_API_KEY
     if not api_key:
-        print("  [STT] WARNING: SARVAM_API_KEY not set — falling back to local Whisper")
-        _sarvam_down = True
-        return _transcribe_local(audio_array)
+        print("  [STT] ERROR: SARVAM_API_KEY not set — set it in .env")
+        return "", 0.0
 
     buf = io.BytesIO()
     sf.write(buf, audio_array, config.AUDIO_SAMPLE_RATE, format='WAV', subtype='PCM_16')
@@ -1190,35 +1418,9 @@ def _transcribe_sarvam(audio_array: np.ndarray):
         return text, 0.92
     except Exception as e:
         _sarvam_down = True
-        print(f"\n  ⚠⚠ SARVAM FALLBACK: {e}")
-        print("  ⚠⚠ Check SARVAM_API_KEY and internet connection.\n")
-        try:
-            print("  ⚠⚠ Using local Whisper tiny.en — accuracy will be lower!")
-            return _transcribe_local(audio_array)
-        except (ImportError, OSError) as whisper_err:
-            # faster_whisper C-extension fails on older libstdc++ — retry Sarvam once more
-            print(f"  ⚠⚠ Local Whisper unavailable ({whisper_err.__class__.__name__}), retrying Sarvam...")
-            try:
-                import requests as _req, base64 as _b64, io as _io, wave as _wave, struct as _struct
-                wav_buf = _io.BytesIO()
-                with _wave.open(wav_buf, 'wb') as wf:
-                    wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(config.AUDIO_SAMPLE_RATE)
-                    pcm = (audio_array * 32767).clip(-32768, 32767).astype('int16')
-                    wf.writeframes(pcm.tobytes())
-                wav_buf.seek(0)
-                resp = _req.post(
-                    "https://api.sarvam.ai/speech-to-text",
-                    headers={"api-subscription-key": config.SARVAM_API_KEY},
-                    files={"file": ("audio.wav", wav_buf, "audio/wav")},
-                    data={"language_code": getattr(config, 'SARVAM_LANGUAGE', 'en-IN'), "model": "saarika:v2.5"},
-                    timeout=10,
-                )
-                if resp.ok:
-                    text = resp.json().get("transcript", "").strip()
-                    return text, 0.88
-            except Exception:
-                pass
-            return "", 0.0
+        _sarvam_down_until = _time.time() + 90
+        print(f"\n  ⚠⚠ SARVAM ERROR: {e} — skipping (circuit open 90s)\n")
+        return "", 0.0
 
 
 # ── Filler / noise filter ──────────────────────────────────────────────────────
