@@ -344,13 +344,22 @@
 (function () {
   'use strict';
 
-  // ── RTC config (mirrors mon_rtc_config.js) ─────────────────────────────
+  // ── RTC config — must match mon_rtc_config.js on sender side ──────────
+  // TURN relay is required for cross-NAT connections (different cities/ISPs).
   const RTC_CONFIG = {
     iceServers: [
       { urls: ['stun:stun.l.google.com:19302'] },
       { urls: ['stun:stun1.l.google.com:19302'] },
-      { urls: ['stun:stun2.l.google.com:19302'] },
       { urls: ['stun:global.stun.twilio.com:3478'] },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
     ],
   };
 
@@ -475,13 +484,23 @@
 
   async function handleOffer(offerData) {
     setRtcStatus('wait', '◌ negotiating…');
+    console.log('[STREAM] offer received — creating RTCPeerConnection');
 
     if (_pc) { _pc.close(); _pc = null; }
     _pc = new RTCPeerConnection(RTC_CONFIG);
 
     _pc.ontrack = (e) => {
+      console.log('[STREAM] ontrack fired — binding video srcObject');
       const video = document.getElementById('screen-video');
-      video.srcObject = e.streams[0];
+      // Use streams[0] if available; otherwise build stream from the track directly
+      if (e.streams && e.streams[0]) {
+        video.srcObject = e.streams[0];
+      } else {
+        if (!video.srcObject) video.srcObject = new MediaStream();
+        video.srcObject.addTrack(e.track);
+      }
+      // Explicit play() required — autoplay policies block silent srcObject assignment
+      video.play().catch(err => console.warn('[STREAM] video.play() blocked:', err.name));
       document.getElementById('screen-waiting').style.display = 'none';
       setRtcStatus('live', '● screen live');
       showScreenPanel(true);
@@ -489,6 +508,7 @@
 
     _pc.onicecandidate = (e) => {
       if (!e.candidate || !_ws || _ws.readyState !== WebSocket.OPEN) return;
+      console.log('[SIGNAL] sending ICE candidate to sender');
       _ws.send(JSON.stringify({
         type: 'signal', signal_type: 'ice_candidate',
         session_id: _sessionId, viewer_id: _viewerId,
@@ -498,13 +518,22 @@
 
     _pc.onconnectionstatechange = () => {
       const s = _pc.connectionState;
+      console.log('[STREAM] connection state:', s);
       if (s === 'connected')                        setRtcStatus('live', '● screen live');
       if (s === 'disconnected' || s === 'failed')   setRtcStatus('offline', '✕ screen disconnected');
+    };
+
+    _pc.oniceconnectionstatechange = () => {
+      console.log('[SIGNAL] ICE state:', _pc.iceConnectionState);
+      if (_pc.iceConnectionState === 'failed') {
+        console.error('[ERROR] ICE failed — likely no TURN relay or firewall blocking UDP');
+      }
     };
 
     await _pc.setRemoteDescription(new RTCSessionDescription(offerData));
     const answer = await _pc.createAnswer();
     await _pc.setLocalDescription(answer);
+    console.log('[SIGNAL] answer sent to sender');
 
     if (_ws && _ws.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify({
@@ -517,7 +546,9 @@
 
   async function handleIce(candidate) {
     if (!_pc) return;
-    try { await _pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(_) {}
+    try { await _pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(err) {
+      console.warn('[SIGNAL] addIceCandidate failed:', err.message);
+    }
   }
 
   function setRtcStatus(cls, text) {

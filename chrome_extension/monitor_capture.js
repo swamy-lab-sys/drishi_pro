@@ -40,7 +40,7 @@ async function startScreenCapture(streamId) {
   // Settle time for Linux/Wayland to release the picker context
   await new Promise(r => setTimeout(r, 600));
 
-  console.log("[MonitorCapture] Starting Simplified Capture for ID:", streamId);
+  console.log("[STREAM] Starting capture for streamId:", streamId);
 
   // Note: On most Linux builds, the token is SINGLE-USE.
   // 1080p/30fps for crisp remote desktop quality (TeamViewer-level).
@@ -97,14 +97,12 @@ async function startScreenCapture(streamId) {
 
     activeStream = stream;
     await sender.setStream(stream);
-    console.log("[MonitorCapture] SUCCESS: Remote visibility pipeline established.");
+    console.log("[STREAM] Screen capture live — WebRTC sender ready");
     showShareUrl();
   } catch (error) {
-    console.error("[MonitorCapture] CAPTURE FAILURE:", error.name, error.message);
-
+    console.error("[ERROR] Screen capture failed:", error.name, error.message);
     if (error.message.includes("tab capture") || error.name === "AbortError") {
-      console.error("[Monitor] LINUX STABILITY ALERT: Hardware acceleration or library inconsistency detected.");
-      console.error("[Monitor] ACTION REQUIRED: Restart Chrome with --disable-gpu or choose 'Entire Screen' instead of 'Tab'.");
+      console.error("[ERROR] Linux fix: restart Chrome with --disable-gpu or choose 'Entire Screen' instead of 'Tab'");
     }
     throw error;
   }
@@ -155,7 +153,7 @@ function handleStartRequest(streamId) {
 }
 
 async function startCaptureSequence() {
-  console.log("[MonitorCapture] Initializing same-tab capture sequence...");
+  console.log("[INFO] Starting screen capture sequence");
 
   // Settle internal state
   if (activeStream) {
@@ -171,12 +169,12 @@ async function startCaptureSequence() {
         ["screen", "window", "tab"],
         (streamId) => {
           if (chrome.runtime.lastError) {
-            console.error("[MonitorCapture] Picker Error:", chrome.runtime.lastError.message);
+            console.error("[ERROR] Screen picker:", chrome.runtime.lastError.message);
             resolve({ ok: false, error: chrome.runtime.lastError.message });
             return;
           }
           if (!streamId) {
-            console.log("[MonitorCapture] Picker canceled.");
+            console.log("[INFO] Screen picker cancelled");
             resolve({ ok: false, error: "Canceled" });
             return;
           }
@@ -188,7 +186,7 @@ async function startCaptureSequence() {
         }
       );
     } catch (e) {
-      console.error("[MonitorCapture] Picker failed:", e);
+      console.error("[ERROR] Picker failed:", e.message);
       resolve({ ok: false, error: e.message });
     }
   });
@@ -234,7 +232,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 document.getElementById("manual-picker-btn")?.addEventListener("click", () => {
   const key = document.getElementById("secret-key-input")?.value || "";
   chrome.storage.sync.set({ secretCode: key }, () => {
-    console.log("[MonitorCapture] Secret key synced to background:", key);
     startCaptureSequence();
   });
 });

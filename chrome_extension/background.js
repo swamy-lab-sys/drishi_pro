@@ -599,20 +599,33 @@ function monQueueCaptureRestart(reason) {
 }
 
 async function monHandleSignalingMessage(payload) {
-  if (!monCurrentSettings.screenEnabled) return;
-  if (payload.signal_type === "viewer_joined") {
+  const stype = payload.signal_type;
+
+  if (stype === "viewer_joined") {
+    // Do NOT rely on screenEnabled in-memory flag — MV3 service workers restart and lose state.
+    // Instead, check if the capture tab is actually alive. If it's gone, screen sharing is not running.
+    const captureTabs = await chrome.tabs.query({ url: chrome.runtime.getURL("monitor_capture.html") + "*" });
+    if (captureTabs.length === 0 && !monCurrentSettings.screenEnabled) {
+      console.warn("[SIGNAL] viewer_joined ignored — no active screen share");
+      return;
+    }
+    console.log(`[SIGNAL] viewer_joined → creating offer for viewer ${payload.viewer_id}`);
     await monEnsureBridgeTab();
     await chrome.runtime.sendMessage({ type: "mon_viewer_joined", viewerId: payload.viewer_id }).catch(() => { });
     return;
   }
-  if (payload.signal_type === "viewer_left") {
+
+  if (stype === "viewer_left") {
+    console.log(`[SIGNAL] viewer_left viewer=${payload.viewer_id}`);
     await chrome.runtime.sendMessage({ type: "mon_viewer_left", viewerId: payload.viewer_id }).catch(() => { });
     return;
   }
-  if (payload.signal_type === "answer" || payload.signal_type === "ice_candidate") {
+
+  if (stype === "answer" || stype === "ice_candidate") {
+    console.log(`[SIGNAL] ${stype} viewer=${payload.viewer_id}`);
     await chrome.runtime.sendMessage({
       type: "mon_signal_to_sender",
-      signalType: payload.signal_type,
+      signalType: stype,
       viewerId: payload.viewer_id,
       data: payload.data,
     }).catch(() => { });
@@ -804,8 +817,11 @@ async function _ensureOffscreenDoc() {
   await _closeOffscreenDoc();
   const docUrl = chrome.runtime.getURL('audio_offscreen.html');
   await chrome.offscreen.createDocument({
-    url: docUrl, reasons: ['USER_MEDIA'],
-    justification: 'Capture tab audio and stream PCM-16 to Drishi /ws/audio',
+    url: docUrl,
+    // USER_MEDIA: needed for getUserMedia() tab/mic capture
+    // AUDIO_PLAYBACK: needed for Audio element passthrough so tab audio remains audible
+    reasons: ['USER_MEDIA', 'AUDIO_PLAYBACK'],
+    justification: 'Capture tab/mic audio and stream PCM-16 to Drishi /ws/audio',
   });
   audioOffscreenCreated = true;
 }
@@ -816,11 +832,11 @@ async function _ensureOffscreenDoc() {
  */
 async function handleAudioStart(sendResponse, req) {
   try {
-    const { streamId, serverUrl, secretCode, sarvamKey = '', userToken = '', tabTitle = '', captureMode = 'tab' } = req;
+    const { streamId, serverUrl, secretCode, sarvamKey = '', userToken = '', tabTitle = '', tabUrl = '', captureMode = 'tab' } = req;
     if (!serverUrl) throw new Error('Server URL not configured. Set it in Settings.');
     if (captureMode !== 'mic' && !streamId) throw new Error('No stream ID — popup must call getMediaStreamId first.');
 
-    chrome.storage.local.set({ captureTabTitle: tabTitle, captureTabUrl: '', captureMode });
+    chrome.storage.local.set({ captureTabTitle: tabTitle, captureTabUrl: tabUrl, captureMode });
     _rlogToken = userToken || _rlogToken;
 
     await _ensureOffscreenDoc();
@@ -830,7 +846,7 @@ async function handleAudioStart(sendResponse, req) {
     let resp;
     try {
       resp = await chrome.runtime.sendMessage({
-        type: 'audio_start_capture', streamId, serverUrl, secretCode, sarvamKey, userToken, captureMode,
+        type: 'audio_start_capture', streamId, serverUrl, secretCode, sarvamKey, userToken, captureMode, tabUrl,
       });
     } catch (_) {
       throw new Error('Offscreen document not responding. Please try again.');
@@ -885,13 +901,13 @@ async function handleRemoteStartCapture(sendResponse) {
     const serverUrl = (stored.serverUrl || SERVER_URL).replace(/\/$/, '');
     const userToken = stored.userToken || '';
 
-    chrome.storage.local.set({ captureTabTitle: tab.title || 'Remote tab', captureMode: 'tab' });
+    chrome.storage.local.set({ captureTabTitle: tab.title || 'Remote tab', captureTabUrl: tab.url || '', captureMode: 'tab' });
     await _ensureOffscreenDoc();
 
     const resp = await chrome.runtime.sendMessage({
       type: 'audio_start_capture', streamId, serverUrl,
       secretCode: stored.secretCode || SECRET_CODE,
-      sarvamKey, userToken, captureMode: 'tab',
+      sarvamKey, userToken, captureMode: 'tab', tabUrl: tab.url || '',
     });
 
     if (resp?.ok) {
