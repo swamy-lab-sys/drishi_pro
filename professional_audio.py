@@ -350,10 +350,10 @@ def capture_question(max_duration=15.0, silence_duration=1.2, verbose=False,
     max_silence_chunks = int(silence_duration * 1000 / 30)
     max_chunks = int(max_duration * 1000 / 30)
 
-    # Adaptive silence: after significant speech (>2s) relax the silence gate
+    # Adaptive silence: after significant speech (>3.5s) relax the silence gate
     # slightly to tolerate mid-sentence pauses from slow speakers.
     speech_chunk_count = 0
-    _LONG_SPEECH_THRESHOLD = int(2.0 * 1000 / 30)   # 2s of speech
+    _LONG_SPEECH_THRESHOLD = int(3.5 * 1000 / 30)   # 3.5s of speech
 
     start_time = time.time()
 
@@ -384,12 +384,14 @@ def capture_question(max_duration=15.0, silence_duration=1.2, verbose=False,
                     silence_chunks += 1
                     audio_chunks.append(chunk)
 
-                    # After significant speech, allow longer silence before cutting
+                    # After significant speech, allow slightly longer silence before cutting
                     # so slow interviewers can pause mid-thought without triggering end.
+                    # Scale with configured silence_duration (not hardcoded) so fast-preset
+                    # users (0.6s) are not penalised with 1.8s waits on every question.
                     adaptive_limit = max_silence_chunks
                     if speech_chunk_count >= _LONG_SPEECH_THRESHOLD:
                         adaptive_limit = max(max_silence_chunks,
-                                             int(1.8 * 1000 / 30))  # min 1.8s
+                                             int(silence_duration * 1.5 * 1000 / 30))
 
                     if silence_chunks > adaptive_limit:
                         if verbose:

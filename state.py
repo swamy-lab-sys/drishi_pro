@@ -258,7 +258,7 @@ def calculate_adaptive_cooldown(answer_length: int = 0, is_code: bool = False) -
 
     # Code answers need slightly longer cooldown (user reading code)
     if is_code:
-        cooldown = min(cooldown + 0.8, COOLDOWN_MAX)
+        cooldown = min(cooldown + 0.3, COOLDOWN_MAX)
 
     return cooldown
 
@@ -291,18 +291,23 @@ def is_in_cooldown() -> bool:
     """
     Check if currently in cooldown period.
     Auto-clears cooldown if time has elapsed.
+
+    Lock ordering: always acquire _cooldown_lock first, release it before
+    acquiring _state_lock. Never hold both simultaneously to prevent deadlock.
     """
-    global _in_cooldown, _cooldown_end_time, _current_state
+    global _in_cooldown, _current_state
     with _cooldown_lock:
-        if _in_cooldown:
-            if time.time() >= _cooldown_end_time:
-                _in_cooldown = False
-                with _state_lock:
-                    _current_state = PipelineState.IDLE
-                _idle_event.set()
-                return False
+        if not _in_cooldown:
+            return False
+        if time.time() < _cooldown_end_time:
             return True
-        return False
+        # Cooldown expired — clear the flag while still holding _cooldown_lock
+        _in_cooldown = False
+    # _cooldown_lock is now released; safe to acquire _state_lock
+    with _state_lock:
+        _current_state = PipelineState.IDLE
+    _idle_event.set()
+    return False
 
 
 def get_cooldown_remaining() -> float:
@@ -405,6 +410,12 @@ def set_selected_user(user: dict):
     global _selected_user
     with _selected_user_lock:
         _selected_user = user
+    # Invalidate resume context cache so next answer rebuilds with new user data
+    try:
+        from user_manager import invalidate_resume_context_cache
+        invalidate_resume_context_cache()
+    except Exception:
+        pass
 
 
 def get_mode_profile() -> str:
