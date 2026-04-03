@@ -6,10 +6,10 @@ venv/
 ENV/
 
 # Environment (contains API keys — never commit)
-.env
+# .env  ← included for OS reinstall backup
 
 # Runtime / generated
-*.db
+# *.db  ← included for OS reinstall backup
 *.log
 *.raw
 .interview_assistant/
